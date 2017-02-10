@@ -1,0 +1,30 @@
+From 3139f583eb1de6e50ddd5d526bdf294c9ec95bca Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 17 Nov 2016 17:07:41 -0500
+Subject: [PATCH 04/43] [Unix] Set CMake policy CMP0058 to New
+
+When building with newer versions of Cmake targeting
+ninja, a warning is set unless this policy is explicitly set
+---
+ CMakeLists.txt | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index c9a75e5..334103d 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -5,6 +5,10 @@ if(CMAKE_VERSION VERSION_EQUAL 3.0 OR CMAKE_VERSION VERSION_GREATER 3.0)
+     cmake_policy(SET CMP0042 NEW)
+ endif()
+ 
++if(POLICY CMP0058)
++  cmake_policy(SET CMP0058 NEW)
++endif()
++
+ # Set the project name
+ project(CoreCLR)
+ 
+-- 
+2.7.4
+

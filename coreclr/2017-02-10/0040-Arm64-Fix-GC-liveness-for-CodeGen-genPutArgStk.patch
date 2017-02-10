@@ -1,0 +1,35 @@
+From 913912cb5bf696816b039b1e75e1fd9f4a8619e7 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 3 Feb 2017 22:24:07 +0000
+Subject: [PATCH 40/43] [Arm64] Fix GC liveness for CodeGen::genPutArgStk()
+
+---
+ src/jit/codegenarm64.cpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 6b93137..0dd80cd 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -5757,7 +5757,6 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
+             assert((varNode != nullptr) ^ (addrNode != nullptr));
+ 
+             BYTE     gcPtrs[MAX_ARG_REG_COUNT] = {};         // TYPE_GC_NONE = 0
+-            BYTE*    structGcLayout            = &gcPtrs[0]; // The GC layout for the struct
+             unsigned gcPtrCount;                             // The count of GC pointers in the struct
+             int      structSize;
+             bool     isHfa;
+@@ -5777,7 +5776,8 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
+                                                // as that is how much stack is allocated for this LclVar
+                 isHfa          = varDsc->lvIsHfa();
+                 gcPtrCount     = varDsc->lvStructGcCount;
+-                structGcLayout = varDsc->lvGcLayout;
++                for(unsigned i = 0; i < gcPtrCount; ++i)
++                  gcPtrs[i] = varDsc->lvGcLayout[i];
+             }
+             else // addrNode is used
+             {
+-- 
+2.7.4
+

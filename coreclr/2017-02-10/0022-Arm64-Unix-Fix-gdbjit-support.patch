@@ -1,0 +1,26 @@
+From 1b0a8e77b5f4103870d9c03fa2e6325b15ed4a62 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 24 Jan 2017 21:30:52 +0000
+Subject: [PATCH 22/43] [Arm64/Unix] Fix gdbjit support
+
+---
+ src/vm/gdbjit.h | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/vm/gdbjit.h b/src/vm/gdbjit.h
+index 1bc7577..cafeac8 100644
+--- a/src/vm/gdbjit.h
++++ b/src/vm/gdbjit.h
+@@ -473,6 +473,8 @@ public:
+         m_sub_loc[1] = DW_OP_reg6;
+ #elif defined(_TARGET_X86_)
+         m_sub_loc[1] = DW_OP_reg5;
++#elif defined(_TARGET_ARM64_)
++        m_sub_loc[1] = DW_OP_reg29;
+ #elif defined(_TARGET_ARM_)
+         m_sub_loc[1] = DW_OP_reg11;
+ #else
+-- 
+2.7.4
+

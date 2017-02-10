@@ -1,0 +1,31 @@
+From aaeb1a676d157ad2dbc14bb860403dfa24e30f48 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 17 Nov 2016 15:13:50 -0500
+Subject: [PATCH 03/43] [Unix] Disable null-dereference warning --> error
+
+When building with Clang 3.9 code fails compilation due to CoreCLR
+deliberately returning a deferenced null_ptr in a function which returns
+a reference.
+
+Disable promoting the warning to an error until code is resolved.
+---
+ compileoptions.cmake | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/compileoptions.cmake b/compileoptions.cmake
+index 75d51fd..8da9a38 100644
+--- a/compileoptions.cmake
++++ b/compileoptions.cmake
+@@ -36,7 +36,7 @@ if (CLR_CMAKE_PLATFORM_UNIX)
+   # There are constants of type BOOL used in a condition. But BOOL is defined as int
+   # and so the compiler thinks that there is a mistake.
+   add_compile_options(-Wno-constant-logical-operand)
+-
++  add_compile_options(-Wno-null-dereference)
+   add_compile_options(-Wno-unknown-warning-option)
+ 
+   #These seem to indicate real issues
+-- 
+2.7.4
+

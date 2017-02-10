@@ -1,0 +1,65 @@
+From dbc584850cb8e2767f9985c46e6efd1b4792fcf5 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 31 Jan 2017 23:13:09 -0500
+Subject: [PATCH 34/43] [Arm64] ClearRegDisplayArgumentAndScratchRegisters()
+
+---
+ src/vm/arm64/stubs.cpp | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/src/vm/arm64/stubs.cpp b/src/vm/arm64/stubs.cpp
+index 2b5181b..2a2a4aa 100644
+--- a/src/vm/arm64/stubs.cpp
++++ b/src/vm/arm64/stubs.cpp
+@@ -268,6 +268,12 @@ static BYTE gLoadFromLabelIF[sizeof(LoadFromLabelInstructionFormat)];
+ 
+ #endif
+ 
++void ClearRegDisplayArgumentAndScratchRegisters(REGDISPLAY * pRD)
++{
++    for (int i=0; i < 18; i++)
++        pRD->volatileCurrContextPointers.X[i] = NULL;
++}
++
+ #ifndef CROSSGEN_COMPILE
+ void LazyMachState::unwindLazyState(LazyMachState* baseState,
+                                     MachState* unwoundstate,
+@@ -532,6 +538,8 @@ void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+     pRD->pCurrentContextPointers->Fp = m_MachState.ptrX19_X29[10];
+     pRD->pCurrentContextPointers->Lr = NULL; // Unwind again to get Caller's PC
+ #endif
++
++    ClearRegDisplayArgumentAndScratchRegisters(pRD);
+ }
+ #endif // CROSSGEN_COMPILE
+ 
+@@ -819,6 +827,8 @@ void TransitionFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+     CalleeSavedRegisters *pCalleeSaved = GetCalleeSavedRegisters();
+     UpdateRegDisplayFromCalleeSavedRegisters(pRD, pCalleeSaved);
+ 
++    ClearRegDisplayArgumentAndScratchRegisters(pRD);
++
+     // copy the control registers
+     pRD->pCurrentContext->Fp = pCalleeSaved->x29;
+     pRD->pCurrentContext->Lr = pCalleeSaved->x30;
+@@ -876,6 +886,8 @@ void FaultingExceptionFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+     pRD->pCurrentContextPointers->Fp = (PDWORD64)&m_ctx.Fp;
+     pRD->pCurrentContextPointers->Lr = (PDWORD64)&m_ctx.Lr;
+ 
++    ClearRegDisplayArgumentAndScratchRegisters(pRD);
++
+     pRD->IsCallerContextValid = FALSE;
+     pRD->IsCallerSPValid      = FALSE;        // Don't add usage of this field.  This is only temporary.
+ 
+@@ -927,6 +939,7 @@ void InlinedCallFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+     // reset pContext; it's only valid for active (top-most) frame
+     pRD->pContext = NULL;
+ 
++    ClearRegDisplayArgumentAndScratchRegisters(pRD);
+ 
+ 
+     // Update the frame pointer in the current context.
+-- 
+2.7.4
+

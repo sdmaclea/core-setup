@@ -1,0 +1,67 @@
+From 247933226fd1f6b6bdaceeb98b83f3d231e25c03 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 9 Feb 2017 04:45:41 +0000
+Subject: [PATCH 42/43] [Arm64] Correct CORINFO_HELP_ASSIGN_BYREF killed mask
+
+---
+ src/jit/codegencommon.cpp | 4 +++-
+ src/jit/emitarm64.cpp     | 5 +++++
+ src/jit/lsra.cpp          | 3 +++
+ 3 files changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
+index b1e474b..bea659c 100644
+--- a/src/jit/codegencommon.cpp
++++ b/src/jit/codegencommon.cpp
+@@ -647,7 +647,7 @@ regMaskTP Compiler::compHelperCallKillSet(CorInfoHelpFunc helper)
+ #if defined(_TARGET_AMD64_)
+             return RBM_RSI | RBM_RDI | RBM_CALLEE_TRASH;
+ #elif defined(_TARGET_ARM64_)
+-            return RBM_CALLEE_TRASH_NOGC;
++            return RBM_R12 | RBM_R15;
+ #elif defined(_TARGET_X86_)
+             return RBM_ESI | RBM_EDI | RBM_ECX;
+ #else
+@@ -714,6 +714,8 @@ regMaskTP Compiler::compNoGCHelperCallKillSet(CorInfoHelpFunc helper)
+ #if defined(_TARGET_AMD64_)
+             // this helper doesn't trash RSI and RDI
+             return RBM_CALLEE_TRASH_NOGC & ~(RBM_RSI | RBM_RDI);
++#elif defined(_TARGET_ARM64_)
++            return RBM_R12 | RBM_R15;
+ #elif defined(_TARGET_X86_)
+             // This helper only trashes ECX.
+             return RBM_ECX;
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index dd4bac8..8588bd8 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -6709,6 +6709,11 @@ void emitter::emitIns_Call(EmitCallType          callType,
+         {
+             savedSet |= RBM_PROFILER_RET_SCRATCH;
+         }
++
++        if(Compiler::eeGetHelperNum(methHnd) == CORINFO_HELP_ASSIGN_BYREF)
++        {
++            savedSet |= RBM_WRITE_BARRIER_SRC_BYREF | RBM_WRITE_BARRIER_DST_BYREF;
++        }
+     }
+     else
+     {
+diff --git a/src/jit/lsra.cpp b/src/jit/lsra.cpp
+index ac76e29..9773574 100644
+--- a/src/jit/lsra.cpp
++++ b/src/jit/lsra.cpp
+@@ -2683,6 +2683,9 @@ regMaskTP LinearScan::getKillSetForNode(GenTree* tree)
+             {
+                 assert(tree->AsObj()->gtGcPtrCount != 0);
+                 killMask = compiler->compHelperCallKillSet(CORINFO_HELP_ASSIGN_BYREF);
++#ifdef _TARGET_ARM64_
++                killMask |= REG_WRITE_BARRIER_SRC_BYREF | REG_WRITE_BARRIER_DST_BYREF;
++#endif // _TARGET_ARM64_
+                 break;
+             }
+             __fallthrough;
+-- 
+2.7.4
+

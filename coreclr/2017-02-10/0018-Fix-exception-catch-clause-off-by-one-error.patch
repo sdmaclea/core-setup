@@ -1,0 +1,32 @@
+From 9776fcfa3cf0abff336e1e431feacc2f11446775 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 18 Jan 2017 19:17:47 +0000
+Subject: [PATCH 18/43] Fix exception catch clause off by one error
+
+Debug log shows "considering %s clause [%x,%x], ControlPc..."
+
+This patches fixes the mismatch.
+
+Fix resolved observed catch misses on Arm64
+No additonal failures observed on amd64/unix
+---
+ src/vm/exceptionhandling.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/vm/exceptionhandling.cpp b/src/vm/exceptionhandling.cpp
+index 76af037..5a1e0d1 100644
+--- a/src/vm/exceptionhandling.cpp
++++ b/src/vm/exceptionhandling.cpp
+@@ -3986,7 +3986,7 @@ BOOL ExceptionTracker::ClauseCoversPC(
+     // of the method so we can just compare them to the offset returned
+     // by JitCodeToMethodInfo.
+     //
+-    return ((pEHClause->TryStartPC <= dwOffset) && (dwOffset < pEHClause->TryEndPC));
++    return ((pEHClause->TryStartPC <= dwOffset) && (dwOffset <= pEHClause->TryEndPC));
+ }
+ 
+ #if defined(DEBUGGING_SUPPORTED)
+-- 
+2.7.4
+

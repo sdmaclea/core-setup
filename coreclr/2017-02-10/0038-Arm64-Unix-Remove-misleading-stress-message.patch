@@ -1,0 +1,28 @@
+From ac5ba2fdcd585c8451d86f6d5384bd2e372d105a Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 3 Feb 2017 17:58:10 +0000
+Subject: [PATCH 38/43] [Arm64/Unix] Remove misleading stress message
+
+---
+ tests/runtest.sh | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/tests/runtest.sh b/tests/runtest.sh
+index 3f650e7..47e1904 100755
+--- a/tests/runtest.sh
++++ b/tests/runtest.sh
+@@ -1179,7 +1179,10 @@ then
+     scriptPath=$(dirname $0)
+     ${scriptPath}/setup-runtime-dependencies.sh --outputDir=$coreOverlayDir
+ else
++    if [ ! "$ARCH" != "arm64" ]
++    then
+         echo "Skip preparing for GC stress test. Dependent package is not supported on this architecture."
++    fi
+ fi
+ 
+ export __TestEnv=$testEnv
+-- 
+2.7.4
+

@@ -1,0 +1,29 @@
+From e961d79aae506571cc843a7549ba859b075f7ddb Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 31 Jan 2017 23:17:32 -0500
+Subject: [PATCH 36/43] ValidateInner() check method table is not null
+
+---
+ src/vm/object.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/vm/object.cpp b/src/vm/object.cpp
+index b219eb9..21e56ab 100644
+--- a/src/vm/object.cpp
++++ b/src/vm/object.cpp
+@@ -1737,9 +1737,10 @@ VOID Object::ValidateInner(BOOL bDeep, BOOL bVerifyNextHeader, BOOL bVerifySyncB
+         AVInRuntimeImplOkayHolder avOk;
+ 
+         MethodTable *pMT = GetGCSafeMethodTable();
++
+         lastTest = 1;
+ 
+-        CHECK_AND_TEAR_DOWN(pMT->Validate());
++        CHECK_AND_TEAR_DOWN(pMT && pMT->Validate());
+         lastTest = 2;
+ 
+         bool noRangeChecks =
+-- 
+2.7.4
+

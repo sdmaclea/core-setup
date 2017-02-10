@@ -1,0 +1,32 @@
+From 370a7467f68aa727ffc2c43806e9570486a34b32 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 10 Feb 2017 04:26:58 +0000
+Subject: [PATCH 43/43] [Arm64/Unix] Warn if lldb is missing
+
+SOS lldb plugin is an optional component
+
+lldb is not availiable on arm64 prior to lldb3.9
+
+lldb3.9 is not readily available on many ubuntu until 16.10
+
+Change error to warning to simplify building arm64
+---
+ src/ToolBox/SOS/lldbplugin/CMakeLists.txt | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/ToolBox/SOS/lldbplugin/CMakeLists.txt b/src/ToolBox/SOS/lldbplugin/CMakeLists.txt
+index 29b36e8..7b58447 100644
+--- a/src/ToolBox/SOS/lldbplugin/CMakeLists.txt
++++ b/src/ToolBox/SOS/lldbplugin/CMakeLists.txt
+@@ -35,6 +35,7 @@ elseif(CLR_CMAKE_PLATFORM_ARCH_ARM64)
+     add_definitions(-DDBG_TARGET_ARM64=1)
+     add_definitions(-DDBG_TARGET_WIN64=1)
+     add_definitions(-DBIT64)
++    SET(REQUIRE_LLDBPLUGIN false)
+ endif()
+ 
+ set(ENABLE_LLDBPLUGIN ${CLR_CMAKE_PLATFORM_UNIX} CACHE BOOL "Enable building the SOS plugin for LLDB.")
+-- 
+2.7.4
+

@@ -1,0 +1,38 @@
+From 2bc58e47e2ad84634ff7033b5bc168dd262a0876 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 27 Dec 2016 12:55:16 -0500
+Subject: [PATCH 11/43] [Unix] twowaypipe unlink before mkfifo
+
+Remove stale fifo when before mkfifo
+
+This reduces bogus failures when corerun jobs were
+killed with SIGKILL...
+---
+ src/debug/debug-pal/unix/twowaypipe.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/debug/debug-pal/unix/twowaypipe.cpp b/src/debug/debug-pal/unix/twowaypipe.cpp
+index db4599a..9dfe1e3 100644
+--- a/src/debug/debug-pal/unix/twowaypipe.cpp
++++ b/src/debug/debug-pal/unix/twowaypipe.cpp
+@@ -24,11 +24,16 @@ bool TwoWayPipe::CreateServer(DWORD id)
+     PAL_GetTransportPipeName(m_inPipeName, id, "in");
+     PAL_GetTransportPipeName(m_outPipeName, id, "out");
+ 
++    unlink(m_inPipeName);
++
+     if (mkfifo(m_inPipeName, S_IRWXU) == -1)
+     {
+         return false;
+     }
+ 
++
++    unlink(m_outPipeName);
++
+     if (mkfifo(m_outPipeName, S_IRWXU) == -1)
+     {
+         unlink(m_inPipeName);
+-- 
+2.7.4
+

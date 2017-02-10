@@ -1,0 +1,32 @@
+From de6a485fcbc634303f688ae352acaec0583632ec Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 25 Jan 2017 19:09:57 +0000
+Subject: [PATCH 26/43] [Unix] runtest.sh decrease priority of tests
+
+This allows higher priority runtest.sh to submit jobs faster
+
+Ultimately this keeps high core count servers better loaded
+
+It also has the benefit of allowing foreground tasks of being
+more responsive.
+---
+ tests/runtest.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tests/runtest.sh b/tests/runtest.sh
+index b93c22d..3f650e7 100755
+--- a/tests/runtest.sh
++++ b/tests/runtest.sh
+@@ -687,7 +687,7 @@ function run_test {
+         set_up_core_dump_generation
+     fi
+ 
+-    "./$scriptFileName" >"$outputFileName" 2>&1
++    nice "./$scriptFileName" >"$outputFileName" 2>&1
+     local testScriptExitCode=$?
+ 
+     # We will try to print some information from generated core dumps if a debugger
+-- 
+2.7.4
+

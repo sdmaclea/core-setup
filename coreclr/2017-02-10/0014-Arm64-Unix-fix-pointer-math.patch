@@ -1,0 +1,58 @@
+From 332c34bcf4b3721fd8c380609face194f32d568f Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 4 Jan 2017 02:29:48 -0500
+Subject: [PATCH 14/43] [Arm64/Unix] fix pointer math
+
+---
+ src/unwinder/arm64/unwinder_arm64.cpp | 6 +++---
+ src/vm/arm64/stubs.cpp                | 2 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/unwinder/arm64/unwinder_arm64.cpp b/src/unwinder/arm64/unwinder_arm64.cpp
+index e13c7b9..c3b7102 100644
+--- a/src/unwinder/arm64/unwinder_arm64.cpp
++++ b/src/unwinder/arm64/unwinder_arm64.cpp
+@@ -215,7 +215,7 @@ Return Value:
+         for (RegIndex = 0; RegIndex < 18; RegIndex++) {
+             UPDATE_CONTEXT_POINTERS(UnwindParams, RegIndex, SourceAddress);
+ #ifdef __clang__
+-            *(&ContextRecord->X0 + (RegIndex * sizeof(void*))) = MEMORY_READ_QWORD(UnwindParams, SourceAddress);
++            *(&ContextRecord->X0 + RegIndex) = MEMORY_READ_QWORD(UnwindParams, SourceAddress);
+ #else
+             ContextRecord->X[RegIndex] = MEMORY_READ_QWORD(UnwindParams, SourceAddress);
+ #endif
+@@ -295,7 +295,7 @@ Return Value:
+         for (RegIndex = 0; RegIndex < 29; RegIndex++) {
+             UPDATE_CONTEXT_POINTERS(UnwindParams, RegIndex, SourceAddress);
+ #ifdef __clang__
+-            *(&ContextRecord->X0 + (RegIndex * sizeof(void*))) = MEMORY_READ_QWORD(UnwindParams, SourceAddress);
++            *(&ContextRecord->X0 + RegIndex) = MEMORY_READ_QWORD(UnwindParams, SourceAddress);
+ #else
+             ContextRecord->X[RegIndex] = MEMORY_READ_QWORD(UnwindParams, SourceAddress);
+ #endif
+@@ -481,7 +481,7 @@ Return Value:
+     for (RegIndex = 0; RegIndex < RegisterCount; RegIndex++) {
+         UPDATE_CONTEXT_POINTERS(UnwindParams, RegIndex, CurAddress);
+ #ifdef __clang__
+-        *(&ContextRecord->X0 + (RegIndex * sizeof(void*))) = MEMORY_READ_QWORD(UnwindParams, CurAddress);
++        *(&ContextRecord->X0 + FirstRegister + RegIndex) = MEMORY_READ_QWORD(UnwindParams, CurAddress);
+ #else
+         ContextRecord->X[FirstRegister + RegIndex] = MEMORY_READ_QWORD(UnwindParams, CurAddress);
+ #endif
+diff --git a/src/vm/arm64/stubs.cpp b/src/vm/arm64/stubs.cpp
+index 9c9b6a8..a9c7364 100644
+--- a/src/vm/arm64/stubs.cpp
++++ b/src/vm/arm64/stubs.cpp
+@@ -767,7 +767,7 @@ void TransitionFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+     ArgumentRegisters *pArgRegs = GetArgumentRegisters();
+     for (int i = 0; i < ARGUMENTREGISTERS_SIZE; i++)
+ #ifdef __clang__
+-        *(&pRD->pCurrentContext->X0 + (sizeof(void*)*i)) = pArgRegs->x[i];
++        *(&pRD->pCurrentContext->X0 + i) = pArgRegs->x[i];
+ #else
+         pRD->pCurrentContext->X[i] = pArgRegs->x[i];
+ #endif
+-- 
+2.7.4
+

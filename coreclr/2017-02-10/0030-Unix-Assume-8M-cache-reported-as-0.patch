@@ -1,0 +1,30 @@
+From f24ae843b70f3782b1e355217e4512e657f2e72a Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 30 Jan 2017 22:36:04 +0000
+Subject: [PATCH 30/43] [Unix] Assume 8M cache reported as 0
+
+glibc does not currently support cache size info for
+platforms other than Amd64.
+
+Set 8M as a reaonable cache size guess
+---
+ src/pal/src/misc/sysinfo.cpp | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/pal/src/misc/sysinfo.cpp b/src/pal/src/misc/sysinfo.cpp
+index 3ccb35a..71285fd 100644
+--- a/src/pal/src/misc/sysinfo.cpp
++++ b/src/pal/src/misc/sysinfo.cpp
+@@ -343,5 +343,8 @@ PAL_GetLogicalProcessorCacheSizeFromOS()
+     cacheSize = max(cacheSize, sysconf(_SC_LEVEL4_CACHE_SIZE));
+ #endif
+ 
++    if(cacheSize == 0)
++      cacheSize = 8ULL << 20;  // sysconf currently only reports cache size info for x86.
++
+     return cacheSize;
+ }
+-- 
+2.7.4
+

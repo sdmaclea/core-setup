@@ -1,0 +1,44 @@
+From a99214578d02f26dfa2c68598d903e08e58469b9 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 7 Feb 2017 22:24:37 +0000
+Subject: [PATCH 41/43] [Arm*/Unix] Fix GC hole when filter throws
+
+StackFrameIterator::Filter makes assumption that Funclets
+were started if they caused another exception.  This
+does not hold in the case of a throw in a filter.  GC
+transition Stress exposes a hole
+---
+ src/vm/exceptionhandling.h | 2 ++
+ src/vm/stackwalk.cpp       | 2 +-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/vm/exceptionhandling.h b/src/vm/exceptionhandling.h
+index 8b675d5..c4ac099 100644
+--- a/src/vm/exceptionhandling.h
++++ b/src/vm/exceptionhandling.h
+@@ -397,6 +397,8 @@ public:
+         ex->Clear();
+         m_fOwnsExceptionPointers = TRUE;
+     }
++
++    bool IsEHClauseFilter() { return m_EHClauseInfo.GetClauseType() == COR_PRF_CLAUSE_FILTER; }
+ #endif // FEATURE_PAL
+ 
+ private:
+diff --git a/src/vm/stackwalk.cpp b/src/vm/stackwalk.cpp
+index 36af466..49fdac8 100644
+--- a/src/vm/stackwalk.cpp
++++ b/src/vm/stackwalk.cpp
+@@ -1778,7 +1778,7 @@ ProcessFuncletsForGCReporting:
+                                 pCurrTracker = pCurrTracker->GetPreviousExceptionTracker();
+                             }
+ 
+-                            if (pCurrTracker != NULL)
++                            if ((pCurrTracker != NULL) && !pCurrTracker->IsEHClauseFilter())
+                             {
+                                 // The current frame is a parent of a funclet that was already unwound and removed from the stack
+                                 // Set the members the same way we would set them on Windows when we
+-- 
+2.7.4
+

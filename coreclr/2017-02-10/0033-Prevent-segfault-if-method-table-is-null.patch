@@ -1,0 +1,26 @@
+From 78b82346acf35db7e5fe53234ec30dd14761f492 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 31 Jan 2017 23:11:06 -0500
+Subject: [PATCH 33/43] Prevent segfault if method table is null
+
+---
+ src/inc/stdmacros.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/inc/stdmacros.h b/src/inc/stdmacros.h
+index ab77a2c..3ec8bec 100644
+--- a/src/inc/stdmacros.h
++++ b/src/inc/stdmacros.h
+@@ -277,7 +277,7 @@ inline ULONG RoundUpToPower2(ULONG x)
+ 
+ 
+ #define DBG_GET_CLASS_NAME(pMT)        \
+-        (pMT)->GetClass()->GetDebugClassName()
++        (((pMT) == NULL)  ? NULL : (pMT)->GetClass()->GetDebugClassName())
+ 
+ #define DBG_CLASS_NAME_MT(pMT)         \
+         (DBG_GET_CLASS_NAME(pMT) == NULL) ? "<null-class>" : DBG_GET_CLASS_NAME(pMT) 
+-- 
+2.7.4
+

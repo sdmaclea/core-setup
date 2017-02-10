@@ -1,0 +1,39 @@
+From 3f796665a3e2902243b806c67bec5f55298c36e9 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 23 Nov 2016 23:57:12 -0500
+Subject: [PATCH 01/43] [Arm64/Unix] Default to no lldb in build-rootfs
+
+lldb is not readily available on arm64 Ubuntu releases prior to
+16.10
+
+Set the default lldb version to none to allow building Arm64 rootfs
+---
+ cross/build-rootfs.sh | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/cross/build-rootfs.sh b/cross/build-rootfs.sh
+index 72ccc56..dee9c8c 100755
+--- a/cross/build-rootfs.sh
++++ b/cross/build-rootfs.sh
+@@ -5,7 +5,7 @@ usage()
+     echo "Usage: $0 [BuildArch] [LinuxCodeName] [lldbx.y] [--skipunmount]"
+     echo "BuildArch can be: arm(default), armel, arm64, x86"
+     echo "LinuxCodeName - optional, Code name for Linux, can be: trusty(default), vivid, wily, xenial. If BuildArch is armel, LinuxCodeName is jessie(default) or tizen."
+-    echo "lldbx.y - optional, LLDB version, can be: lldb3.6(default), lldb3.8"
++    echo "lldbx.y - optional, LLDB version, can be: lldb3.6, lldb3.8"
+     echo "--skipunmount - optional, will skip the unmount of rootfs folder."
+ 
+     exit 1
+@@ -19,7 +19,7 @@ __BuildArch=arm
+ __UbuntuArch=armhf
+ __UbuntuRepo="http://ports.ubuntu.com/"
+ __UbuntuPackagesBase="build-essential libunwind8-dev gettext symlinks liblttng-ust-dev libicu-dev"
+-__LLDB_Package="lldb-3.6-dev"
++__LLDB_Package=""
+ __UnprocessedBuildArgs=
+ __SkipUnmount=0
+ 
+-- 
+2.7.4
+

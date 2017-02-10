@@ -1,0 +1,25 @@
+From 76256a5e013e8455e1beb40131314341c65a21c4 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 3 Feb 2017 18:02:08 +0000
+Subject: [PATCH 39/43] [Arm64/Unix] Remove aarch64 unsupported message
+
+---
+ build.sh | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/build.sh b/build.sh
+index 6401609..96113df 100755
+--- a/build.sh
++++ b/build.sh
+@@ -475,7 +475,6 @@ case $CPUName in
+         ;;
+ 
+     aarch64)
+-        echo "Unsupported CPU $CPUName detected, build might not succeed!"
+         __BuildArch=arm64
+         __HostArch=arm64
+         ;;
+-- 
+2.7.4
+

@@ -1,0 +1,25 @@
+From 4ec3228eb464672e15ab576b43c28ad596ac7f3e Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 29 Dec 2016 11:17:18 -0500
+Subject: [PATCH 12/43] [Unix] Treat deprecated-declarations as warnings
+
+---
+ compileoptions.cmake | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/compileoptions.cmake b/compileoptions.cmake
+index 8da9a38..57072f8 100644
+--- a/compileoptions.cmake
++++ b/compileoptions.cmake
+@@ -37,6 +37,7 @@ if (CLR_CMAKE_PLATFORM_UNIX)
+   # and so the compiler thinks that there is a mistake.
+   add_compile_options(-Wno-constant-logical-operand)
+   add_compile_options(-Wno-null-dereference)
++  add_compile_options(-Wno-deprecated-declarations)
+   add_compile_options(-Wno-unknown-warning-option)
+ 
+   #These seem to indicate real issues
+-- 
+2.7.4
+

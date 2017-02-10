@@ -1,0 +1,36 @@
+From d2ce4929294116aae37a47eb53ed0451bb3fa84d Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 25 Jan 2017 19:05:34 +0000
+Subject: [PATCH 23/43] [Unix] runtest.sh add trap USR1
+
+Print current summary of completed tests when signal
+USR1 is recieved by run script
+---
+ tests/runtest.sh | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/tests/runtest.sh b/tests/runtest.sh
+index 8a917c3..0cb4cd1 100755
+--- a/tests/runtest.sh
++++ b/tests/runtest.sh
+@@ -325,6 +325,16 @@ function handle_ctrl_c {
+ # Register the Ctrl-C handler
+ trap handle_ctrl_c INT
+ 
++# Handle USR1. We will print the results that we gathered so far and continue.
++function handle_usr1 {
++    echo ""
++    print_results
++    echo ""
++}
++
++# Register the USR1 handler
++trap handle_usr1 USR1
++
+ function create_core_overlay {
+     local errorSource='create_core_overlay'
+     local printUsage=1
+-- 
+2.7.4
+

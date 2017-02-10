@@ -1,0 +1,29 @@
+From db2ef89dbe80bf468d8bf820933a3ef60cc890bd Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 31 Jan 2017 23:09:36 -0500
+Subject: [PATCH 32/43] [Arm64/Unix] disable USE_REDIRECT_FOR_GCSTRESS
+
+When FEATURE_PAL is enableds USE_REDIRECT_FOR_GCSTRESS
+is not supported
+---
+ src/vm/arm64/cgencpu.h | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/vm/arm64/cgencpu.h b/src/vm/arm64/cgencpu.h
+index be3e34d..a176028 100644
+--- a/src/vm/arm64/cgencpu.h
++++ b/src/vm/arm64/cgencpu.h
+@@ -14,7 +14,9 @@
+ #define INSTRFMT_K64
+ #include <stublink.h>
+ 
++#ifndef FEATURE_PAL
+ #define USE_REDIRECT_FOR_GCSTRESS
++#endif // FEATURE_PAL
+ 
+ EXTERN_C void getFPReturn(int fpSize, INT64 *pRetVal);
+ EXTERN_C void setFPReturn(int fpSize, INT64 retVal);
+-- 
+2.7.4
+

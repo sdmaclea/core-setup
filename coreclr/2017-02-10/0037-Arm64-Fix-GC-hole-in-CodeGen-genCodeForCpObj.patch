@@ -1,0 +1,52 @@
+From 566a59aeb283ebac48b2fcea66648bdcdd7604ee Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 3 Feb 2017 01:01:46 +0000
+Subject: [PATCH 37/43] [Arm64] Fix GC hole in CodeGen::genCodeForCpObj()
+
+Update tempreg liveness
+---
+ src/jit/codegenarm64.cpp | 16 +++++++++++-----
+ 1 file changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 71c6dd1..6b93137 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3587,22 +3587,28 @@ void CodeGen::genCodeForCpObj(GenTreeObj* cpObjNode)
+     unsigned slots = cpObjNode->gtSlots;
+     emitter* emit  = getEmitter();
+ 
++    BYTE*    gcPtrs     = cpObjNode->gtGcPtrs;
++
+     // If we can prove it's on the stack we don't need to use the write barrier.
+     if (dstOnStack)
+     {
+         // TODO-ARM64-CQ: Consider using LDP/STP to save codesize.
+-        while (slots > 0)
++        for (unsigned i = 0; i < slots; ++i)
+         {
+-            emit->emitIns_R_R_I(INS_ldr, EA_8BYTE, tmpReg, REG_WRITE_BARRIER_SRC_BYREF, TARGET_POINTER_SIZE,
++            emitAttr attr = EA_8BYTE;
++            if (gcPtrs[i] == GCT_GCREF)
++                attr = EA_GCREF;
++            else if (gcPtrs[i] == GCT_BYREF)
++                attr = EA_BYREF;
++
++            emit->emitIns_R_R_I(INS_ldr, attr, tmpReg, REG_WRITE_BARRIER_SRC_BYREF, TARGET_POINTER_SIZE,
+                                 INS_OPTS_POST_INDEX);
+-            emit->emitIns_R_R_I(INS_str, EA_8BYTE, tmpReg, REG_WRITE_BARRIER_DST_BYREF, TARGET_POINTER_SIZE,
++            emit->emitIns_R_R_I(INS_str, attr, tmpReg, REG_WRITE_BARRIER_DST_BYREF, TARGET_POINTER_SIZE,
+                                 INS_OPTS_POST_INDEX);
+-            slots--;
+         }
+     }
+     else
+     {
+-        BYTE*    gcPtrs     = cpObjNode->gtGcPtrs;
+         unsigned gcPtrCount = cpObjNode->gtGcPtrCount;
+ 
+         unsigned i = 0;
+-- 
+2.7.4
+
