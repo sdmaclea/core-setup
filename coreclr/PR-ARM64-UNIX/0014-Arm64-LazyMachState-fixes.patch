@@ -1,0 +1,224 @@
+From dfca815e4c385591dc6f37ce2d2ea94195715cb1 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 20 Jan 2017 16:11:21 +0000
+Subject: [PATCH 14/23] [Arm64] LazyMachState fixes
+
+---
+ src/vm/arm64/asmconstants.h |  4 +++
+ src/vm/arm64/gmscpu.h       | 44 ++++++++++++++++++++--------
+ src/vm/arm64/stubs.cpp      | 71 ++++++++++++++++++++++++++++++++++++++++-----
+ 3 files changed, 100 insertions(+), 19 deletions(-)
+
+diff --git a/src/vm/arm64/asmconstants.h b/src/vm/arm64/asmconstants.h
+index b0300ca..df4c5d9 100644
+--- a/src/vm/arm64/asmconstants.h
++++ b/src/vm/arm64/asmconstants.h
+@@ -89,7 +89,11 @@ ASMCONSTANTS_C_ASSERT(MachState__isValid == offsetof(MachState, _isValid))
+ #define LazyMachState_captureX19_X29 MachState__captureX19_X29
+ ASMCONSTANTS_C_ASSERT(LazyMachState_captureX19_X29 == offsetof(LazyMachState, captureX19_X29))
+ 
++#ifdef FEATURE_PAL
++#define LazyMachState_captureSp     (MachState__isValid+8+12*8) // padding for alignment & m_Unwound
++#else
+ #define LazyMachState_captureSp     (MachState__isValid+8) // padding for alignment
++#endif
+ ASMCONSTANTS_C_ASSERT(LazyMachState_captureSp == offsetof(LazyMachState, captureSp))
+ 
+ #define LazyMachState_captureIp     (LazyMachState_captureSp+8)
+diff --git a/src/vm/arm64/gmscpu.h b/src/vm/arm64/gmscpu.h
+index e95ef63..9a16487 100644
+--- a/src/vm/arm64/gmscpu.h
++++ b/src/vm/arm64/gmscpu.h
+@@ -29,6 +29,13 @@ struct MachState {
+     
+     BOOL   isValid()    { LIMITED_METHOD_DAC_CONTRACT; return _isValid; }
+     TADDR  GetRetAddr() { LIMITED_METHOD_DAC_CONTRACT; return _pc; }
++
++#ifdef FEATURE_PAL
++    // On PAL, we don't always have the context pointers available due to
++    // a limitation of an unwinding library. In such case, preserve
++    // the unwound values.
++    CalleeSavedRegisters m_Unwound;
++#endif
+ };
+ 
+ struct LazyMachState : public MachState{
+@@ -56,25 +63,38 @@ inline void LazyMachState::setLazyStateFromUnwind(MachState* copy)
+     _sp = copy->_sp;
+     _pc = copy->_pc;
+ 
+-    // Now copy the preserved register pointers. Note that some of the pointers could be
+-    // pointing to copy->captureX19_X29[]. If that is case then while copying to destination
+-    // ensure that they point to corresponding element in captureX19_X29[] of destination.
+-    ULONG64* srcLowerBound = &copy->captureX19_X29[0];
+-    ULONG64* srcUpperBound = (ULONG64*)((BYTE*)copy + offsetof(MachState, ptrX19_X29));
++#ifdef FEATURE_PAL
++    this->m_Unwound = copy->m_Unwound;
++#endif
++
++    // Capture* has already been set, so there is no need to touch it
+ 
++    // loop over the nonvolatile context pointers and make
++    // sure to properly copy interior pointers into the
++    // new struct
+ 
+-    for (int i = 0; i<NUM_NONVOLATILE_CONTEXT_POINTERS; i++)
+-    {
+-        if (copy->ptrX19_X29[i] >= srcLowerBound && copy->ptrX19_X29[i] < srcUpperBound)
++    PULONG64* pSrc = (PULONG64 *)&copy->ptrX19_X29;
++    PULONG64* pDst = (PULONG64 *)&this->ptrX19_X29;
++
++    const PULONG64 LowerBoundDst = (PULONG64) this;
++    const PULONG64 LowerBoundSrc = (PULONG64) copy;
++
++    const PULONG64 UpperBoundSrc = (PULONG64) ((BYTE*)LowerBoundSrc + sizeof(*copy));
++
++    for (int i = 0; i < NUM_NONVOLATILE_CONTEXT_POINTERS; i++)
+     {
+-            ptrX19_X29[i] = (PTR_ULONG64)((BYTE*)copy->ptrX19_X29[i] - (BYTE*)srcLowerBound + (BYTE*)captureX19_X29);
+-        }
+-        else
++        PULONG64 valueSrc = *pSrc++;
++
++        if ((LowerBoundSrc <= valueSrc) && (valueSrc < UpperBoundSrc))
+         {
+-            ptrX19_X29[i] = copy->ptrX19_X29[i];
++            // make any pointer interior to 'src' interior to 'dst'
++            valueSrc = (PULONG64)((BYTE*)valueSrc - (BYTE*)LowerBoundSrc + (BYTE*)LowerBoundDst);
+         }
++
++        *pDst++ = valueSrc;
+     }
+ 
++
+     // this has to be last because we depend on write ordering to 
+     // synchronize the race implicit in updating this struct
+     VolatileStore(&_isValid, TRUE);
+diff --git a/src/vm/arm64/stubs.cpp b/src/vm/arm64/stubs.cpp
+index a9c7364..c8b3dde 100644
+--- a/src/vm/arm64/stubs.cpp
++++ b/src/vm/arm64/stubs.cpp
+@@ -371,6 +371,20 @@ void LazyMachState::unwindLazyState(LazyMachState* baseState,
+         }
+     } while (true);
+ 
++#ifdef FEATURE_PAL
++    unwoundstate->captureX19_X29[0] = context.X19;
++    unwoundstate->captureX19_X29[1] = context.X20;
++    unwoundstate->captureX19_X29[2] = context.X21;
++    unwoundstate->captureX19_X29[3] = context.X22;
++    unwoundstate->captureX19_X29[4] = context.X23;
++    unwoundstate->captureX19_X29[5] = context.X24;
++    unwoundstate->captureX19_X29[6] = context.X25;
++    unwoundstate->captureX19_X29[7] = context.X26;
++    unwoundstate->captureX19_X29[8] = context.X27;
++    unwoundstate->captureX19_X29[9] = context.X28;
++    unwoundstate->captureX19_X29[10] = context.Fp;
++#endif
++
+ #ifdef DACCESS_COMPILE
+     // For DAC builds, we update the registers directly since we dont have context pointers
+     unwoundstate->captureX19_X29[0] = context.X19;
+@@ -450,6 +464,20 @@ void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+         pRD->pCurrentContext->X28 = (DWORD64)(pUnwoundState->captureX19_X29[9]);
+         pRD->pCurrentContext->Fp = (DWORD64)(pUnwoundState->captureX19_X29[10]);
+         pRD->pCurrentContext->Lr = NULL; // Unwind again to get Caller's PC
++
++        pRD->pCurrentContextPointers->X19 = pUnwoundState->ptrX19_X29[0];
++        pRD->pCurrentContextPointers->X20 = pUnwoundState->ptrX19_X29[1];
++        pRD->pCurrentContextPointers->X21 = pUnwoundState->ptrX19_X29[2];
++        pRD->pCurrentContextPointers->X22 = pUnwoundState->ptrX19_X29[3];
++        pRD->pCurrentContextPointers->X23 = pUnwoundState->ptrX19_X29[4];
++        pRD->pCurrentContextPointers->X24 = pUnwoundState->ptrX19_X29[5];
++        pRD->pCurrentContextPointers->X25 = pUnwoundState->ptrX19_X29[6];
++        pRD->pCurrentContextPointers->X26 = pUnwoundState->ptrX19_X29[7];
++        pRD->pCurrentContextPointers->X27 = pUnwoundState->ptrX19_X29[8];
++        pRD->pCurrentContextPointers->X28 = pUnwoundState->ptrX19_X29[9];
++        pRD->pCurrentContextPointers->Fp = pUnwoundState->ptrX19_X29[10];
++        pRD->pCurrentContextPointers->Lr = NULL;
++
+         return;
+     }
+ #endif // DACCESS_COMPILE
+@@ -462,6 +490,20 @@ void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+     pRD->pCurrentContext->Pc = pRD->ControlPC;
+     pRD->pCurrentContext->Sp = pRD->SP;
+ 
++#ifdef FEATURE_PAL
++    pRD->pCurrentContext->X19 = m_MachState.ptrX19_X29[0] ? *m_MachState.ptrX19_X29[0] : m_MachState.captureX19_X29[0];
++    pRD->pCurrentContext->X20 = m_MachState.ptrX19_X29[1] ? *m_MachState.ptrX19_X29[1] : m_MachState.captureX19_X29[1];
++    pRD->pCurrentContext->X21 = m_MachState.ptrX19_X29[2] ? *m_MachState.ptrX19_X29[2] : m_MachState.captureX19_X29[2];
++    pRD->pCurrentContext->X22 = m_MachState.ptrX19_X29[3] ? *m_MachState.ptrX19_X29[3] : m_MachState.captureX19_X29[3];
++    pRD->pCurrentContext->X23 = m_MachState.ptrX19_X29[4] ? *m_MachState.ptrX19_X29[4] : m_MachState.captureX19_X29[4];
++    pRD->pCurrentContext->X24 = m_MachState.ptrX19_X29[5] ? *m_MachState.ptrX19_X29[5] : m_MachState.captureX19_X29[5];
++    pRD->pCurrentContext->X25 = m_MachState.ptrX19_X29[6] ? *m_MachState.ptrX19_X29[6] : m_MachState.captureX19_X29[6];
++    pRD->pCurrentContext->X26 = m_MachState.ptrX19_X29[7] ? *m_MachState.ptrX19_X29[7] : m_MachState.captureX19_X29[7];
++    pRD->pCurrentContext->X27 = m_MachState.ptrX19_X29[8] ? *m_MachState.ptrX19_X29[8] : m_MachState.captureX19_X29[8];
++    pRD->pCurrentContext->X28 = m_MachState.ptrX19_X29[9] ? *m_MachState.ptrX19_X29[9] : m_MachState.captureX19_X29[9];
++    pRD->pCurrentContext->Fp = m_MachState.ptrX19_X29[10] ? *m_MachState.ptrX19_X29[10] : m_MachState.captureX19_X29[10];
++    pRD->pCurrentContext->Lr = NULL; // Unwind again to get Caller's PC
++#else // FEATURE_PAL
+     pRD->pCurrentContext->X19 = *m_MachState.ptrX19_X29[0];
+     pRD->pCurrentContext->X20 = *m_MachState.ptrX19_X29[1];
+     pRD->pCurrentContext->X21 = *m_MachState.ptrX19_X29[2];
+@@ -474,6 +516,7 @@ void HelperMethodFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+     pRD->pCurrentContext->X28 = *m_MachState.ptrX19_X29[9];
+     pRD->pCurrentContext->Fp  = *m_MachState.ptrX19_X29[10];
+     pRD->pCurrentContext->Lr = NULL; // Unwind again to get Caller's PC
++#endif
+ 
+ #if !defined(DACCESS_COMPILE)    
+     pRD->pCurrentContextPointers->X19 = m_MachState.ptrX19_X29[0];
+@@ -790,6 +833,7 @@ void TransitionFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+ 
+ }
+ 
++
+ #endif
+ 
+ #ifndef	CROSSGEN_COMPILE
+@@ -858,20 +902,33 @@ void InlinedCallFrame::UpdateRegDisplay(const PREGDISPLAY pRD)
+         return;
+     }
+ 
+-    // reset pContext; it's only valid for active (top-most) frame
+-    pRD->pContext = NULL;
++    pRD->IsCallerContextValid = FALSE;
++    pRD->IsCallerSPValid      = FALSE;
++
++    pRD->pCurrentContext->Pc = *(DWORD64 *)&m_pCallerReturnAddress;
++    pRD->pCurrentContext->Sp = *(DWORD64 *)&m_pCallSiteSP;
++    pRD->pCurrentContext->Fp = *(DWORD64 *)&m_pCalleeSavedFP;
++
++    pRD->pCurrentContextPointers->X19 = NULL;
++    pRD->pCurrentContextPointers->X20 = NULL;
++    pRD->pCurrentContextPointers->X21 = NULL;
++    pRD->pCurrentContextPointers->X22 = NULL;
++    pRD->pCurrentContextPointers->X23 = NULL;
++    pRD->pCurrentContextPointers->X24 = NULL;
++    pRD->pCurrentContextPointers->X25 = NULL;
++    pRD->pCurrentContextPointers->X26 = NULL;
++    pRD->pCurrentContextPointers->X27 = NULL;
++    pRD->pCurrentContextPointers->X28 = NULL;
+ 
+     pRD->ControlPC = m_pCallerReturnAddress;
+     pRD->SP = (DWORD) dac_cast<TADDR>(m_pCallSiteSP);
+ 
+-    pRD->IsCallerContextValid = FALSE;
+-    pRD->IsCallerSPValid      = FALSE;
++    // reset pContext; it's only valid for active (top-most) frame
++    pRD->pContext = NULL;
++
+ 
+-    pRD->pCurrentContext->Pc = m_pCallerReturnAddress;
+-    pRD->pCurrentContext->Sp = pRD->SP;
+ 
+     // Update the frame pointer in the current context.
+-    pRD->pCurrentContext->Fp = m_pCalleeSavedFP;
+     pRD->pCurrentContextPointers->Fp = &m_pCalleeSavedFP;
+ 
+     RETURN;
+-- 
+2.7.4
+

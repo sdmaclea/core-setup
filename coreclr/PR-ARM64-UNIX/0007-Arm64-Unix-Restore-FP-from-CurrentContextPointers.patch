@@ -1,0 +1,33 @@
+From efb56636180e388364a5d5655a46b6007e5539fb Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 29 Dec 2016 20:15:53 -0500
+Subject: [PATCH 07/23] [Arm64/Unix] Restore FP from CurrentContextPointers
+
+---
+ src/vm/exceptionhandling.cpp | 9 +--------
+ 1 file changed, 1 insertion(+), 8 deletions(-)
+
+diff --git a/src/vm/exceptionhandling.cpp b/src/vm/exceptionhandling.cpp
+index 262d352..76af037 100644
+--- a/src/vm/exceptionhandling.cpp
++++ b/src/vm/exceptionhandling.cpp
+@@ -448,14 +448,7 @@ void ExceptionTracker::UpdateNonvolatileRegisters(CONTEXT *pContextRecord, REGDI
+     UPDATEREG(X26);
+     UPDATEREG(X27);
+     UPDATEREG(X28);
+-    // Obtain value of Fp from CurrentContext instead of from CurrentContextPointers
+-    // It should not matter. CurrentContextPointers does not have value of FP as this will 
+-    // require changes in MachState to also store pointer of FP which it does not do currently.
+-    pContextRecord->Fp = pRegDisplay->pCurrentContext->Fp;
+-    if (pAbortContext)
+-    {
+-        pAbortContext->Fp = pContextRecord->Fp;
+-    }
++    UPDATEREG(Fp);
+ 
+ #else
+     PORTABILITY_ASSERT("ExceptionTracker::UpdateNonvolatileRegisters");
+-- 
+2.7.4
+

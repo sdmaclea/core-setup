@@ -1,0 +1,59 @@
+From 185c491e5619aac2dd8023a3eb11fb28b419d9f1 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 13 Feb 2017 22:43:57 +0000
+Subject: [PATCH 23/23] [Arm64/Unix] Remove m_Unwound per review comments
+
+---
+ src/vm/arm64/asmconstants.h |  4 ----
+ src/vm/arm64/gmscpu.h       | 11 -----------
+ 2 files changed, 15 deletions(-)
+
+diff --git a/src/vm/arm64/asmconstants.h b/src/vm/arm64/asmconstants.h
+index df4c5d9..b0300ca 100644
+--- a/src/vm/arm64/asmconstants.h
++++ b/src/vm/arm64/asmconstants.h
+@@ -89,11 +89,7 @@ ASMCONSTANTS_C_ASSERT(MachState__isValid == offsetof(MachState, _isValid))
+ #define LazyMachState_captureX19_X29 MachState__captureX19_X29
+ ASMCONSTANTS_C_ASSERT(LazyMachState_captureX19_X29 == offsetof(LazyMachState, captureX19_X29))
+ 
+-#ifdef FEATURE_PAL
+-#define LazyMachState_captureSp     (MachState__isValid+8+12*8) // padding for alignment & m_Unwound
+-#else
+ #define LazyMachState_captureSp     (MachState__isValid+8) // padding for alignment
+-#endif
+ ASMCONSTANTS_C_ASSERT(LazyMachState_captureSp == offsetof(LazyMachState, captureSp))
+ 
+ #define LazyMachState_captureIp     (LazyMachState_captureSp+8)
+diff --git a/src/vm/arm64/gmscpu.h b/src/vm/arm64/gmscpu.h
+index 9a16487..7785daf 100644
+--- a/src/vm/arm64/gmscpu.h
++++ b/src/vm/arm64/gmscpu.h
+@@ -29,13 +29,6 @@ struct MachState {
+     
+     BOOL   isValid()    { LIMITED_METHOD_DAC_CONTRACT; return _isValid; }
+     TADDR  GetRetAddr() { LIMITED_METHOD_DAC_CONTRACT; return _pc; }
+-
+-#ifdef FEATURE_PAL
+-    // On PAL, we don't always have the context pointers available due to
+-    // a limitation of an unwinding library. In such case, preserve
+-    // the unwound values.
+-    CalleeSavedRegisters m_Unwound;
+-#endif
+ };
+ 
+ struct LazyMachState : public MachState{
+@@ -63,10 +56,6 @@ inline void LazyMachState::setLazyStateFromUnwind(MachState* copy)
+     _sp = copy->_sp;
+     _pc = copy->_pc;
+ 
+-#ifdef FEATURE_PAL
+-    this->m_Unwound = copy->m_Unwound;
+-#endif
+-
+     // Capture* has already been set, so there is no need to touch it
+ 
+     // loop over the nonvolatile context pointers and make
+-- 
+2.7.4
+

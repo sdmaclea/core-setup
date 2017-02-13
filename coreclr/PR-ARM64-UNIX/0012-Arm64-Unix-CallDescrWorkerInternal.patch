@@ -1,0 +1,37 @@
+From 775fd5a75ba20e55ee84ad90b337bfb27dba3e1c Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 18 Jan 2017 20:43:20 +0000
+Subject: [PATCH 12/23] [Arm64/Unix] CallDescrWorkerInternal
+
+Use empty stack slot to save argument
+---
+ src/vm/arm64/calldescrworkerarm64.S | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/vm/arm64/calldescrworkerarm64.S b/src/vm/arm64/calldescrworkerarm64.S
+index 71e0cb6..92ee30f 100644
+--- a/src/vm/arm64/calldescrworkerarm64.S
++++ b/src/vm/arm64/calldescrworkerarm64.S
+@@ -13,7 +13,8 @@
+ 
+ NESTED_ENTRY CallDescrWorkerInternal, _TEXT, NoHandler
+     PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, -32
+-    PROLOG_SAVE_REG    x19, 16   //the stack slot at sp+24 is empty for 16 byte alligment
++    PROLOG_SAVE_REG    x19, 16
++    PROLOG_SAVE_REG    x0, 24
+ 
+     mov     x19, x0 // save pCallDescrData in x19
+ 
+@@ -68,6 +69,8 @@ LOCAL_LABEL(NoFloatingPoint):
+     ldr     x9, [x19,#CallDescrData__pTarget]
+     blr     x9
+ 
++    ldr     x19, [fp, 24] // Fixup corrupted X19 caller preserved register
++
+     ldr     w3, [x19,#CallDescrData__fpReturnSize]
+ 
+     // Int return case
+-- 
+2.7.4
+

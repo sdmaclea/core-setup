@@ -1,0 +1,41 @@
+From 6caae84cb176cf2d68c16c2be9ce0996b55553ad Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 1 Dec 2016 14:06:29 -0500
+Subject: [PATCH 02/23] [Arm64/Unix] Fix CONTEXTToNativeContext()
+
+---
+ src/pal/src/include/pal/context.h | 3 +--
+ src/pal/src/thread/context.cpp    | 2 ++
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/pal/src/include/pal/context.h b/src/pal/src/include/pal/context.h
+index 6857c13..08fa05d 100644
+--- a/src/pal/src/include/pal/context.h
++++ b/src/pal/src/include/pal/context.h
+@@ -248,8 +248,7 @@ inline void *FPREG_Xstate_Ymmh(const ucontext_t *uc)
+ 
+ #define MCREG_Sp(mc)      ((mc).sp)
+ #define MCREG_Pc(mc)      ((mc).pc)
+-#define MCREG_PState(mc)  ((mc).pstate)
+-#define MCREG_Cpsr(mc)    ((mc).cpsr)
++#define MCREG_Cpsr(mc)    ((mc).pstate)
+ #else
+     // For FreeBSD, as found in x86/ucontext.h
+ #define MCREG_Rbp(mc)	    ((mc).mc_rbp)
+diff --git a/src/pal/src/thread/context.cpp b/src/pal/src/thread/context.cpp
+index 0449df5..bdce0d5 100644
+--- a/src/pal/src/thread/context.cpp
++++ b/src/pal/src/thread/context.cpp
+@@ -127,6 +127,8 @@ typedef int __ptrace_request;
+         ASSIGN_REG(R12)
+ #elif defined(_ARM64_)
+ #define ASSIGN_CONTROL_REGS \
++        ASSIGN_REG(Cpsr)    \
++        ASSIGN_REG(Fp)      \
+         ASSIGN_REG(Sp)      \
+         ASSIGN_REG(Lr)      \
+         ASSIGN_REG(Pc)
+-- 
+2.7.4
+
