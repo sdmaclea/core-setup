@@ -1,0 +1,27 @@
+From 5ca2d2c6a0d3682007ec5884d7990856c9316555 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 14 Feb 2017 20:43:58 +0000
+Subject: [PATCH] Fix EH_LOG Catch set notation
+
+Update log to indicate EHClause.TryEndPC in non-inclusive
+---
+ src/vm/exceptionhandling.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/vm/exceptionhandling.cpp b/src/vm/exceptionhandling.cpp
+index ba7a68d..0dfa4a9 100644
+--- a/src/vm/exceptionhandling.cpp
++++ b/src/vm/exceptionhandling.cpp
+@@ -2680,7 +2680,7 @@ CLRUnwindStatus ExceptionTracker::ProcessManagedCallFrame(
+                 EE_ILEXCEPTION_CLAUSE EHClause;
+                 PTR_EXCEPTION_CLAUSE_TOKEN pEHClauseToken = pJitMan->GetNextEHClause(&EnumState, &EHClause);
+ 
+-                EH_LOG((LL_INFO100, "  considering %s clause [%x,%x], ControlPc is %s clause (offset %x)",
++                EH_LOG((LL_INFO100, "  considering %s clause [%x,%x), ControlPc is %s clause (offset %x)",
+                         (IsFault(&EHClause)         ? "fault"   :
+                         (IsFinally(&EHClause)       ? "finally" :
+                         (IsFilterHandler(&EHClause) ? "filter"  :
+-- 
+2.7.4
+
