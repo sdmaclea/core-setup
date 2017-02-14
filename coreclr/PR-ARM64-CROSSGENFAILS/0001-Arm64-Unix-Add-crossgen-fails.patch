@@ -1,0 +1,32 @@
+From bf1c4e9b151a63c463ba495a20bbe4d662337bf5 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 14 Feb 2017 18:41:30 +0000
+Subject: [PATCH] [Arm64/Unix] Add crossgen fails
+
+Add crossgen fails from issue #9481 to fails.testlist
+---
+ tests/arm64/fails.testlist | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/tests/arm64/fails.testlist b/tests/arm64/fails.testlist
+index 5013739..97cc348 100644
+--- a/tests/arm64/fails.testlist
++++ b/tests/arm64/fails.testlist
+@@ -58,3 +58,13 @@ Exceptions/ForeignThread/ForeignThreadExceptions/ForeignThreadExceptions.sh
+ 
+ // Expected: 0x43e08b2a2c280290
+ JIT/Regression/JitBlue/GitHub_3449/GitHub_3449/GitHub_3449.sh
++
++// Crossgen fails
++// https://github.com/dotnet/coreclr/issues/9481
++JIT/Performance/CodeQuality/Linq/Linq/Linq.sh
++JIT/Performance/CodeQuality/Math/Functions/Functions/Functions.sh
++JIT/Performance/CodeQuality/Serialization/Deserialize/Deserialize.sh
++JIT/Performance/CodeQuality/Serialization/Serialize/Serialize.sh
++JIT/Regression/CLR-x86-JIT/v2.1/DDB/b188478/b188478/b188478.sh
++JIT/Regression/CLR-x86-JIT/v2.2/ddb/ddb188478/DDB188478/DDB188478.sh
++Loader/classloader/regressions/dev11_95728/dev11_95728/dev11_95728.sh
+-- 
+2.7.4
+
