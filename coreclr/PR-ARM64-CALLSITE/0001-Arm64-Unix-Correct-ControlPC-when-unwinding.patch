@@ -1,0 +1,36 @@
+From 14bda60c5a1ba9e4ee1f7d539bb133c0bcbaaa5e Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 15 Feb 2017 16:23:33 +0000
+Subject: [PATCH] [Arm64/Unix] Correct ControlPC when unwinding
+
+Fixes #9585
+---
+ src/vm/exceptionhandling.cpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/vm/exceptionhandling.cpp b/src/vm/exceptionhandling.cpp
+index a6c7651..f9be8a0 100644
+--- a/src/vm/exceptionhandling.cpp
++++ b/src/vm/exceptionhandling.cpp
+@@ -4331,7 +4331,7 @@ VOID UnwindManagedExceptionPass2(PAL_SEHException& ex, CONTEXT* unwindStartConte
+         dispatcherContext.FunctionEntry = codeInfo.GetFunctionEntry();
+         dispatcherContext.ControlPc = controlPc;
+         dispatcherContext.ImageBase = codeInfo.GetModuleBase();
+-#if defined(_TARGET_ARM_) || defined(_TARGET_X86_)
++#if defined(_TARGET_ARM_) || defined(_TARGET_ARM64_) || defined(_TARGET_X86_)
+         dispatcherContext.ControlPcIsUnwound = !!(currentFrameContext->ContextFlags & CONTEXT_UNWOUND_TO_CALL);
+ #endif
+         // Check whether we have a function table entry for the current controlPC.
+@@ -4482,7 +4482,7 @@ VOID DECLSPEC_NORETURN UnwindManagedExceptionPass1(PAL_SEHException& ex, CONTEXT
+         dispatcherContext.FunctionEntry = codeInfo.GetFunctionEntry();
+         dispatcherContext.ControlPc = controlPc;
+         dispatcherContext.ImageBase = codeInfo.GetModuleBase();
+-#if defined(_TARGET_ARM_) || defined(_TARGET_X86_)
++#if defined(_TARGET_ARM_) || defined(_TARGET_ARM64_) || defined(_TARGET_X86_)
+         dispatcherContext.ControlPcIsUnwound = !!(frameContext->ContextFlags & CONTEXT_UNWOUND_TO_CALL);
+ #endif
+ 
+-- 
+2.7.4
+
