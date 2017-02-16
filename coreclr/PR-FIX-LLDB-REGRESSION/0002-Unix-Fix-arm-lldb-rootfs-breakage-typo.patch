@@ -1,0 +1,26 @@
+From 268a3f004ad0a80297c1580d087e005cd3f50d18 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 16 Feb 2017 13:11:06 +0000
+Subject: [PATCH 2/2] [Unix] Fix arm/lldb rootfs breakage (typo)
+
+---
+ cross/build-rootfs.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/cross/build-rootfs.sh b/cross/build-rootfs.sh
+index 955bb77..4b695ab 100755
+--- a/cross/build-rootfs.sh
++++ b/cross/build-rootfs.sh
+@@ -16,7 +16,7 @@ __InitialDir=$PWD
+ __BuildArch=arm
+ __UbuntuArch=armhf
+ __UbuntuRepo="http://ports.ubuntu.com/"
+-__LLDB_Package_Default="lldb-3.6-dev"
++__LLDB_Package="lldb-3.6-dev"
+ __SkipUnmount=0
+ 
+ # base development support
+-- 
+2.7.4
+
