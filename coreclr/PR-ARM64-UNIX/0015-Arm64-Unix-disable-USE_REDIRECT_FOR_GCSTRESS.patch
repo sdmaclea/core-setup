@@ -2,7 +2,7 @@ From dccb0d3e02564c1cf69ea4dcb78de7a67080a1f9 Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Tue, 31 Jan 2017 23:09:36 -0500
-Subject: [PATCH 15/23] [Arm64/Unix] disable USE_REDIRECT_FOR_GCSTRESS
+Subject: [PATCH] [Arm64/Unix] disable USE_REDIRECT_FOR_GCSTRESS
 
 When FEATURE_PAL is enableds USE_REDIRECT_FOR_GCSTRESS
 is not supported

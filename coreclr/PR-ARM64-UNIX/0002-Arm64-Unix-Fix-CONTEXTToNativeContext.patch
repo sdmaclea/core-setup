@@ -2,7 +2,7 @@ From 6caae84cb176cf2d68c16c2be9ce0996b55553ad Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Thu, 1 Dec 2016 14:06:29 -0500
-Subject: [PATCH 02/23] [Arm64/Unix] Fix CONTEXTToNativeContext()
+Subject: [PATCH] [Arm64/Unix] Fix CONTEXTToNativeContext()
 
 ---
  src/pal/src/include/pal/context.h | 3 +--

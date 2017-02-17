@@ -2,7 +2,7 @@ From d05be2c8b051e76570676e9b9d39f43961b8d814 Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Tue, 10 Jan 2017 23:23:53 +0000
-Subject: [PATCH 10/23] [Arm64/Unix] More Fp fixups
+Subject: [PATCH] [Arm64/Unix] More Fp fixups
 
 ---
  src/pal/src/exception/seh-unwind.cpp | 1 +

@@ -2,7 +2,7 @@ From 86cfff3355cbbe8de94022a24a6b291cbc60763d Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Wed, 7 Dec 2016 14:43:55 -0500
-Subject: [PATCH 04/23] [Arm64/Unix] Preserve x8 argument register
+Subject: [PATCH] [Arm64/Unix] Preserve x8 argument register
 
 ---
  src/pal/inc/unixasmmacrosarm64.inc | 2 ++

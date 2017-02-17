@@ -2,7 +2,7 @@ From 011e693c3d88c4cff3ac51e30181abd45b61865c Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Thu, 22 Dec 2016 13:43:32 -0500
-Subject: [PATCH 06/23] [Arm64/Unix] Fix RtlRestoreContext
+Subject: [PATCH] [Arm64/Unix] Fix RtlRestoreContext
 
 ---
  src/pal/src/arch/arm64/context2.S | 37 +++++++++++++------------------------

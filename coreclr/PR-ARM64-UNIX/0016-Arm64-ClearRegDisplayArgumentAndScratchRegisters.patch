@@ -2,7 +2,7 @@ From 1bf23c06546121389bb95ee2f29b1f238320ddec Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Tue, 31 Jan 2017 23:13:09 -0500
-Subject: [PATCH 16/23] [Arm64] ClearRegDisplayArgumentAndScratchRegisters()
+Subject: [PATCH] [Arm64] ClearRegDisplayArgumentAndScratchRegisters()
 
 ---
  src/vm/arm64/stubs.cpp | 13 +++++++++++++

@@ -2,7 +2,7 @@ From 2e7f2d1299af2d1e8a692be401dbea5e8aac20ff Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Thu, 1 Dec 2016 14:08:22 -0500
-Subject: [PATCH 03/23] [Arm64/Unix] ThrowExceptionFromContextInternal
+Subject: [PATCH] [Arm64/Unix] ThrowExceptionFromContextInternal
 
 ---
  src/pal/src/arch/arm64/asmconstants.h    | 81 ++++++++++++++++++++++++++++++++

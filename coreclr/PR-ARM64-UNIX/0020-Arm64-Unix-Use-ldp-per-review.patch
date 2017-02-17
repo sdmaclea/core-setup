@@ -1,0 +1,42 @@
+From fb41fca95f3cdabaa45647a282db1f18d7d48bff Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 13 Feb 2017 21:34:00 +0000
+Subject: [PATCH] [Arm64/Unix] Use ldp per review
+
+Also fix indentation
+---
+ src/pal/src/arch/arm64/exceptionhelper.S | 17 ++++++-----------
+ 1 file changed, 6 insertions(+), 11 deletions(-)
+
+diff --git a/src/pal/src/arch/arm64/exceptionhelper.S b/src/pal/src/arch/arm64/exceptionhelper.S
+index 80075ae..480846e 100644
+--- a/src/pal/src/arch/arm64/exceptionhelper.S
++++ b/src/pal/src/arch/arm64/exceptionhelper.S
+@@ -16,17 +16,12 @@ LEAF_ENTRY ThrowExceptionFromContextInternal, _TEXT
+     // loading the FP from the context, but before loading the SP from the context.
+     stp fp, lr,  [sp, -16]!
+ 
+-    ldr	x19,	[x0, #(CONTEXT_X19)]
+-    ldr	x20,	[x0, #(CONTEXT_X20)]
+-    ldr	x21,	[x0, #(CONTEXT_X21)]
+-    ldr	x22,	[x0, #(CONTEXT_X22)]
+-    ldr	x23,	[x0, #(CONTEXT_X23)]
+-    ldr	x24,	[x0, #(CONTEXT_X24)]
+-    ldr	x25,	[x0, #(CONTEXT_X25)]
+-    ldr	x26,	[x0, #(CONTEXT_X26)]
+-    ldr	x27,	[x0, #(CONTEXT_X27)]
+-    ldr	x28,	[x0, #(CONTEXT_X28)]
+-    ldr	fp, 	[x0, #(CONTEXT_Fp)]
++    ldp x19,x20, [x0, #(CONTEXT_X19)]
++    ldp x21,x22, [x0, #(CONTEXT_X21)]
++    ldp x23,x24, [x0, #(CONTEXT_X23)]
++    ldp x24,x25, [x0, #(CONTEXT_X24)]
++    ldp x26,x27, [x0, #(CONTEXT_X26)]
++    ldp x28,fp,  [x0, #(CONTEXT_X28)]
+     ldr lr,      [x0, #(CONTEXT_Pc)]
+     ldr x2,      [x0, #(CONTEXT_Sp)]
+     mov sp, x2
+-- 
+2.7.4
+

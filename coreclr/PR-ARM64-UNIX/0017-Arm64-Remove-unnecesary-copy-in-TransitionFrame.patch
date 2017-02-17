@@ -2,7 +2,7 @@ From 72a38968e5758c6990501435e6423bf22b2d25b8 Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Tue, 31 Jan 2017 23:14:55 -0500
-Subject: [PATCH 17/23] [Arm64] Remove unnecesary copy in TransitionFrame
+Subject: [PATCH] [Arm64] Remove unnecesary copy in TransitionFrame
 
 ---
  src/vm/arm64/stubs.cpp | 10 ----------

@@ -2,7 +2,7 @@ From 0e778d7accdf17366cb2c7637002469e921114f9 Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Tue, 22 Nov 2016 13:32:26 -0500
-Subject: [PATCH 01/23] [Arm64/Unix] Update arm64 *.S files to match *.asm
+Subject: [PATCH] [Arm64/Unix] Update arm64 *.S files to match *.asm
 
 ---
  src/debug/ee/arm64/dbghelpers.S     |  36 ++-

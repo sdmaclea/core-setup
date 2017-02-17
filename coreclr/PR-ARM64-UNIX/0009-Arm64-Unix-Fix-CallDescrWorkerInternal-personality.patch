@@ -2,7 +2,7 @@ From da3093a0254c8178984b3e4cbca130f05b14ae05 Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Sat, 7 Jan 2017 00:03:41 +0000
-Subject: [PATCH 09/23] [Arm64/Unix] Fix CallDescrWorkerInternal personality
+Subject: [PATCH] [Arm64/Unix] Fix CallDescrWorkerInternal personality
 
 ---
  src/vm/arm64/calldescrworkerarm64.S | 2 +-

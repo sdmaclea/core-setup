@@ -2,7 +2,7 @@ From efb56636180e388364a5d5655a46b6007e5539fb Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Thu, 29 Dec 2016 20:15:53 -0500
-Subject: [PATCH 07/23] [Arm64/Unix] Restore FP from CurrentContextPointers
+Subject: [PATCH] [Arm64/Unix] Restore FP from CurrentContextPointers
 
 ---
  src/vm/exceptionhandling.cpp | 9 +--------

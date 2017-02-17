@@ -2,7 +2,7 @@ From dfca815e4c385591dc6f37ce2d2ea94195715cb1 Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Fri, 20 Jan 2017 16:11:21 +0000
-Subject: [PATCH 14/23] [Arm64] LazyMachState fixes
+Subject: [PATCH] [Arm64] LazyMachState fixes
 
 ---
  src/vm/arm64/asmconstants.h |  4 +++

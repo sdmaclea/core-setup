@@ -1,0 +1,35 @@
+From 1f5e9a7f37353b751151c110e7532758dad1e842 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 13 Feb 2017 22:10:33 +0000
+Subject: [PATCH] [Arm64/Unix] Fix indentation per review
+
+---
+ src/vm/arm64/asmhelpers.S | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
+index deb2a98..5e7fabe 100644
+--- a/src/vm/arm64/asmhelpers.S
++++ b/src/vm/arm64/asmhelpers.S
+@@ -843,7 +843,7 @@ NESTED_END UM2MThunk_WrapperHelper, _TEXT
+ #ifdef FEATURE_HIJACK
+ // ------------------------------------------------------------------
+ // Hijack function for functions which return a scalar type or a struct (value type)
+-    NESTED_ENTRY OnHijackTripThread, _TEXT, NoHandler
++NESTED_ENTRY OnHijackTripThread, _TEXT, NoHandler
+     PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, -144
+     // Spill callee saved registers
+     PROLOG_SAVE_REG_PAIR   x19, x20, 16
+@@ -876,7 +876,7 @@ NESTED_END UM2MThunk_WrapperHelper, _TEXT
+     EPILOG_RESTORE_REG_PAIR   x27, x28, 80
+     EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr,   144
+     EPILOG_RETURN
+-    NESTED_END OnHijackTripThread, _TEXT
++NESTED_END OnHijackTripThread, _TEXT
+ 
+ #endif // FEATURE_HIJACK
+ 
+-- 
+2.7.4
+

@@ -2,7 +2,7 @@ From 775fd5a75ba20e55ee84ad90b337bfb27dba3e1c Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Wed, 18 Jan 2017 20:43:20 +0000
-Subject: [PATCH 12/23] [Arm64/Unix] CallDescrWorkerInternal
+Subject: [PATCH] [Arm64/Unix] CallDescrWorkerInternal
 
 Use empty stack slot to save argument
 ---
