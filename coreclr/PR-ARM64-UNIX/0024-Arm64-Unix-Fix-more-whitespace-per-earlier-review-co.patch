@@ -1,0 +1,87 @@
+From d18c6d3e5ecf674525f4256b9f1e76d7f0a28ed4 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 17 Feb 2017 15:52:38 +0000
+Subject: [PATCH] [Arm64/Unix] Fix more whitespace per earlier review comments
+
+---
+ src/vm/arm64/asmhelpers.S | 16 ++++++++--------
+ 1 file changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
+index ebf706f..dd28c3e 100644
+--- a/src/vm/arm64/asmhelpers.S
++++ b/src/vm/arm64/asmhelpers.S
+@@ -470,7 +470,7 @@ LEAF_END SinglecastDelegateInvokeStub, _TEXT
+ // On exit:
+ //   tail calls to real method
+ //
+-    NESTED_ENTRY ComCallPreStub, _TEXT, NoHandler
++NESTED_ENTRY ComCallPreStub, _TEXT, NoHandler
+ 
+     // Save arguments and return address
+     PROLOG_SAVE_REG_PAIR           fp, lr, -ComCallPreStub_FirstStackAdjust!
+@@ -508,7 +508,7 @@ ComCallPreStub_ErrorExit
+ 
+     EPILOG_RETURN
+ 
+-    NESTED_END ComCallPreStub, _TEXT
++NESTED_END ComCallPreStub, _TEXT
+ 
+ // ------------------------------------------------------------------
+ // COM to CLR stub which sets up a ComMethodFrame and calls COMToCLRWorker.
+@@ -1062,7 +1062,7 @@ GenerateRedirectedStubWithFrame NakedThrowHelper, NakedThrowHelper2
+ #define BACKPATCH_FLAG      1
+ #define PROMOTE_CHAIN_FLAG  2
+ 
+-    NESTED_ENTRY ResolveWorkerChainLookupAsmStub, _TEXT, NoHandler
++NESTED_ENTRY ResolveWorkerChainLookupAsmStub, _TEXT, NoHandler
+ 
+     tst     x11, #BACKPATCH_FLAG    // First we check if x11 has the BACKPATCH_FLAG set
+     bne     LOCAL_LABEL(Fail)       // If the BACKPATCH_FLAGS is set we will go directly to the ResolveWorkerAsmStub
+@@ -1099,13 +1099,13 @@ LOCAL_LABEL(Promote):
+ LOCAL_LABEL(Fail):
+     b       ResolveWorkerAsmStub // call the ResolveWorkerAsmStub method to transition into the VM
+ 
+-    NESTED_END ResolveWorkerChainLookupAsmStub, _TEXT
++NESTED_END ResolveWorkerChainLookupAsmStub, _TEXT
+ 
+ // ------------------------------------------------------------------
+ // void ResolveWorkerAsmStub(args in regs x0-x7 & stack and possibly retbuf arg in x8, x11:IndirectionCellAndFlags, x12:DispatchToken)
+ //
+ // The stub dispatch thunk which transfers control to VSD_ResolveWorker.
+-        NESTED_ENTRY ResolveWorkerAsmStub, _TEXT, NoHandler
++NESTED_ENTRY ResolveWorkerAsmStub, _TEXT, NoHandler
+ 
+     PROLOG_WITH_TRANSITION_BLOCK
+ 
+@@ -1120,7 +1120,7 @@ LOCAL_LABEL(Fail):
+ 
+     EPILOG_BRANCH_REG  x9
+ 
+-        NESTED_END ResolveWorkerAsmStub, _TEXT
++NESTED_END ResolveWorkerAsmStub, _TEXT
+ 
+ #ifdef FEATURE_READYTORUN
+ 
+@@ -1144,7 +1144,7 @@ NESTED_END DelayLoad_MethodCall_FakeProlog, _TEXT
+ 
+ 
+ .macro DynamicHelper frameFlags, suffix
+-    NESTED_ENTRY DelayLoad_Helper\suffix\()_FakeProlog, _TEXT, NoHandler
++NESTED_ENTRY DelayLoad_Helper\suffix\()_FakeProlog, _TEXT, NoHandler
+ DelayLoad_Helper\suffix:
+     .global DelayLoad_Helper\suffix
+ 
+@@ -1164,7 +1164,7 @@ LOCAL_LABEL(FakeProlog\suffix\()_0):
+     EPILOG_WITH_TRANSITION_BLOCK_TAILCALL
+     EPILOG_BRANCH_REG  x12
+ 
+-    NESTED_END DelayLoad_Helper\suffix\()_FakeProlog, _TEXT
++NESTED_END DelayLoad_Helper\suffix\()_FakeProlog, _TEXT
+ .endm
+ 
+ DynamicHelper DynamicHelperFrameFlags_Default
+-- 
+2.7.4
+
