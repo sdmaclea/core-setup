@@ -1,0 +1,55 @@
+From 1e08eb2be580d27c7d0cffdecc8bfd93e70e407e Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Sat, 18 Feb 2017 01:28:17 +0000
+Subject: [PATCH] [ARM64] Use PT_KNONVOLATILE... for cross
+
+In order to enable cross compilation support, ARM64
+needs to use PT_KNONVOLATILE_CONTEXT_POINTERS
+---
+ src/unwinder/arm64/unwinder_arm64.cpp | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/unwinder/arm64/unwinder_arm64.cpp b/src/unwinder/arm64/unwinder_arm64.cpp
+index 36f7de1..1edb94a 100644
+--- a/src/unwinder/arm64/unwinder_arm64.cpp
++++ b/src/unwinder/arm64/unwinder_arm64.cpp
+@@ -109,7 +109,7 @@ typedef struct _ARM64_VFP_STATE
+ 
+ typedef struct _ARM64_UNWIND_PARAMS
+ {
+-    PKNONVOLATILE_CONTEXT_POINTERS ContextPointers;
++    PT_KNONVOLATILE_CONTEXT_POINTERS ContextPointers;
+ } ARM64_UNWIND_PARAMS, *PARM64_UNWIND_PARAMS;
+ 
+ #define UNWIND_PARAMS_SET_TRAP_FRAME(Params, Address, Size)
+@@ -117,7 +117,7 @@ typedef struct _ARM64_UNWIND_PARAMS
+ #define UPDATE_CONTEXT_POINTERS(Params, RegisterNumber, Address)                      \
+ do {                                                                                  \
+     if (ARGUMENT_PRESENT(Params)) {                                                   \
+-        PKNONVOLATILE_CONTEXT_POINTERS ContextPointers = (Params)->ContextPointers; \
++        PT_KNONVOLATILE_CONTEXT_POINTERS ContextPointers = (Params)->ContextPointers; \
+         if (ARGUMENT_PRESENT(ContextPointers)) {                                      \
+             if (RegisterNumber >=  19 && RegisterNumber <= 30) {                      \
+                 (&ContextPointers->X19)[RegisterNumber - 19] = (PDWORD64)Address;     \
+@@ -130,7 +130,7 @@ do {
+ #define UPDATE_FP_CONTEXT_POINTERS(Params, RegisterNumber, Address)                   \
+ do {                                                                                  \
+     if (ARGUMENT_PRESENT(Params)) {                                                   \
+-        PKNONVOLATILE_CONTEXT_POINTERS ContextPointers = (Params)->ContextPointers; \
++        PT_KNONVOLATILE_CONTEXT_POINTERS ContextPointers = (Params)->ContextPointers; \
+         if (ARGUMENT_PRESENT(ContextPointers) &&                                      \
+             (RegisterNumber >=  8) &&                                                 \
+             (RegisterNumber <= 15)) {                                                 \
+@@ -1621,7 +1621,7 @@ RtlVirtualUnwind(
+     IN OUT PCONTEXT ContextRecord,
+     OUT PVOID *HandlerData,
+     OUT PULONG64 EstablisherFrame,
+-    IN OUT PKNONVOLATILE_CONTEXT_POINTERS ContextPointers OPTIONAL
++    IN OUT PT_KNONVOLATILE_CONTEXT_POINTERS ContextPointers OPTIONAL
+     )
+ {
+     PEXCEPTION_ROUTINE handlerRoutine;
+-- 
+2.7.4
+
