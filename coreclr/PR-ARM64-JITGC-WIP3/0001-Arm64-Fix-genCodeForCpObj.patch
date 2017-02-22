@@ -1,0 +1,43 @@
+From 798959555bacce3a60811cf9dd6007563eb4a72b Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 22 Feb 2017 22:11:45 +0000
+Subject: [PATCH] [Arm64] Fix genCodeForCpObj()
+
+CORINFO_HELP_ASSIGN_BYREF is the functional equivalent to
+
+   *dst = *src;
+   ++dst;
+   ++src;
+
+Note: Description ignores barriers.
+
+Since src and dst are incremented the registers are marked dead.
+
+In genCodeForCpObj(), the incremented values are will be reused
+and therefore must be treated as live.  Add code to explicitly
+force them live for this use case.
+---
+ src/jit/codegenarm64.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 48d6f76..21da357 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3628,6 +3628,12 @@ void CodeGen::genCodeForCpObj(GenTreeObj* cpObjNode)
+                 default:
+                     // We have a GC pointer, call the memory barrier.
+                     genEmitHelperCall(CORINFO_HELP_ASSIGN_BYREF, 0, EA_PTRSIZE);
++
++                    // genEmitHelperCall(CORINFO_HELP_ASSIGN_BYREF...) killed these registers.
++                    // However they are still live references to the structures we are copying.
++                    gcInfo.gcMarkRegPtrVal(REG_WRITE_BARRIER_SRC_BYREF, srcAddrType);
++                    gcInfo.gcMarkRegPtrVal(REG_WRITE_BARRIER_DST_BYREF, dstAddr->TypeGet());
++
+                     gcPtrCount--;
+                     break;
+             }
+-- 
+2.7.4
+
