@@ -1,0 +1,150 @@
+From 4be13b807816d3e08bdc6401575232baafec10e4 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 1 Mar 2017 09:17:07 -0500
+Subject: [PATCH] [Arm64/Unix] Fix stack unwinding
+
+This restore the functionality lost by #9866 w/o functional
+loss
+---
+ src/pal/inc/unixasmmacrosarm64.inc                | 37 ++---------------------
+ src/pal/src/arch/arm64/callsignalhandlerwrapper.S |  1 +
+ src/vm/arm64/asmhelpers.S                         |  8 ++++-
+ 3 files changed, 10 insertions(+), 36 deletions(-)
+
+diff --git a/src/pal/inc/unixasmmacrosarm64.inc b/src/pal/inc/unixasmmacrosarm64.inc
+index ed73748..f0c4a5e 100644
+--- a/src/pal/inc/unixasmmacrosarm64.inc
++++ b/src/pal/inc/unixasmmacrosarm64.inc
+@@ -43,7 +43,6 @@ C_FUNC(\Name\()_End):
+ 
+ .macro PROLOG_STACK_ALLOC Size
+         sub sp, sp, \Size
+-        .cfi_adjust_cfa_offset \Size
+ .endm
+ 
+ .macro EPILOG_STACK_FREE Size
+@@ -67,6 +66,7 @@ C_FUNC(\Name\()_End):
+         .cfi_rel_offset \reg2, \ofs + 8
+         .ifc \reg1, fp
+         mov fp, sp
++        .cfi_def_cfa_register fp
+         .endif
+ .endm
+ 
+@@ -77,6 +77,7 @@ C_FUNC(\Name\()_End):
+         .cfi_rel_offset \reg2, 8
+         .ifc \reg1, fp
+         mov fp, sp
++        .cfi_def_cfa_register fp
+         .endif
+ .endm
+ 
+@@ -191,19 +192,10 @@ C_FUNC(\Name\()_End):
+ .macro SAVE_ARGUMENT_REGISTERS reg, ofs
+ 
+         stp                    x0, x1, [\reg, #(\ofs)]
+-       .cfi_rel_offset x0, \ofs
+-       .cfi_rel_offset x1, \ofs + 8
+         stp                    x2, x3, [\reg, #(\ofs + 16)]
+-       .cfi_rel_offset x2, \ofs + 16
+-       .cfi_rel_offset x3, \ofs + 24
+         stp                    x4, x5, [\reg, #(\ofs + 32)]
+-       .cfi_rel_offset x4, \ofs + 32
+-       .cfi_rel_offset x5, \ofs + 40
+         stp                    x6, x7, [\reg, #(\ofs + 48)]
+-       .cfi_rel_offset x6, \ofs + 48
+-       .cfi_rel_offset x7, \ofs + 56
+         str                    x8, [\reg, #(\ofs + 64)]
+-       .cfi_rel_offset x8, \ofs + 64
+ 
+ .endm
+ 
+@@ -211,53 +203,28 @@ C_FUNC(\Name\()_End):
+ .macro SAVE_FLOAT_ARGUMENT_REGISTERS reg, ofs
+ 
+         stp                    d0, d1, [\reg, #(\ofs)]
+-       .cfi_rel_offset d0, \ofs + 0
+-       .cfi_rel_offset d1, \ofs + 8
+         stp                    d2, d3, [\reg, #(\ofs + 16)]
+-       .cfi_rel_offset d2, \ofs + 16
+-       .cfi_rel_offset d3, \ofs + 24
+         stp                    d4, d5, [\reg, #(\ofs + 32)]
+-       .cfi_rel_offset d4, \ofs + 32
+-       .cfi_rel_offset d5, \ofs + 40
+         stp                    d6, d7, [\reg, #(\ofs + 48)]
+-       .cfi_rel_offset d6, \ofs + 48
+-       .cfi_rel_offset d7, \ofs + 56
+ 
+ .endm
+ 
+ .macro RESTORE_ARGUMENT_REGISTERS reg, ofs
+ 
+         ldp                    x0, x1, [\reg, #(\ofs)]
+-        .cfi_restore x0
+-        .cfi_restore x1
+         ldp                    x2, x3, [\reg, #(\ofs + 16)]
+-        .cfi_restore x2
+-        .cfi_restore x3
+         ldp                    x4, x5, [\reg, #(\ofs + 32)]
+-        .cfi_restore x4
+-        .cfi_restore x5
+         ldp                    x6, x7, [\reg, #(\ofs + 48)]
+-        .cfi_restore x6
+-        .cfi_restore x7
+         ldr                    x8, [\reg, #(\ofs + 64)]
+-        .cfi_restore x8
+ 
+ .endm
+ 
+ .macro RESTORE_FLOAT_ARGUMENT_REGISTERS reg, ofs
+ 
+         ldp                    d0, d1, [\reg, #(\ofs)]
+-        .cfi_restore d0
+-        .cfi_restore d1
+         ldp                    d2, d3, [\reg, #(\ofs + 16)]
+-        .cfi_restore d2
+-        .cfi_restore d3
+         ldp                    d4, d5, [\reg, #(\ofs + 32)]
+-        .cfi_restore d4
+-        .cfi_restore d5
+         ldp                    d6, d7, [\reg, #(\ofs + 48)]
+-        .cfi_restore d6
+-        .cfi_restore d7
+ 
+ .endm
+ 
+diff --git a/src/pal/src/arch/arm64/callsignalhandlerwrapper.S b/src/pal/src/arch/arm64/callsignalhandlerwrapper.S
+index 48b2596..90fb602 100644
+--- a/src/pal/src/arch/arm64/callsignalhandlerwrapper.S
++++ b/src/pal/src/arch/arm64/callsignalhandlerwrapper.S
+@@ -17,6 +17,7 @@ C_FUNC(SignalHandlerWorkerReturnOffset\Alignment):
+ NESTED_ENTRY CallSignalHandlerWrapper\Alignment, _TEXT, NoHandler
+ __StackAllocationSize = (128 + 8 + 8 + \Alignment) // red zone + fp + lr + alignment 
+     PROLOG_STACK_ALLOC __StackAllocationSize
++    .cfi_adjust_cfa_offset __StackAllocationSize
+     PROLOG_SAVE_REG_PAIR fp, lr, 0
+     bl      EXTERNAL_C_FUNC(signal_handler_worker)
+ LOCAL_LABEL(SignalHandlerWorkerReturn\Alignment):
+diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
+index b318ad9..ef6b5cf 100644
+--- a/src/vm/arm64/asmhelpers.S
++++ b/src/vm/arm64/asmhelpers.S
+@@ -909,7 +909,13 @@ NESTED_ENTRY CallEHFunclet, _TEXT, NoHandler
+     // X3 = address of the location where the SP of funclet's caller (i.e. this helper) should be saved.
+     //
+ 
+-    PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, -96
++    // Using below prolog instead of PROLOG_SAVE_REG_PAIR_INDEXED fp,lr, -96
++    // is intentional. Above statement would also emit instruction to save
++    // sp in fp. If sp is saved in fp in prolog then it is not expected that fp can change in the body
++    // of method. However, this method needs to be able to change fp before calling funclet.
++    // This is required to access locals in funclet.
++    PROLOG_SAVE_REG_PAIR_INDEXED   x29, lr, -96
++
+     // Spill callee saved registers
+     PROLOG_SAVE_REG_PAIR   x19, x20, 16
+     PROLOG_SAVE_REG_PAIR   x21, x22, 32
+-- 
+2.7.4
+
