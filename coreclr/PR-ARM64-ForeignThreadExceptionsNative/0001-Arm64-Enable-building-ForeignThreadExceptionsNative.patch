@@ -1,0 +1,32 @@
+From c7cfcaa605f7c5facba05c24d1556f5f117c6de1 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 1 Mar 2017 12:02:50 -0500
+Subject: [PATCH] [Arm64] Enable building ForeignThreadExceptionsNative
+
+---
+ tests/src/Exceptions/ForeignThread/CMakeLists.txt | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/tests/src/Exceptions/ForeignThread/CMakeLists.txt b/tests/src/Exceptions/ForeignThread/CMakeLists.txt
+index 78bde48..132dfee 100644
+--- a/tests/src/Exceptions/ForeignThread/CMakeLists.txt
++++ b/tests/src/Exceptions/ForeignThread/CMakeLists.txt
+@@ -1,7 +1,5 @@
+ cmake_minimum_required (VERSION 2.6)
+ 
+-if(NOT (CLR_CMAKE_TARGET_ARCH STREQUAL arm64))
+-
+ project (ForeignThreadExceptionsNative)
+ 
+ include_directories(${INC_PLATFORM_DIR})
+@@ -13,5 +11,3 @@ add_library (ForeignThreadExceptionsNative SHARED ${SOURCES})
+ 
+ # add the install targets
+ install (TARGETS ForeignThreadExceptionsNative DESTINATION bin)
+-
+-endif()
+\ No newline at end of file
+-- 
+2.7.4
+
