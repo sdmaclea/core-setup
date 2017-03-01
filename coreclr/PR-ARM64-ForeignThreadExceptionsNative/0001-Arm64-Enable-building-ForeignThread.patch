@@ -1,0 +1,45 @@
+From 9c224da8a89d27c87e76cc3ff17cd7749fe6c434 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 1 Mar 2017 12:02:50 -0500
+Subject: [PATCH] [Arm64] Enable building ForeignThread
+
+---
+ tests/src/Exceptions/ForeignThread/CMakeLists.txt                 | 4 ----
+ tests/src/Exceptions/ForeignThread/ForeignThreadExceptions.csproj | 1 -
+ 2 files changed, 5 deletions(-)
+
+diff --git a/tests/src/Exceptions/ForeignThread/CMakeLists.txt b/tests/src/Exceptions/ForeignThread/CMakeLists.txt
+index 78bde48..132dfee 100644
+--- a/tests/src/Exceptions/ForeignThread/CMakeLists.txt
++++ b/tests/src/Exceptions/ForeignThread/CMakeLists.txt
+@@ -1,7 +1,5 @@
+ cmake_minimum_required (VERSION 2.6)
+ 
+-if(NOT (CLR_CMAKE_TARGET_ARCH STREQUAL arm64))
+-
+ project (ForeignThreadExceptionsNative)
+ 
+ include_directories(${INC_PLATFORM_DIR})
+@@ -13,5 +11,3 @@ add_library (ForeignThreadExceptionsNative SHARED ${SOURCES})
+ 
+ # add the install targets
+ install (TARGETS ForeignThreadExceptionsNative DESTINATION bin)
+-
+-endif()
+\ No newline at end of file
+diff --git a/tests/src/Exceptions/ForeignThread/ForeignThreadExceptions.csproj b/tests/src/Exceptions/ForeignThread/ForeignThreadExceptions.csproj
+index 382de1b..ee4c292 100644
+--- a/tests/src/Exceptions/ForeignThread/ForeignThreadExceptions.csproj
++++ b/tests/src/Exceptions/ForeignThread/ForeignThreadExceptions.csproj
+@@ -13,7 +13,6 @@
+     <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+     <ReferencePath>$(ProgramFiles)\Common Files\microsoft shared\VSTT\11.0\UITestExtensionPackages</ReferencePath>
+     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
+-    <DisableProjectBuild Condition=" '$(Platform)' == 'arm64' ">true</DisableProjectBuild> 
+     <NuGetPackageImportStamp>7a9bfb7d</NuGetPackageImportStamp>
+     <DefineConstants>$(DefineConstants);STATIC</DefineConstants>
+   </PropertyGroup>
+-- 
+2.7.4
+
