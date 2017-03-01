@@ -1,4 +1,4 @@
-From f894cf48cbb1acea2a483e57d2f69318383c925c Mon Sep 17 00:00:00 2001
+From f299670a15d03259bd4268eb8e2f1af280c97a10 Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Tue, 28 Feb 2017 18:16:44 -0500
@@ -6,14 +6,23 @@ Subject: [PATCH] [Arm64/Unix] Revert fix stack unwinding in
  CallDescrWorkerInternal
 
 ---
- src/pal/inc/unixasmmacrosarm64.inc | 2 --
- 1 file changed, 2 deletions(-)
+ src/pal/inc/unixasmmacrosarm64.inc                | 3 +--
+ src/pal/src/arch/arm64/callsignalhandlerwrapper.S | 1 -
+ 2 files changed, 1 insertion(+), 3 deletions(-)
 
 diff --git a/src/pal/inc/unixasmmacrosarm64.inc b/src/pal/inc/unixasmmacrosarm64.inc
-index 34509f3..e79423f 100644
+index 34509f3..ed73748 100644
 --- a/src/pal/inc/unixasmmacrosarm64.inc
 +++ b/src/pal/inc/unixasmmacrosarm64.inc
-@@ -66,7 +66,6 @@ C_FUNC(\Name\()_End):
+@@ -43,6 +43,7 @@ C_FUNC(\Name\()_End):
+ 
+ .macro PROLOG_STACK_ALLOC Size
+         sub sp, sp, \Size
++        .cfi_adjust_cfa_offset \Size
+ .endm
+ 
+ .macro EPILOG_STACK_FREE Size
+@@ -66,7 +67,6 @@ C_FUNC(\Name\()_End):
          .cfi_rel_offset \reg2, \ofs + 8
          .ifc \reg1, fp
          mov fp, sp
@@ -21,7 +30,7 @@ index 34509f3..e79423f 100644
          .endif
  .endm
  
-@@ -77,7 +76,6 @@ C_FUNC(\Name\()_End):
+@@ -77,7 +77,6 @@ C_FUNC(\Name\()_End):
          .cfi_rel_offset \reg2, 8
          .ifc \reg1, fp
          mov fp, sp
@@ -29,6 +38,18 @@ index 34509f3..e79423f 100644
          .endif
  .endm
  
+diff --git a/src/pal/src/arch/arm64/callsignalhandlerwrapper.S b/src/pal/src/arch/arm64/callsignalhandlerwrapper.S
+index 90fb602..48b2596 100644
+--- a/src/pal/src/arch/arm64/callsignalhandlerwrapper.S
++++ b/src/pal/src/arch/arm64/callsignalhandlerwrapper.S
+@@ -17,7 +17,6 @@ C_FUNC(SignalHandlerWorkerReturnOffset\Alignment):
+ NESTED_ENTRY CallSignalHandlerWrapper\Alignment, _TEXT, NoHandler
+ __StackAllocationSize = (128 + 8 + 8 + \Alignment) // red zone + fp + lr + alignment 
+     PROLOG_STACK_ALLOC __StackAllocationSize
+-    .cfi_adjust_cfa_offset __StackAllocationSize
+     PROLOG_SAVE_REG_PAIR fp, lr, 0
+     bl      EXTERNAL_C_FUNC(signal_handler_worker)
+ LOCAL_LABEL(SignalHandlerWorkerReturn\Alignment):
 -- 
 2.7.4
 
