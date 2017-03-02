@@ -1,0 +1,26 @@
+From b7ad5db9aa53aee98dfca1859254192a8af16f0a Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 1 Mar 2017 16:29:42 -0500
+Subject: [PATCH] Fix crossgen segfault
+
+---
+ src/utilcode/pedecoder.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/utilcode/pedecoder.cpp b/src/utilcode/pedecoder.cpp
+index e4fc465..b769fab 100644
+--- a/src/utilcode/pedecoder.cpp
++++ b/src/utilcode/pedecoder.cpp
+@@ -1829,7 +1829,7 @@ BOOL PEDecoder::HasNativeHeader() const
+ 
+ #ifdef FEATURE_PREJIT
+     // Pretend that ready-to-run images do not have native header
+-    RETURN (((GetCorHeader()->Flags & VAL32(COMIMAGE_FLAGS_IL_LIBRARY)) != 0) && !HasReadyToRunHeader());
++    RETURN (GetCorHeader() && ((GetCorHeader()->Flags & VAL32(COMIMAGE_FLAGS_IL_LIBRARY)) != 0) && !HasReadyToRunHeader());
+ #else
+     RETURN FALSE;
+ #endif
+-- 
+2.7.4
+
