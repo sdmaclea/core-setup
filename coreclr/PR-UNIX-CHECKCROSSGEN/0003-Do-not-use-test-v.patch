@@ -1,0 +1,28 @@
+From 797b0b8222e53b0541072be6e1bd191b5bdb7ad8 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 3 Mar 2017 14:18:41 +0000
+Subject: [PATCH] Do not use test -v
+
+CI showed bash 4.2 feature test -v is not present on
+OSX CI systems.  Fall back to more standard bash test
+---
+ tests/runtest.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tests/runtest.sh b/tests/runtest.sh
+index 7bf3b46..b5de40f 100755
+--- a/tests/runtest.sh
++++ b/tests/runtest.sh
+@@ -404,7 +404,7 @@ function precompile_overlay_assemblies {
+                     echo Unable to generate dasm for $filename
+                 fi
+             else
+-                if [[ -v skipCrossGenFiles[$(basename $filename)] ]]; then
++                if [[ ${skipCrossGenFiles[$(basename $filename)]:-0} == 0 ]]; then
+                     continue
+                 fi
+                 echo Precompiling $filename
+-- 
+2.7.4
+
