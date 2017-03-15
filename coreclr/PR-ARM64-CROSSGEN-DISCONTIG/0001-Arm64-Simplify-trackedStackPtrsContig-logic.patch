@@ -1,0 +1,34 @@
+From c43abaf6e6e0adc64d2b9d828a7b87041d719b95 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 15 Mar 2017 23:21:04 +0000
+Subject: [PATCH] [Arm64] Simplify trackedStackPtrsContig logic
+
+Follow amd64 example and always mark stk-ptrs discontiguous
+---
+ src/jit/codegencommon.cpp | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
+index 90a9149..bb03295 100644
+--- a/src/jit/codegencommon.cpp
++++ b/src/jit/codegencommon.cpp
+@@ -3150,14 +3150,11 @@ void CodeGen::genGenerateCode(void** codePtr, ULONG* nativeSizeOfCode)
+ 
+     bool trackedStackPtrsContig; // are tracked stk-ptrs contiguous ?
+ 
+-#ifdef _TARGET_AMD64_
++#if defined(_TARGET_AMD64_) || defined(_TARGET_ARM64_)
+     trackedStackPtrsContig = false;
+ #elif defined(_TARGET_ARM_)
+     // On arm due to prespilling of arguments, tracked stk-ptrs may not be contiguous
+     trackedStackPtrsContig = !compiler->opts.compDbgEnC && !compiler->compIsProfilerHookNeeded();
+-#elif defined(_TARGET_ARM64_)
+-    // Incoming vararg registers are homed on the top of the stack. Tracked var may not be contiguous.
+-    trackedStackPtrsContig = !compiler->opts.compDbgEnC && !compiler->info.compIsVarArgs;
+ #else
+     trackedStackPtrsContig = !compiler->opts.compDbgEnC;
+ #endif
+-- 
+2.7.4
+
