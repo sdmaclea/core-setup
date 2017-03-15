@@ -1,0 +1,111 @@
+From df966e4d203979143a0eef4306c963bb321ba4df Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 15 Mar 2017 19:03:04 +0000
+Subject: [PATCH] [Arm64] Enable tailcall for call, pop, ret case
+
+Fixes #9880
+---
+ src/jit/flowgraph.cpp |  8 ++++----
+ src/jit/importer.cpp  | 13 ++++++-------
+ src/jit/morph.cpp     |  2 +-
+ 3 files changed, 11 insertions(+), 12 deletions(-)
+
+diff --git a/src/jit/flowgraph.cpp b/src/jit/flowgraph.cpp
+index 8bd267c..7c3e9fd 100644
+--- a/src/jit/flowgraph.cpp
++++ b/src/jit/flowgraph.cpp
+@@ -5388,15 +5388,15 @@ unsigned Compiler::fgMakeBasicBlocks(const BYTE* codeAddr, IL_OFFSET codeSize, B
+                     if (!impIsTailCallILPattern(tailCall, opcode, codeAddr + sz, codeEndp, isRecursive,
+                                                 &isCallPopAndRet))
+                     {
+-#ifdef _TARGET_AMD64_
++#if defined(_TARGET_AMD64_) || defined(_TARGET_ARM64_)
+                         BADCODE3("tail call not followed by ret or pop+ret", " at offset %04X",
+                                  (IL_OFFSET)(codeAddr - codeBegp));
+ #else
+                         BADCODE3("tail call not followed by ret", " at offset %04X", (IL_OFFSET)(codeAddr - codeBegp));
+-#endif //_TARGET_AMD64_
++#endif // defined(_TARGET_AMD64_) || defined(_TARGET_ARM64_)
+                     }
+ 
+-#ifdef _TARGET_AMD64_
++#if defined(_TARGET_AMD64_) || defined(_TARGET_ARM64_)
+                     if (isCallPopAndRet)
+                     {
+                         // By breaking here, we let pop and ret opcodes to be
+@@ -5405,7 +5405,7 @@ unsigned Compiler::fgMakeBasicBlocks(const BYTE* codeAddr, IL_OFFSET codeSize, B
+                         // in fgMorphCall().
+                         break;
+                     }
+-#endif //_TARGET_AMD64_
++#endif // defined(_TARGET_AMD64_) || defined(_TARGET_ARM64_)
+                 }
+                 else
+                 {
+diff --git a/src/jit/importer.cpp b/src/jit/importer.cpp
+index e285fed..ed994e4 100644
+--- a/src/jit/importer.cpp
++++ b/src/jit/importer.cpp
+@@ -6271,7 +6271,7 @@ bool Compiler::impIsTailCallILPattern(bool        tailPrefixed,
+     int    cntPop = 0;
+     OPCODE nextOpcode;
+ 
+-#ifdef _TARGET_AMD64_
++#if defined(_TARGET_AMD64_) || defined(_TARGET_ARM64_)
+     do
+     {
+         nextOpcode = (OPCODE)getU1LittleEndian(codeAddrOfNextOpcode);
+@@ -6282,7 +6282,7 @@ bool Compiler::impIsTailCallILPattern(bool        tailPrefixed,
+                                                                                          // one pop seen so far.
+ #else
+     nextOpcode = (OPCODE)getU1LittleEndian(codeAddrOfNextOpcode);
+-#endif
++#endif // defined(_TARGET_AMD64_) || defined(_TARGET_ARM64_)
+ 
+     if (isCallPopAndRet)
+     {
+@@ -6290,15 +6290,14 @@ bool Compiler::impIsTailCallILPattern(bool        tailPrefixed,
+         *isCallPopAndRet = (nextOpcode == CEE_RET) && (cntPop == 1);
+     }
+ 
+-#ifdef _TARGET_AMD64_
+-    // Jit64 Compat:
++#if defined(_TARGET_AMD64_) || defined(_TARGET_ARM64_)
+     // Tail call IL pattern could be either of the following
+     // 1) call/callvirt/calli + ret
+     // 2) call/callvirt/calli + pop + ret in a method returning void.
+     return (nextOpcode == CEE_RET) && ((cntPop == 0) || ((cntPop == 1) && (info.compRetType == TYP_VOID)));
+-#else //!_TARGET_AMD64_
++#else
+     return (nextOpcode == CEE_RET) && (cntPop == 0);
+-#endif
++#endif // defined(_TARGET_AMD64_) || defined(_TARGET_ARM64_)
+ }
+ 
+ /*****************************************************************************
+@@ -15358,7 +15357,7 @@ bool Compiler::impReturnInstruction(BasicBlock* block, int prefixFlags, OPCODE&
+     // We must have imported a tailcall and jumped to RET
+     if (prefixFlags & PREFIX_TAILCALL)
+     {
+-#ifndef _TARGET_AMD64_
++#if !(defined(_TARGET_AMD64_) || defined(_TARGET_ARM64_))
+         // Jit64 compat:
+         // This cannot be asserted on Amd64 since we permit the following IL pattern:
+         //      tail.call
+diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
+index 96edb3b..7b816f9 100644
+--- a/src/jit/morph.cpp
++++ b/src/jit/morph.cpp
+@@ -7911,7 +7911,7 @@ GenTreePtr Compiler::fgMorphCall(GenTreeCall* call)
+         // the call.
+         GenTreeStmt* nextMorphStmt = fgMorphStmt->gtNextStmt;
+ 
+-#ifdef _TARGET_AMD64_
++#if defined(_TARGET_AMD64_) || defined(_TARGET_ARM64_)
+         // Legacy Jit64 Compat:
+         // There could be any number of GT_NOPs between tail call and GT_RETURN.
+         // That is tail call pattern could be one of the following:
+-- 
+2.7.4
+
