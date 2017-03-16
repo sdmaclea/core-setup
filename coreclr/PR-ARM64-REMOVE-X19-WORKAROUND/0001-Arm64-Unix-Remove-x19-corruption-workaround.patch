@@ -1,0 +1,26 @@
+From 12652716ec011d1400a6babaa123e65222dda88e Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 16 Mar 2017 16:20:39 +0000
+Subject: [PATCH] [Arm64/Unix] Remove x19 corruption workaround
+
+---
+ src/vm/arm64/calldescrworkerarm64.S | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/vm/arm64/calldescrworkerarm64.S b/src/vm/arm64/calldescrworkerarm64.S
+index 2210d70..c1ce066 100644
+--- a/src/vm/arm64/calldescrworkerarm64.S
++++ b/src/vm/arm64/calldescrworkerarm64.S
+@@ -69,8 +69,6 @@ LOCAL_LABEL(NoFloatingPoint):
+     ldr     x9, [x19,#CallDescrData__pTarget]
+     blr     x9
+ 
+-    ldr     x19, [fp, 24] // Fixup corrupted X19 caller preserved register
+-
+     ldr     w3, [x19,#CallDescrData__fpReturnSize]
+ 
+     // Int return case
+-- 
+2.7.4
+
