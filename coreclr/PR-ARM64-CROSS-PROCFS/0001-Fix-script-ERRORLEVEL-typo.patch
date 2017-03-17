@@ -1,0 +1,26 @@
+From fe95b9db6380a43fbc6125197ac7ddc4768a352b Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 17 Mar 2017 16:46:39 +0000
+Subject: [PATCH] Fix script ERRORLEVEL typo
+
+---
+ tests/src/CLRTest.Execute.Bash.targets | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tests/src/CLRTest.Execute.Bash.targets b/tests/src/CLRTest.Execute.Bash.targets
+index f17973a..5af1306 100644
+--- a/tests/src/CLRTest.Execute.Bash.targets
++++ b/tests/src/CLRTest.Execute.Bash.targets
+@@ -33,7 +33,7 @@ WARNING:   When setting properties based on their current state (for example:
+       <![CDATA[
+ echo "$CORE_ROOT/ildasm" -raweh -out=$(DisassemblyName) $(InputAssemblyName)
+ "$CORE_ROOT/ildasm" -raweh -out=$(DisassemblyName) $(InputAssemblyName)
+-_ERRORLEVEL=$?
++ERRORLEVEL=$?
+ if [  $ERRORLEVEL -ne 0 ]
+ then
+   echo EXECUTION OF ILDASM - FAILED $ERRORLEVEL
+-- 
+2.7.4
+

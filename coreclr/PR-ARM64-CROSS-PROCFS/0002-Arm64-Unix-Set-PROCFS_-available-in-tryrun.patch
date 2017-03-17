@@ -1,0 +1,39 @@
+From 7b45d8b457ee07fbcd5ec3a081b119445c3f28b0 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 17 Mar 2017 16:53:24 +0000
+Subject: [PATCH] [Arm64/Unix] Set PROCFS_* available in tryrun
+
+---
+ cross/arm64/tryrun.cmake | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/cross/arm64/tryrun.cmake b/cross/arm64/tryrun.cmake
+index 1751ac5..6626fe1 100644
+--- a/cross/arm64/tryrun.cmake
++++ b/cross/arm64/tryrun.cmake
+@@ -107,17 +107,17 @@ SET( HAVE_CLOCK_MONOTONIC_COARSE_EXITCODE
+      CACHE STRING "Result from TRY_RUN" FORCE)
+ 
+ SET( HAVE_PROCFS_CTL_EXITCODE
+-     1
++     0
+      CACHE STRING "Result from TRY_RUN" FORCE)
+ 
+ SET( HAVE_PROCFS_MAPS_EXITCODE
+-     1
++     0
+      CACHE STRING "Result from TRY_RUN" FORCE)
+ 
+ SET( HAVE_PROCFS_STAT_EXITCODE
+-     1
++     0
+      CACHE STRING "Result from TRY_RUN" FORCE)
+ 
+ SET( HAVE_PROCFS_STATUS_EXITCODE
+-     1
++     0
+      CACHE STRING "Result from TRY_RUN" FORCE)
+-- 
+2.7.4
+
