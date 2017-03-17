@@ -1,0 +1,50 @@
+From 15f2e26d4cdc2ad4a2b1ac5b1386c29640602bf8 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 17 Mar 2017 17:49:42 +0000
+Subject: [PATCH] [Arm64/Windows] Revert changes per #10260 & review
+
+---
+ src/vm/arm64/CallDescrWorkerARM64.asm | 5 +----
+ src/vm/arm64/calldescrworkerarm64.S   | 2 +-
+ 2 files changed, 2 insertions(+), 5 deletions(-)
+
+diff --git a/src/vm/arm64/CallDescrWorkerARM64.asm b/src/vm/arm64/CallDescrWorkerARM64.asm
+index 4bd0de7..b9f8a60 100644
+--- a/src/vm/arm64/CallDescrWorkerARM64.asm
++++ b/src/vm/arm64/CallDescrWorkerARM64.asm
+@@ -21,8 +21,7 @@
+ ;;void CallDescrWorkerInternal(CallDescrData * pCallDescrData);
+         NESTED_ENTRY CallDescrWorkerInternal,,CallDescrWorkerUnwindFrameChainHandler
+         PROLOG_SAVE_REG_PAIR   fp, lr, #-32!
+-        PROLOG_SAVE_REG        x19, #16
+-        PROLOG_SAVE_REG        x0, #24
++        PROLOG_SAVE_REG        x19, #16   ;the stack slot at sp+24 is empty for 16 byte alligment
+ 
+         mov     x19, x0 ; save pCallDescrData in x19
+ 
+@@ -77,8 +76,6 @@ LNoFloatingPoint
+         ldr     x9, [x19,#CallDescrData__pTarget]
+         blr     x9
+ 
+-        ldr     x19, [fp, 24] ; Fixup corrupted X19 callee preserved register
+-
+         ldr     w3, [x19,#CallDescrData__fpReturnSize]
+ 
+         ;; Int return case
+diff --git a/src/vm/arm64/calldescrworkerarm64.S b/src/vm/arm64/calldescrworkerarm64.S
+index f3ea970..2210d70 100644
+--- a/src/vm/arm64/calldescrworkerarm64.S
++++ b/src/vm/arm64/calldescrworkerarm64.S
+@@ -69,7 +69,7 @@ LOCAL_LABEL(NoFloatingPoint):
+     ldr     x9, [x19,#CallDescrData__pTarget]
+     blr     x9
+ 
+-    ldr     x19, [fp, 24] // Fixup corrupted X19 callee preserved register
++    ldr     x19, [fp, 24] // Fixup corrupted X19 caller preserved register
+ 
+     ldr     w3, [x19,#CallDescrData__fpReturnSize]
+ 
+-- 
+2.7.4
+
