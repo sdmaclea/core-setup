@@ -1,0 +1,38 @@
+From 3794640c3fa64be43cd8975eac5a3ee36cf21e22 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 23 Mar 2017 17:10:26 +0000
+Subject: [PATCH] Mark b425314 Incompatible
+
+b425314 has internal logic to determine if it making forward progress
+
+If test takes too long, test self check fails and test aborts with a
+failure.  This makes this test difficult in GCStress/HeapVerify situations
+where run time is substantially longer.
+
+This test was already marked incompatible for x86.  Remove x86 condition
+to mark incompatible on al platforms.
+---
+ .../JIT/Regression/CLR-x86-JIT/V2.0-Beta2/b425314/b425314.csproj    | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/tests/src/JIT/Regression/CLR-x86-JIT/V2.0-Beta2/b425314/b425314.csproj b/tests/src/JIT/Regression/CLR-x86-JIT/V2.0-Beta2/b425314/b425314.csproj
+index b52194a..1c73df7 100644
+--- a/tests/src/JIT/Regression/CLR-x86-JIT/V2.0-Beta2/b425314/b425314.csproj
++++ b/tests/src/JIT/Regression/CLR-x86-JIT/V2.0-Beta2/b425314/b425314.csproj
+@@ -11,9 +11,9 @@
+     <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
+ 
+-    <!-- NOTE: this test simply takes too long to complete under heap verify. It is not fundamentally incompatible. -->
+-    <GCStressIncompatible Condition="'$(Platform)' == 'x86'">true</GCStressIncompatible>
+-    <HeapVerifyIncompatible Condition="'$(Platform)' == 'x86'">true</HeapVerifyIncompatible>
++    <!-- NOTE: This test takes too long and internally times out under GCStress/heap verify. It is not fundamentally incompatible if stress testing is fast enough.  -->
++    <GCStressIncompatible>true</GCStressIncompatible>
++    <HeapVerifyIncompatible>true</HeapVerifyIncompatible>
+   </PropertyGroup>
+   <!-- Default configurations to help VS understand the configurations -->
+   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+-- 
+2.7.4
+
