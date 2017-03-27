@@ -1,0 +1,29 @@
+From e59ab7b62492173eae2be6f96723c2500e080868 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 27 Mar 2017 18:21:30 +0000
+Subject: [PATCH] Fix unwinding issue caught by CI
+
+Debugged by Rahul Kumar (Thanks)
+---
+ src/vm/arm64/asmhelpers.asm | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/vm/arm64/asmhelpers.asm b/src/vm/arm64/asmhelpers.asm
+index 865bca9..90ab9d9 100644
+--- a/src/vm/arm64/asmhelpers.asm
++++ b/src/vm/arm64/asmhelpers.asm
+@@ -1005,7 +1005,9 @@ UM2MThunk_WrapperHelper_RegArgumentsSetup
+         ; sp in fp. If sp is saved in fp in prolog then it is not expected that fp can change in the body
+         ; of method. However, this method needs to be able to change fp before calling funclet.
+         ; This is required to access locals in funclet.
+-        PROLOG_SAVE_REG_PAIR   x29,lr, #-96!
++        PROLOG_SAVE_REG_PAIR   x19,x20, #-96!
++        PROLOG_SAVE_REG        fp, #0
++        PROLOG_SAVE_REG        lr, #8
+ 
+         ; Spill callee saved registers
+         PROLOG_SAVE_REG_PAIR   x19, x20, 16
+-- 
+2.7.4
+
