@@ -1,0 +1,77 @@
+From 915df991419a5da16bc6fbb81d3218eac96d451c Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 28 Mar 2017 22:01:37 +0000
+Subject: [PATCH] [Arm64] Revise CORINFO_HELP_ASSIGN_BYREF code
+
+Reverts #9655 which didn't work correctly
+
+Revised code to match amd64
+
+Fixes many failing GCStress tests
+---
+ src/jit/codegenarm64.cpp  | 5 -----
+ src/jit/codegencommon.cpp | 4 +++-
+ src/jit/emitarm64.cpp     | 8 ++------
+ 3 files changed, 5 insertions(+), 12 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index d476e19..5698be9 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3634,11 +3634,6 @@ void CodeGen::genCodeForCpObj(GenTreeObj* cpObjNode)
+                     // In the case of a GC-Pointer we'll call the ByRef write barrier helper
+                     genEmitHelperCall(CORINFO_HELP_ASSIGN_BYREF, 0, EA_PTRSIZE);
+ 
+-                    // genEmitHelperCall(CORINFO_HELP_ASSIGN_BYREF...) killed these registers.
+-                    // However they are still live references to the structures we are copying.
+-                    gcInfo.gcMarkRegPtrVal(REG_WRITE_BARRIER_SRC_BYREF, TYP_BYREF);
+-                    gcInfo.gcMarkRegPtrVal(REG_WRITE_BARRIER_DST_BYREF, TYP_BYREF);
+-
+                     gcPtrCount--;
+                     break;
+             }
+diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
+index a28ce2c..5e65397 100644
+--- a/src/jit/codegencommon.cpp
++++ b/src/jit/codegencommon.cpp
+@@ -652,7 +652,7 @@ regMaskTP Compiler::compHelperCallKillSet(CorInfoHelpFunc helper)
+ #if defined(_TARGET_AMD64_)
+             return RBM_RSI | RBM_RDI | RBM_CALLEE_TRASH;
+ #elif defined(_TARGET_ARM64_)
+-            return RBM_CALLEE_TRASH_NOGC;
++            return RBM_WRITE_BARRIER_SRC_BYREF | RBM_WRITE_BARRIER_DST_BYREF | RBM_CALLEE_TRASH_NOGC;
+ #elif defined(_TARGET_X86_)
+             return RBM_ESI | RBM_EDI | RBM_ECX;
+ #else
+@@ -722,6 +722,8 @@ regMaskTP Compiler::compNoGCHelperCallKillSet(CorInfoHelpFunc helper)
+ #elif defined(_TARGET_X86_)
+             // This helper only trashes ECX.
+             return RBM_ECX;
++#elif defined(_TARGET_ARM64_)
++            return RBM_CALLEE_TRASH_NOGC & ~(RBM_WRITE_BARRIER_SRC_BYREF | RBM_WRITE_BARRIER_DST_BYREF);
+ #else
+             return RBM_CALLEE_TRASH_NOGC;
+ #endif // defined(_TARGET_AMD64_)
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index dd4bac8..f0eb641 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -6697,12 +6697,8 @@ void emitter::emitIns_Call(EmitCallType          callType,
+     {
+         assert(emitNoGChelper(Compiler::eeGetHelperNum(methHnd)));
+ 
+-        // This call will preserve the liveness of most registers
+-        //
+-        // - On the ARM64 the NOGC helpers will preserve all registers,
+-        //   except for those listed in the RBM_CALLEE_TRASH_NOGC mask
+-
+-        savedSet = RBM_ALLINT & ~RBM_CALLEE_TRASH_NOGC;
++        // Get the set of registers that this call kills and remove it from the saved set.
++        savedSet = RBM_ALLINT & ~emitComp->compNoGCHelperCallKillSet(Compiler::eeGetHelperNum(methHnd));
+ 
+         // In case of Leave profiler callback, we need to preserve liveness of REG_PROFILER_RET_SCRATCH
+         if (isProfLeaveCB)
+-- 
+2.7.4
+
