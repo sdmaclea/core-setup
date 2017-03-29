@@ -1,0 +1,35 @@
+From 03e9fd77c9ff5933b47e9e2bdce825eaa6e47eba Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 29 Mar 2017 21:07:26 +0000
+Subject: [PATCH] Handle null ref in Compiler::optCreateAssertion
+
+Code as recommended by Eugene Rozenfeld in #10359
+
+Fixes #10359
+---
+ src/jit/assertionprop.cpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/jit/assertionprop.cpp b/src/jit/assertionprop.cpp
+index 87aa946..423a8a6 100644
+--- a/src/jit/assertionprop.cpp
++++ b/src/jit/assertionprop.cpp
+@@ -947,12 +947,12 @@ AssertionIndex Compiler::optCreateAssertion(GenTreePtr       op1,
+             while (vnStore->GetVNFunc(vn, &funcAttr) && (funcAttr.m_func == (VNFunc)GT_ADD) &&
+                    (vnStore->TypeOfVN(vn) == TYP_BYREF))
+             {
+-                if (vnStore->IsVNConstant(funcAttr.m_args[1]))
++                if (vnStore->IsVNConstant(funcAttr.m_args[1]) && varTypeIsIntegral(vnStore->TypeOfVN(funcAttr.m_args[1])))
+                 {
+                     offset += vnStore->CoercedConstantValue<ssize_t>(funcAttr.m_args[1]);
+                     vn = funcAttr.m_args[0];
+                 }
+-                else if (vnStore->IsVNConstant(funcAttr.m_args[0]))
++                else if (vnStore->IsVNConstant(funcAttr.m_args[0]) && varTypeIsIntegral(vnStore->TypeOfVN(funcAttr.m_args[0])))
+                 {
+                     offset += vnStore->CoercedConstantValue<ssize_t>(funcAttr.m_args[0]);
+                     vn = funcAttr.m_args[1];
+-- 
+2.7.4
+
