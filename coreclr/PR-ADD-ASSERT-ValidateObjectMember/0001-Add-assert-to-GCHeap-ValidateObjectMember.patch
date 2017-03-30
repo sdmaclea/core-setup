@@ -1,0 +1,28 @@
+From 3e41080d5467264f795e5436e3a75839046f8a75 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 30 Mar 2017 19:57:11 +0000
+Subject: [PATCH] Add assert to GCHeap::ValidateObjectMember
+
+In presence of a corrupt heap, objects can contain
+null method table.  Add assertion to prevent segfault
+in checked/debug builds.
+---
+ src/gc/gc.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
+index 9435357..65c6742 100644
+--- a/src/gc/gc.cpp
++++ b/src/gc/gc.cpp
+@@ -33501,6 +33501,7 @@ void GCHeap::ValidateObjectMember (Object* obj)
+                                     {
+                                         dprintf (3, ("VOM: m: %Ix obj %Ix", (size_t)child_o, o));
+                                         MethodTable *pMT = method_table (child_o);
++                                        assert(pMT);
+                                         if (!pMT->SanityCheck()) {
+                                             dprintf (3, ("Bad member of %Ix %Ix",
+                                                         (size_t)oo, (size_t)child_o));
+-- 
+2.7.4
+
