@@ -1,0 +1,28 @@
+From 80a314c64b1e850d1ee6e10e9792a13ae90b22bd Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 31 Mar 2017 15:55:53 +0000
+Subject: [PATCH] [Arm64] Fix GCStress hole in genReturn
+
+---
+ src/jit/codegenarm64.cpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 5698be9..f346f0a 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -1883,8 +1883,8 @@ void CodeGen::genReturn(GenTreePtr treeNode)
+ 
+         if (movRequired)
+         {
+-            emitAttr movSize = EA_ATTR(genTypeSize(targetType));
+-            getEmitter()->emitIns_R_R(INS_mov, movSize, retReg, op1->gtRegNum);
++            emitAttr attr = emitTypeSize(targetType);
++            getEmitter()->emitIns_R_R(INS_mov, attr, retReg, op1->gtRegNum);
+         }
+     }
+ 
+-- 
+2.7.4
+
