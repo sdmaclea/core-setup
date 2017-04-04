@@ -1,0 +1,42 @@
+From 2b9ead19d8827adfed632916f90d1da83812ee9a Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 4 Apr 2017 19:02:32 +0000
+Subject: [PATCH] [Arm64] Fix GC Holes in emitInsLoadStoreOp
+
+---
+ src/jit/emitarm64.cpp | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index f0eb641..4d6d491 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -10820,13 +10820,13 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
+                     if (lsl > 0)
+                     {
+                         // Generate code to set tmpReg = base + index*scale
+-                        emitIns_R_R_R_I(INS_add, EA_PTRSIZE, tmpReg, memBase->gtRegNum, index->gtRegNum, lsl,
++                        emitIns_R_R_R_I(INS_add, EA_BYREF, tmpReg, memBase->gtRegNum, index->gtRegNum, lsl,
+                                         INS_OPTS_LSL);
+                     }
+                     else // no scale
+                     {
+                         // Generate code to set tmpReg = base + index
+-                        emitIns_R_R_R(INS_add, EA_PTRSIZE, tmpReg, memBase->gtRegNum, index->gtRegNum);
++                        emitIns_R_R_R(INS_add, EA_BYREF, tmpReg, memBase->gtRegNum, index->gtRegNum);
+                     }
+ 
+                     noway_assert(emitInsIsLoad(ins) || (tmpReg != dataReg));
+@@ -10841,7 +10841,7 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
+                     codeGen->instGen_Set_Reg_To_Imm(EA_PTRSIZE, tmpReg, offset);
+                     // Then add the base register
+                     //      rd = rd + base
+-                    emitIns_R_R_R(INS_add, EA_PTRSIZE, tmpReg, tmpReg, memBase->gtRegNum);
++                    emitIns_R_R_R(INS_add, EA_BYREF, tmpReg, tmpReg, memBase->gtRegNum);
+ 
+                     noway_assert(emitInsIsLoad(ins) || (tmpReg != dataReg));
+                     noway_assert(tmpReg != index->gtRegNum);
+-- 
+2.7.4
+
