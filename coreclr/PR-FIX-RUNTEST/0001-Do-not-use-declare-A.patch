@@ -1,0 +1,53 @@
+From c9401137f5e5a5b4ad518afb07a29e22b7781ff3 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 4 Apr 2017 15:02:18 +0000
+Subject: [PATCH] Do not use declare -A
+
+This broke runtest.sh on OSX 10.12
+---
+ tests/runtest.sh | 20 +++++++++++++-------
+ 1 file changed, 13 insertions(+), 7 deletions(-)
+
+diff --git a/tests/runtest.sh b/tests/runtest.sh
+index 458f451..402b924 100755
+--- a/tests/runtest.sh
++++ b/tests/runtest.sh
+@@ -371,13 +371,19 @@ function create_core_overlay {
+     copy_test_native_bin_to_test_root
+ }
+ 
+-function precompile_overlay_assemblies {
+-    declare -A skipCrossGenFiles
++declare -a skipCrossGenFiles
+ 
+-    while read line
+-    do
+-      skipCrossGenFiles[$line]=1
+-    done <  "$(dirname "$0")/skipCrossGenFiles.$ARCH.txt"
++function is_skip_crossgen_test {
++    for skip in "${skipCrossGenFiles[@]}"; do
++        if [ "$1" == "$skip" ]; then
++            return 0
++        fi
++    done
++    return 1
++}
++
++function precompile_overlay_assemblies {
++    skipCrossGenFiles=($(read_array "$(dirname "$0")/skipCrossGenFiles.$ARCH.txt"))
+ 
+     if [ $doCrossgen == 1 ]; then
+         local overlayDir=$CORE_ROOT
+@@ -393,7 +399,7 @@ function precompile_overlay_assemblies {
+                     echo Unable to generate dasm for $filename
+                 fi
+             else
+-                if [[ ${skipCrossGenFiles[$(basename $filename)]:-0} == 0 ]]; then
++                if is_skip_crossgen_test "$(basename $filename)"; then
+                     continue
+                 fi
+                 echo Precompiling $filename
+-- 
+2.7.4
+
