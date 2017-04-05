@@ -1,0 +1,42 @@
+From 0b2d8e8e8cffbbc75fbdf5dd3631b93470da3c21 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 5 Apr 2017 16:43:54 +0000
+Subject: [PATCH] [Arm64] Fix GC Hole in genLeaInstruction
+
+---
+ src/jit/codegenarm64.cpp | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index c123136..a43e774 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -4733,13 +4733,13 @@ void CodeGen::genLeaInstruction(GenTreeAddrMode* lea)
+                 if (lsl > 0)
+                 {
+                     // Generate code to set tmpReg = base + index*scale
+-                    emit->emitIns_R_R_R_I(INS_add, EA_PTRSIZE, tmpReg, memBase->gtRegNum, index->gtRegNum, lsl,
++                    emit->emitIns_R_R_R_I(INS_add, size, tmpReg, memBase->gtRegNum, index->gtRegNum, lsl,
+                                           INS_OPTS_LSL);
+                 }
+                 else // no scale
+                 {
+                     // Generate code to set tmpReg = base + index
+-                    emit->emitIns_R_R_R(INS_add, EA_PTRSIZE, tmpReg, memBase->gtRegNum, index->gtRegNum);
++                    emit->emitIns_R_R_R(INS_add, size, tmpReg, memBase->gtRegNum, index->gtRegNum);
+                 }
+ 
+                 // Then compute target reg from [tmpReg + offset]
+@@ -4752,7 +4752,7 @@ void CodeGen::genLeaInstruction(GenTreeAddrMode* lea)
+                 instGen_Set_Reg_To_Imm(EA_PTRSIZE, tmpReg, offset);
+                 // Then add the base register
+                 //      rd = rd + base
+-                emit->emitIns_R_R_R(INS_add, EA_PTRSIZE, tmpReg, tmpReg, memBase->gtRegNum);
++                emit->emitIns_R_R_R(INS_add, size, tmpReg, tmpReg, memBase->gtRegNum);
+ 
+                 noway_assert(tmpReg != index->gtRegNum);
+ 
+-- 
+2.7.4
+
