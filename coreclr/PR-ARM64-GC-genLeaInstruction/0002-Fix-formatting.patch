@@ -1,0 +1,27 @@
+From 2158affc52869daabd8580970efb9ef501e32b42 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 5 Apr 2017 21:27:03 +0000
+Subject: [PATCH] Fix formatting
+
+---
+ src/jit/codegenarm64.cpp | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index a43e774..061017e 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -4733,8 +4733,7 @@ void CodeGen::genLeaInstruction(GenTreeAddrMode* lea)
+                 if (lsl > 0)
+                 {
+                     // Generate code to set tmpReg = base + index*scale
+-                    emit->emitIns_R_R_R_I(INS_add, size, tmpReg, memBase->gtRegNum, index->gtRegNum, lsl,
+-                                          INS_OPTS_LSL);
++                    emit->emitIns_R_R_R_I(INS_add, size, tmpReg, memBase->gtRegNum, index->gtRegNum, lsl, INS_OPTS_LSL);
+                 }
+                 else // no scale
+                 {
+-- 
+2.7.4
+
