@@ -1,0 +1,30 @@
+From 2255bb93c794f8bf77387dd2d2a2a4c4ee582942 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 6 Apr 2017 21:56:08 +0000
+Subject: [PATCH] Fix formating
+
+---
+ src/jit/codegenarm64.cpp | 4 ++--
+ src/jit/lsraarm64.cpp    | 0
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 421814a..32f6117 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3397,9 +3397,9 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* cpBlkNode)
+     GenTreePtr source  = cpBlkNode->Data();
+     GenTreePtr srcAddr = nullptr;
+ 
+-    assert((size != 0 ) && (size <= CPBLK_UNROLL_LIMIT));
++    assert((size != 0) && (size <= CPBLK_UNROLL_LIMIT));
+ 
+-    emitter *emit = getEmitter();
++    emitter* emit = getEmitter();
+ 
+     if (source->gtOper == GT_IND)
+     {
+-- 
+2.7.4
+
