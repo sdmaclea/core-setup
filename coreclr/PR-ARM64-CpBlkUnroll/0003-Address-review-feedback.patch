@@ -1,0 +1,47 @@
+From d5d141545cbe7aea82c59b8e90748dadb4848bb9 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 7 Apr 2017 15:10:33 +0000
+Subject: [PATCH] Address review feedback
+
+---
+ src/jit/codegenarm64.cpp | 16 +++++++++++++---
+ 1 file changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 32f6117..f1a900d 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3381,8 +3381,18 @@ void CodeGen::genCodeForLoadOffset(instruction ins, emitAttr size, regNumber dst
+ //   offset: distance from the base from which to load
+ void CodeGen::genCodeForStoreOffset(instruction ins, emitAttr size, regNumber src, GenTree* base, unsigned offset)
+ {
+-    // For arm64 these functions are identical
+-    genCodeForLoadOffset(ins, size, src, base, offset);
++    emitter* emit = getEmitter();
++
++    if (base->OperIsLocalAddr())
++    {
++        if (base->gtOper == GT_LCL_FLD_ADDR)
++            offset += base->gtLclFld.gtLclOffs;
++        emit->emitIns_S_R(ins, size, src, base->gtLclVarCommon.gtLclNum, offset);
++    }
++    else
++    {
++        emit->emitIns_R_R_I(ins, size, src, base->gtRegNum, offset);
++    }
+ }
+ 
+ // Generates CpBlk code by performing a loop unroll
+@@ -3451,7 +3461,7 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* cpBlkNode)
+         }
+     }
+ 
+-    // Fill the remainder (15 bytes or less) if there's one.
++    // Fill the remainder (7 bytes or less) if there's one.
+     if ((size & 0x7) != 0)
+     {
+         if ((size & 4) != 0)
+-- 
+2.7.4
+
