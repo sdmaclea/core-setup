@@ -1,0 +1,45 @@
+From 3ec6edf15485d2fb2b95ac277a3348e73106e9a7 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 7 Apr 2017 12:51:18 +0000
+Subject: [PATCH] Correct assert w.r.t meaning of lvRegister
+
+Per recomendation of Pat Gavlin in #9898
+
+Fixes #9898
+---
+ src/jit/compiler.hpp | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/src/jit/compiler.hpp b/src/jit/compiler.hpp
+index 0026947..d2ce07c 100644
+--- a/src/jit/compiler.hpp
++++ b/src/jit/compiler.hpp
+@@ -2335,15 +2335,21 @@ inline
+             // On amd64, every param has a stack location, except on Unix-like systems.
+             assert(varDsc->lvIsParam);
+ #endif // FEATURE_UNIX_AMD64_STRUCT_PASSING
+-#elif defined(_TARGET_X86_) && !defined(LEGACY_BACKEND)
++#elif !defined(LEGACY_BACKEND)
++#if defined(_TARGET_X86_)
+             // For !LEGACY_BACKEND on x86, a stack parameter that is enregistered will have a stack location.
+             assert(varDsc->lvIsParam && !varDsc->lvIsRegArg);
+-#else  // !(_TARGET_AMD64 || !(defined(_TARGET_X86_) && !defined(LEGACY_BACKEND)))
++#else
++            // For !LEGACY_BACKEND on other targets, a stack parameter that is enregistered or prespilled
++            // for profiling on ARM will have a stack location.
++            assert((varDsc->lvIsParam && !varDsc->lvIsRegArg) || isPrespilledArg);
++#endif
++#else  // !(_TARGET_AMD64 || defined(LEGACY_BACKEND))
+             // Otherwise, we only have a valid stack location for:
+             // A parameter that was passed on the stack, being homed into its register home,
+             // or a prespilled argument on arm under profiler.
+             assert((varDsc->lvIsParam && !varDsc->lvIsRegArg && varDsc->lvRegister) || isPrespilledArg);
+-#endif // !(_TARGET_AMD64 || !(defined(_TARGET_X86_) && !defined(LEGACY_BACKEND)))
++#endif // !(_TARGET_AMD64 || defined(LEGACY_BACKEND))
+         }
+ 
+         FPbased = varDsc->lvFramePointerBased;
+-- 
+2.7.4
+
