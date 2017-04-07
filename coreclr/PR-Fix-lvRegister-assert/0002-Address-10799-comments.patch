@@ -1,0 +1,32 @@
+From dc778e1ac129e12223f5ed62db5bfae0d0e2c6ad Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 7 Apr 2017 18:16:11 +0000
+Subject: [PATCH] Address #10799 comments
+
+---
+ src/jit/compiler.hpp | 5 -----
+ 1 file changed, 5 deletions(-)
+
+diff --git a/src/jit/compiler.hpp b/src/jit/compiler.hpp
+index d2ce07c..88c082d 100644
+--- a/src/jit/compiler.hpp
++++ b/src/jit/compiler.hpp
+@@ -2336,14 +2336,9 @@ inline
+             assert(varDsc->lvIsParam);
+ #endif // FEATURE_UNIX_AMD64_STRUCT_PASSING
+ #elif !defined(LEGACY_BACKEND)
+-#if defined(_TARGET_X86_)
+-            // For !LEGACY_BACKEND on x86, a stack parameter that is enregistered will have a stack location.
+-            assert(varDsc->lvIsParam && !varDsc->lvIsRegArg);
+-#else
+             // For !LEGACY_BACKEND on other targets, a stack parameter that is enregistered or prespilled
+             // for profiling on ARM will have a stack location.
+             assert((varDsc->lvIsParam && !varDsc->lvIsRegArg) || isPrespilledArg);
+-#endif
+ #else  // !(_TARGET_AMD64 || defined(LEGACY_BACKEND))
+             // Otherwise, we only have a valid stack location for:
+             // A parameter that was passed on the stack, being homed into its register home,
+-- 
+2.7.4
+
