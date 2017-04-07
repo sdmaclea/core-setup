@@ -1,0 +1,158 @@
+From 97bac158f3d84c278d1937e68853304584b8318e Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 7 Apr 2017 15:10:42 +0000
+Subject: [PATCH] [Arm64] Use ldp/stp in CpBlkUnroll
+
+---
+ src/jit/codegenarm64.cpp | 71 ++++++++++++++++++++++++++++++++++++++++++------
+ src/jit/codegenlinear.h  |  8 +++++-
+ src/jit/lsraarm64.cpp    |  6 ++++
+ 3 files changed, 75 insertions(+), 10 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index f1a900d..d46d8cd 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3376,6 +3376,28 @@ void CodeGen::genCodeForLoadOffset(instruction ins, emitAttr size, regNumber dst
+     }
+ }
+ 
++// Generate code for a load pair from some address + offset
++//   base: tree node which can be either a local address or arbitrary node
++//   offset: distance from the base from which to load
++void CodeGen::genCodeForLoadPairOffset(regNumber dst, regNumber dst2, GenTree* base, unsigned offset)
++{
++    emitter* emit = getEmitter();
++
++    if (base->OperIsLocalAddr())
++    {
++        if (base->gtOper == GT_LCL_FLD_ADDR)
++            offset += base->gtLclFld.gtLclOffs;
++
++        // TODO-ARM64-CQ: Implement support for using a ldp instruction with a varNum (see emitIns_R_S)
++        emit->emitIns_R_S(INS_ldr, EA_8BYTE, dst, base->gtLclVarCommon.gtLclNum, offset);
++        emit->emitIns_R_S(INS_ldr, EA_8BYTE, dst2, base->gtLclVarCommon.gtLclNum, offset + REGSIZE_BYTES);
++    }
++    else
++    {
++        emit->emitIns_R_R_R_I(INS_ldp, EA_8BYTE, dst, dst2, base->gtRegNum, offset);
++    }
++}
++
+ // Generate code for a store to some address + offset
+ //   base: tree node which can be either a local address or arbitrary node
+ //   offset: distance from the base from which to load
+@@ -3395,6 +3417,28 @@ void CodeGen::genCodeForStoreOffset(instruction ins, emitAttr size, regNumber sr
+     }
+ }
+ 
++// Generate code for a store pair to some address + offset
++//   base: tree node which can be either a local address or arbitrary node
++//   offset: distance from the base from which to load
++void CodeGen::genCodeForStorePairOffset(regNumber src, regNumber src2, GenTree* base, unsigned offset)
++{
++    emitter* emit = getEmitter();
++
++    if (base->OperIsLocalAddr())
++    {
++        if (base->gtOper == GT_LCL_FLD_ADDR)
++            offset += base->gtLclFld.gtLclOffs;
++
++        // TODO-ARM64-CQ: Implement support for using a stp instruction with a varNum (see emitIns_S_R)
++        emit->emitIns_S_R(INS_str, EA_8BYTE, src, base->gtLclVarCommon.gtLclNum, offset);
++        emit->emitIns_S_R(INS_str, EA_8BYTE, src2, base->gtLclVarCommon.gtLclNum, offset + REGSIZE_BYTES);
++    }
++    else
++    {
++        emit->emitIns_R_R_R_I(INS_stp, EA_8BYTE, src, src2, base->gtRegNum, offset);
++    }
++}
++
+ // Generates CpBlk code by performing a loop unroll
+ // Preconditions:
+ //  The size argument of the CpBlk node is a constant and <= 64 bytes.
+@@ -3444,26 +3488,35 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* cpBlkNode)
+     unsigned offset = 0;
+ 
+     // Grab the integer temp register to emit the loads and stores.
+-    regNumber tmpReg = genRegNumFromMask(cpBlkNode->gtRsvdRegs & RBM_ALLINT);
++    regMaskTP tmpMask = genFindLowestBit(cpBlkNode->gtRsvdRegs & RBM_ALLINT);
++    regNumber tmpReg  = genRegNumFromMask(tmpMask);
+ 
+-    if (size >= REGSIZE_BYTES)
++    if (size >= 2 * REGSIZE_BYTES)
+     {
+-        // TODO-ARM64-CQ: Consider using LDP/STP to save codesize.
+-        size_t slots = size / REGSIZE_BYTES;
++        regMaskTP tmp2Mask = cpBlkNode->gtRsvdRegs & RBM_ALLINT & ~tmpMask;
++        regNumber tmp2Reg  = genRegNumFromMask(tmp2Mask);
++
++        size_t slots = size / (2 * REGSIZE_BYTES);
+ 
+         while (slots-- > 0)
+         {
+             // Load
+-            genCodeForLoadOffset(INS_ldr, EA_8BYTE, tmpReg, srcAddr, offset);
++            genCodeForLoadPairOffset(tmpReg, tmp2Reg, srcAddr, offset);
+             // Store
+-            genCodeForStoreOffset(INS_str, EA_8BYTE, tmpReg, dstAddr, offset);
+-            offset += REGSIZE_BYTES;
++            genCodeForStorePairOffset(tmpReg, tmp2Reg, dstAddr, offset);
++            offset += 2 * REGSIZE_BYTES;
+         }
+     }
+ 
+-    // Fill the remainder (7 bytes or less) if there's one.
+-    if ((size & 0x7) != 0)
++    // Fill the remainder (15 bytes or less) if there's one.
++    if ((size & 0xf) != 0)
++    {
++        if ((size & 8) != 0)
+         {
++            genCodeForLoadOffset(INS_ldr, EA_8BYTE, tmpReg, srcAddr, offset);
++            genCodeForStoreOffset(INS_str, EA_8BYTE, tmpReg, dstAddr, offset);
++            offset += 8;
++        }
+         if ((size & 4) != 0)
+         {
+             genCodeForLoadOffset(INS_ldr, EA_4BYTE, tmpReg, srcAddr, offset);
+diff --git a/src/jit/codegenlinear.h b/src/jit/codegenlinear.h
+index b038858..fa0c85c 100644
+--- a/src/jit/codegenlinear.h
++++ b/src/jit/codegenlinear.h
+@@ -232,7 +232,13 @@ void genStoreRegToStackArg(var_types type, regNumber reg, int offset);
+ 
+ void genCodeForLoadOffset(instruction ins, emitAttr size, regNumber dst, GenTree* base, unsigned offset);
+ 
+-void genCodeForStoreOffset(instruction ins, emitAttr size, regNumber dst, GenTree* base, unsigned offset);
++void genCodeForStoreOffset(instruction ins, emitAttr size, regNumber src, GenTree* base, unsigned offset);
++
++#ifdef _TARGET_ARM64_
++void genCodeForLoadPairOffset(regNumber dst, regNumber dst2, GenTree* base, unsigned offset);
++
++void genCodeForStorePairOffset(regNumber src, regNumber src2, GenTree* base, unsigned offset);
++#endif // _TARGET_ARM64_
+ 
+ void genCodeForStoreBlk(GenTreeBlk* storeBlkNode);
+ 
+diff --git a/src/jit/lsraarm64.cpp b/src/jit/lsraarm64.cpp
+index e9fbd90..397bf18 100644
+--- a/src/jit/lsraarm64.cpp
++++ b/src/jit/lsraarm64.cpp
+@@ -1259,6 +1259,12 @@ void Lowering::TreeNodeInfoInitBlockStore(GenTreeBlk* blkNode)
+             {
+                 internalIntCount      = 1;
+                 internalIntCandidates = RBM_ALLINT;
++
++                if (size >= 2 * REGSIZE_BYTES)
++                {
++                    // Use ldp/stp to reduce code size and improve performance
++                    internalIntCount++;
++                }
+             }
+             else
+             {
+-- 
+2.7.4
+
