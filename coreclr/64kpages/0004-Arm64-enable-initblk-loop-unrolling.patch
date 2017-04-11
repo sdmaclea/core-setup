@@ -1,0 +1,160 @@
+From ba554f4e16c45f8eff7c7ba3737e3b58db1f18dd Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 7 Apr 2017 20:08:36 +0000
+Subject: [PATCH] [Arm64] enable initblk loop unrolling
+
+---
+ src/jit/codegenarm64.cpp | 56 +++++++++++++++++++++++++++++++++++++-----------
+ src/jit/lowerarm64.cpp   |  8 +------
+ src/jit/lsraarm64.cpp    |  7 +-----
+ 3 files changed, 45 insertions(+), 26 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 08d17d0..3dfa32a 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3287,7 +3287,6 @@ BAILOUT:
+ //   b) The size of the struct to initialize is smaller than INITBLK_UNROLL_LIMIT bytes.
+ void CodeGen::genCodeForInitBlkUnroll(GenTreeBlk* initBlkNode)
+ {
+-#if 0
+     // Make sure we got the arguments of the initblk/initobj operation in the right registers
+     unsigned   size    = initBlkNode->Size();
+     GenTreePtr dstAddr = initBlkNode->Addr();
+@@ -3297,13 +3296,13 @@ void CodeGen::genCodeForInitBlkUnroll(GenTreeBlk* initBlkNode)
+         initVal = initVal->gtGetOp1();
+     }
+ 
+-    assert(!dstAddr->isContained());
+-    assert(!initVal->isContained());
++    assert(dstAddr->isUsedFromReg());
++    assert(initVal->isUsedFromReg() || (initVal->IsIntegralConst(0) && ((size & 0xf) == 0)));
+     assert(size != 0);
+     assert(size <= INITBLK_UNROLL_LIMIT);
+     assert(initVal->gtSkipReloadOrCopy()->IsCnsIntOrI());
+ 
+-    emitter *emit = getEmitter();
++    emitter* emit = getEmitter();
+ 
+     genConsumeOperands(initBlkNode);
+ 
+@@ -3311,10 +3310,45 @@ void CodeGen::genCodeForInitBlkUnroll(GenTreeBlk* initBlkNode)
+     // get the original initVal from below the GT_RELOAD, but only after capturing the valReg,
+     // which needs to be the new register.
+     regNumber valReg = initVal->gtRegNum;
+-    initVal = initVal->gtSkipReloadOrCopy();
+-#else  // !0
+-    NYI("genCodeForInitBlkUnroll");
+-#endif // !0
++
++    unsigned offset = 0;
++
++    // Perform an unroll using SSE2 loads and stores.
++    if (size >= 2 * REGSIZE_BYTES)
++    {
++        // Determine how many 16 byte slots
++        size_t slots = size / (2 * REGSIZE_BYTES);
++
++        while (slots-- > 0)
++        {
++            emit->emitIns_R_R_R_I(INS_stp, EA_8BYTE, valReg, valReg, dstAddr->gtRegNum, offset);
++            offset += (2 * REGSIZE_BYTES);
++        }
++    }
++
++    // Fill the remainder (15 bytes or less) if there's any.
++    if ((size & 0xf) != 0)
++    {
++        if ((size & 8) != 0)
++        {
++            emit->emitIns_R_R_I(INS_str, EA_8BYTE, valReg, dstAddr->gtRegNum, offset);
++            offset += 8;
++        }
++        if ((size & 4) != 0)
++        {
++            emit->emitIns_R_R_I(INS_str, EA_4BYTE, valReg, dstAddr->gtRegNum, offset);
++            offset += 4;
++        }
++        if ((size & 2) != 0)
++        {
++            emit->emitIns_R_R_I(INS_str, EA_2BYTE, valReg, dstAddr->gtRegNum, offset);
++            offset += 2;
++        }
++        if ((size & 1) != 0)
++        {
++            emit->emitIns_R_R_I(INS_str, EA_1BYTE, valReg, dstAddr->gtRegNum, offset);
++        }
++    }
+ }
+ 
+ // Generates code for InitBlk by calling the VM memset helper function.
+@@ -3343,14 +3377,10 @@ void CodeGen::genCodeForInitBlk(GenTreeBlk* initBlkNode)
+         assert(initBlkNode->gtRsvdRegs == RBM_ARG_2);
+     }
+ 
+-// TODO-ARM64-CQ: When initblk loop unrolling is implemented
+-//                put this assert back on.
+-#if 0
+     if (size != 0)
+     {
+-        assert(blockSize >= INITBLK_UNROLL_LIMIT);
++        assert(size > INITBLK_UNROLL_LIMIT);
+     }
+-#endif // 0
+ 
+     genConsumeBlockOp(initBlkNode, REG_ARG_0, REG_ARG_1, REG_ARG_2);
+ 
+diff --git a/src/jit/lowerarm64.cpp b/src/jit/lowerarm64.cpp
+index a29db38..7a564ef 100644
+--- a/src/jit/lowerarm64.cpp
++++ b/src/jit/lowerarm64.cpp
+@@ -134,11 +134,6 @@ void Lowering::LowerBlockStore(GenTreeBlk* blkNode)
+         }
+         srcAddrOrFill = initVal;
+ 
+-#if 0
+-        // TODO-ARM64-CQ: Currently we generate a helper call for every
+-        // initblk we encounter.  Later on we should implement loop unrolling
+-        // code sequences to improve CQ.
+-        // For reference see the code in LowerXArch.cpp.
+         if ((size != 0) && (size <= INITBLK_UNROLL_LIMIT) && initVal->IsCnsIntOrI())
+         {
+             // The fill value of an initblk is interpreted to hold a
+@@ -158,10 +153,9 @@ void Lowering::LowerBlockStore(GenTreeBlk* blkNode)
+                 initVal->gtIntCon.gtIconVal = 0x0101010101010101LL * fill;
+                 initVal->gtType             = TYP_LONG;
+             }
+-            initBlkNode->gtBlkOpKind = GenTreeBlkOp::BlkOpKindUnroll;
++            blkNode->gtBlkOpKind = GenTreeBlk::BlkOpKindUnroll;
+         }
+         else
+-#endif // 0
+         {
+             blkNode->gtBlkOpKind = GenTreeBlk::BlkOpKindHelper;
+         }
+diff --git a/src/jit/lsraarm64.cpp b/src/jit/lsraarm64.cpp
+index 397bf18..3929eb6 100644
+--- a/src/jit/lsraarm64.cpp
++++ b/src/jit/lsraarm64.cpp
+@@ -1196,16 +1196,11 @@ void Lowering::TreeNodeInfoInitBlockStore(GenTreeBlk* blkNode)
+         }
+         srcAddrOrFill = initVal;
+ 
+-#if 0
+         if (blkNode->gtBlkOpKind == GenTreeBlk::BlkOpKindUnroll)
+         {
+-            // TODO-ARM64-CQ: Currently we generate a helper call for every
+-            // initblk we encounter.  Later on we should implement loop unrolling
+-            // code sequences to improve CQ.
+-            // For reference see the code in lsraxarch.cpp.
++            // No additional temporaries required
+         }
+         else
+-#endif // 0
+         {
+             assert(blkNode->gtBlkOpKind == GenTreeBlk::BlkOpKindHelper);
+             // The helper follows the regular ABI.
+-- 
+2.7.4
+

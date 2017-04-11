@@ -1,0 +1,26 @@
+From 14e03fc86eafc6efa0bafd2f0e8503fdd9830b37 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 17 Mar 2017 00:01:21 +0000
+Subject: [PATCH] Allow target of calli to be lowered to ldc.i4
+
+---
+ src/jit/importer.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/jit/importer.cpp b/src/jit/importer.cpp
+index 64c6f45..5176744 100644
+--- a/src/jit/importer.cpp
++++ b/src/jit/importer.cpp
+@@ -5656,7 +5656,7 @@ GenTreeCall* Compiler::impImportIndirectCall(CORINFO_SIG_INFO* sig, IL_OFFSETX i
+     /* Get the function pointer */
+ 
+     GenTreePtr fptr = impPopStack().val;
+-    assert(genActualType(fptr->gtType) == TYP_I_IMPL);
++    assert(genActualType(fptr->gtType) == TYP_I_IMPL || genActualType(fptr->gtType) == TYP_INT);
+ 
+ #ifdef DEBUG
+     // This temporary must never be converted to a double in stress mode,
+-- 
+2.7.4
+
