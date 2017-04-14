@@ -1,0 +1,29 @@
+From b3430c4abaa64aaa9b1ea14e45a4b1ee346208dc Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 14 Apr 2017 22:15:05 +0000
+Subject: [PATCH] [Arm64/Windows] Fix Windows Arm64 build error
+
+---
+ src/inc/utilcode.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/inc/utilcode.h b/src/inc/utilcode.h
+index d53062d..a3c67ef 100644
+--- a/src/inc/utilcode.h
++++ b/src/inc/utilcode.h
+@@ -1492,7 +1492,11 @@ DWORD_PTR GetCurrentProcessCpuMask();
+ 
+ size_t GetOsPageSize();
+ 
++#ifdef FEATURE_PAL
+ #define PAGE_SIZE               GetOsPageSize()
++#else FEATURE_PAL
++#define PAGE_SIZE               0x1000
++#endif
+ 
+ #ifndef OS_PAGE_SIZE
+ #define OS_PAGE_SIZE PAGE_SIZE
+-- 
+2.7.4
+
