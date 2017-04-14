@@ -1,0 +1,385 @@
+From 00d167bf1fe2a65a3d8ace000670e58892266d10 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 10 Apr 2017 19:52:42 +0000
+Subject: [PATCH] [Arm64/Unix] Add 64K page support
+
+---
+ src/ToolBox/SOS/Strike/gcroot.cpp         |  4 ++--
+ src/ToolBox/SOS/Strike/platformspecific.h |  5 +++++
+ src/gc/env/gcenv.base.h                   |  2 +-
+ src/gc/env/gcenv.os.h                     |  3 +++
+ src/gc/gc.cpp                             | 14 +++++++-------
+ src/gc/gcpriv.h                           | 10 ++++++++--
+ src/gc/unix/gcenv.unix.cpp                | 16 +++++++++++++++-
+ src/gc/windows/gcenv.windows.cpp          |  6 ++++++
+ src/inc/switches.h                        |  6 ------
+ src/inc/utilcode.h                        |  9 +++++++++
+ src/pal/src/include/pal/virtual.h         |  7 +++++--
+ src/pal/src/thread/process.cpp            |  4 +++-
+ src/utilcode/util.cpp                     | 18 ++++++++++++++++++
+ src/vm/syncblk.cpp                        |  4 ++--
+ 14 files changed, 84 insertions(+), 24 deletions(-)
+
+diff --git a/src/ToolBox/SOS/Strike/gcroot.cpp b/src/ToolBox/SOS/Strike/gcroot.cpp
+index 8608098..d6d714a 100644
+--- a/src/ToolBox/SOS/Strike/gcroot.cpp
++++ b/src/ToolBox/SOS/Strike/gcroot.cpp
+@@ -1317,9 +1317,9 @@ void PrintNotReachableInRange(TADDR rngStart, TADDR rngEnd, BOOL bExcludeReadyFo
+ // In the code we also rely on the assumption that one card_table entry (DWORD) covers an entire os page
+ //
+ #if defined (_TARGET_WIN64_)
+-#define card_size ((size_t)(2*DT_OS_PAGE_SIZE/card_word_width))
++#define card_size ((size_t)(2*DT_GC_PAGE_SIZE/card_word_width))
+ #else
+-#define card_size ((size_t)(DT_OS_PAGE_SIZE/card_word_width))
++#define card_size ((size_t)(DT_GC_PAGE_SIZE/card_word_width))
+ #endif //_TARGET_WIN64_
+ 
+ // so card_size = 128 on x86, 256 on x64
+diff --git a/src/ToolBox/SOS/Strike/platformspecific.h b/src/ToolBox/SOS/Strike/platformspecific.h
+index fdbc5b5..ee416db 100644
+--- a/src/ToolBox/SOS/Strike/platformspecific.h
++++ b/src/ToolBox/SOS/Strike/platformspecific.h
+@@ -190,6 +190,11 @@ struct DT_RTL_USER_PROCESS_PARAMETERS
+ 
+ #endif // !FEATURE_PAL
+ 
++// TODO-ARM64-NYI Support for SOS on target with 64K pages
++//
++// This is probably as simple as redefining DT_OS_PAGE_SIZE to be a function
++// which returns the page size of the connected target
+ #define DT_OS_PAGE_SIZE   4096
++#define DT_GC_PAGE_SIZE   0x1000
+ 
+ #endif // !__PLATFORM_SPECIFIC_INCLUDED
+diff --git a/src/gc/env/gcenv.base.h b/src/gc/env/gcenv.base.h
+index a4befca..52ad6e9 100644
+--- a/src/gc/env/gcenv.base.h
++++ b/src/gc/env/gcenv.base.h
+@@ -300,7 +300,7 @@ typedef DPTR(uint8_t)   PTR_uint8_t;
+ 
+ #define DECLSPEC_ALIGN(x)   __declspec(align(x))
+ 
+-#define OS_PAGE_SIZE 4096
++#define OS_PAGE_SIZE GCToOSInterface::GetPageSize()
+ 
+ #ifndef _ASSERTE
+ #define _ASSERTE(_expr) ASSERT(_expr)
+diff --git a/src/gc/env/gcenv.os.h b/src/gc/env/gcenv.os.h
+index 6ea35e3..0936185 100644
+--- a/src/gc/env/gcenv.os.h
++++ b/src/gc/env/gcenv.os.h
+@@ -324,6 +324,9 @@ public:
+     //  Any parameter can be null.
+     static void GetMemoryStatus(uint32_t* memory_load, uint64_t* available_physical, uint64_t* available_page_file);
+ 
++    // Get size of an OS memory page
++    static uint64_t GetPageSize();
++
+     //
+     // Misc
+     //
+diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
+index 6d53c89..eb285ef 100644
+--- a/src/gc/gc.cpp
++++ b/src/gc/gc.cpp
+@@ -6306,7 +6306,7 @@ void gc_heap::make_c_mark_list (uint8_t** arr)
+ static const size_t card_bundle_word_width = 32;
+ 
+ // How do we express the fact that 32 bits (card_word_width) is one uint32_t?
+-static const size_t card_bundle_size = (size_t)(OS_PAGE_SIZE / (sizeof(uint32_t)*card_bundle_word_width));
++static const size_t card_bundle_size = (size_t)(GC_PAGE_SIZE / (sizeof(uint32_t)*card_bundle_word_width));
+ 
+ inline
+ size_t card_bundle_word (size_t cardb)
+@@ -10705,7 +10705,7 @@ gc_heap::destroy_semi_shared()
+ //TODO: will need to move this to per heap
+ //#ifdef BACKGROUND_GC
+ //    if (c_mark_list)
+-//        delete c_mark_list;
++//        delete [] c_mark_list;
+ //#endif //BACKGROUND_GC
+ 
+ #ifdef MARK_LIST
+@@ -18784,13 +18784,13 @@ void gc_heap::fix_card_table ()
+                     time_stop - time_start, tot_cycles);
+ #endif //TIME_WRITE_WATCH
+ 
+-            assert( ((card_size * card_word_width)&(OS_PAGE_SIZE-1))==0 );
++            assert( ((card_size * card_word_width)&(GC_PAGE_SIZE-1))==0 );
+             //printf ("%Ix written into\n", bcount);
+             dprintf (3,("Found %Id pages written", bcount));
+             for (unsigned  i = 0; i < bcount; i++)
+             {
+                 // Set the card words corresponding to the entire page.
+-                for (unsigned j = 0; j < (card_size*card_word_width)/OS_PAGE_SIZE; j++)
++                for (unsigned j = 0; j < (card_size*card_word_width)/GC_PAGE_SIZE; j++)
+                 {
+                     card_table [card_word (card_of (g_addresses [i]))+j] = ~0u;
+                 }
+@@ -26608,7 +26608,7 @@ void gc_heap::revisit_written_pages (BOOL concurrent_p, BOOL reset_only_p)
+                             card_table [card_word (card_of (background_written_addresses [i]))] = ~0u;
+                             dprintf (3,("Set Cards [%p:%p, %p:%p[",
+                                         card_of (background_written_addresses [i]), g_addresses [i],
+-                                        card_of (background_written_addresses [i]+OS_PAGE_SIZE), background_written_addresses [i]+OS_PAGE_SIZE));
++                                        card_of (background_written_addresses [i]+GC_PAGE_SIZE), background_written_addresses [i]+GC_PAGE_SIZE));
+     #endif //NO_WRITE_BARRIER
+                             uint8_t* page = (uint8_t*)background_written_addresses[i];
+                             dprintf (3, ("looking at page %d at %Ix(h: %Ix)", i, 
+@@ -26685,7 +26685,7 @@ void gc_heap::background_grow_c_mark_list()
+         assert (new_c_mark_list);
+         memcpy (new_c_mark_list, c_mark_list, c_mark_list_length*sizeof(uint8_t*));
+         c_mark_list_length = c_mark_list_length*2;
+-        delete c_mark_list;
++        delete [] c_mark_list;
+         c_mark_list = new_c_mark_list;
+     }
+ }
+@@ -26870,7 +26870,7 @@ BOOL gc_heap::create_bgc_thread_support()
+     }
+ 
+     //needs to have room for enough smallest objects fitting on a page
+-    parr = new (nothrow) (uint8_t* [1 + page_size / MIN_OBJECT_SIZE]);
++    parr = new (nothrow) uint8_t*[1 + page_size / MIN_OBJECT_SIZE];
+     if (!parr)
+     {
+         goto cleanup;
+diff --git a/src/gc/gcpriv.h b/src/gc/gcpriv.h
+index a2ec64b..29a76ba 100644
+--- a/src/gc/gcpriv.h
++++ b/src/gc/gcpriv.h
+@@ -4302,6 +4302,12 @@ dynamic_data* gc_heap::dynamic_data_of (int gen_number)
+     return &dynamic_data_table [ gen_number ];
+ }
+ 
++#ifdef FEATURE_PAL
++#define GC_PAGE_SIZE 0x1000
++#else
++#define GC_PAGE_SIZE OS_PAGE_SIZE
++#endif
++
+ #define card_word_width ((size_t)32)
+ 
+ //
+@@ -4309,9 +4315,9 @@ dynamic_data* gc_heap::dynamic_data_of (int gen_number)
+ // In the code we also rely on the assumption that one card_table entry (uint32_t) covers an entire os page
+ //
+ #if defined (BIT64)
+-#define card_size ((size_t)(2*OS_PAGE_SIZE/card_word_width))
++#define card_size ((size_t)(2*GC_PAGE_SIZE/card_word_width))
+ #else
+-#define card_size ((size_t)(OS_PAGE_SIZE/card_word_width))
++#define card_size ((size_t)(GC_PAGE_SIZE/card_word_width))
+ #endif // BIT64
+ 
+ // Returns the index of the card word a card is in
+diff --git a/src/gc/unix/gcenv.unix.cpp b/src/gc/unix/gcenv.unix.cpp
+index 5fc63f4..8948069 100644
+--- a/src/gc/unix/gcenv.unix.cpp
++++ b/src/gc/unix/gcenv.unix.cpp
+@@ -62,7 +62,7 @@ static_assert(sizeof(uint64_t) == 8, "unsigned long isn't 8 bytes");
+ static uint32_t g_logicalCpuCount = 0;
+ 
+ // Helper memory page used by the FlushProcessWriteBuffers
+-static uint8_t g_helperPage[OS_PAGE_SIZE] __attribute__((aligned(OS_PAGE_SIZE)));
++static uint8_t* g_helperPage = 0;
+ 
+ // Mutex to make the FlushProcessWriteBuffersMutex thread safe
+ static pthread_mutex_t g_flushProcessWriteBuffersMutex;
+@@ -86,6 +86,10 @@ bool GCToOSInterface::Initialize()
+ 
+     g_logicalCpuCount = cpuCount;
+ 
++    assert(g_helperPage == 0);
++
++    g_helperPage = static_cast<uint8_t*>(mmap(0, OS_PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0));
++
+     // Verify that the s_helperPage is really aligned to the g_SystemInfo.dwPageSize
+     assert((((size_t)g_helperPage) & (OS_PAGE_SIZE - 1)) == 0);
+ 
+@@ -124,6 +128,8 @@ void GCToOSInterface::Shutdown()
+     assert(ret == 0);
+     ret = pthread_mutex_destroy(&g_flushProcessWriteBuffersMutex);
+     assert(ret == 0);
++
++    munmap(g_helperPage, OS_PAGE_SIZE);
+ }
+ 
+ // Get numeric id of the current thread if possible on the
+@@ -517,6 +523,14 @@ void GCToOSInterface::GetMemoryStatus(uint32_t* memory_load, uint64_t* available
+         *available_page_file = 0;
+ }
+ 
++// Get size of an OS memory page
++void GCToOSInterface::GetPageSize()
++{
++    static pageSize = (sysconf( _SC_PAGE_SIZE ) != -1) ? sysconf( _SC_PAGE_SIZE ) : 4096;
++
++    return pageSize;
++}
++
+ // Get a high precision performance counter
+ // Return:
+ //  The counter value
+diff --git a/src/gc/windows/gcenv.windows.cpp b/src/gc/windows/gcenv.windows.cpp
+index 0f3fd71..6dc502c 100644
+--- a/src/gc/windows/gcenv.windows.cpp
++++ b/src/gc/windows/gcenv.windows.cpp
+@@ -484,6 +484,12 @@ void GCToOSInterface::GetMemoryStatus(uint32_t* memory_load, uint64_t* available
+         *available_page_file = ms.ullAvailPageFile;
+ }
+ 
++// Get size of an OS memory page
++void GCToOSInterface::GetPageSize()
++{
++    return 4096;
++}
++
+ // Get a high precision performance counter
+ // Return:
+ //  The counter value
+diff --git a/src/inc/switches.h b/src/inc/switches.h
+index bb30387..1b22b57 100644
+--- a/src/inc/switches.h
++++ b/src/inc/switches.h
+@@ -72,11 +72,9 @@
+ #endif
+ 
+ #if defined(_TARGET_X86_) || defined(_TARGET_ARM_)
+-    #define PAGE_SIZE               0x1000
+     #define USE_UPPER_ADDRESS       0
+ 
+ #elif defined(_TARGET_AMD64_) || defined(_TARGET_ARM64_)
+-    #define PAGE_SIZE               0x1000
+     #define UPPER_ADDRESS_MAPPING_FACTOR 2
+     #define CLR_UPPER_ADDRESS_MIN   0x64400000000
+     #define CODEHEAP_START_ADDRESS  0x64480000000
+@@ -92,10 +90,6 @@
+     #error Please add a new #elif clause and define all portability macros for the new platform
+ #endif
+ 
+-#ifndef OS_PAGE_SIZE
+-#define OS_PAGE_SIZE PAGE_SIZE
+-#endif
+-
+ #if defined(_WIN64)
+ #define JIT_IS_ALIGNED
+ #endif
+diff --git a/src/inc/utilcode.h b/src/inc/utilcode.h
+index 5394f1b..d53062d 100644
+--- a/src/inc/utilcode.h
++++ b/src/inc/utilcode.h
+@@ -1490,6 +1490,15 @@ public:
+ int GetCurrentProcessCpuCount();
+ DWORD_PTR GetCurrentProcessCpuMask();
+ 
++size_t GetOsPageSize();
++
++#define PAGE_SIZE               GetOsPageSize()
++
++#ifndef OS_PAGE_SIZE
++#define OS_PAGE_SIZE PAGE_SIZE
++#endif
++
++
+ //*****************************************************************************
+ // Return != 0 if the bit at the specified index in the array is on and 0 if
+ // it is off.
+diff --git a/src/pal/src/include/pal/virtual.h b/src/pal/src/include/pal/virtual.h
+index 31d225f..3badbe2 100644
+--- a/src/pal/src/include/pal/virtual.h
++++ b/src/pal/src/include/pal/virtual.h
+@@ -58,11 +58,14 @@ enum VIRTUAL_CONSTANTS
+     VIRTUAL_EXECUTE,
+     VIRTUAL_EXECUTE_READ,
+ 
+-    VIRTUAL_PAGE_SIZE       = 0x1000,
+-    VIRTUAL_PAGE_MASK       = VIRTUAL_PAGE_SIZE - 1,
++    VIRTUAL_PAGE_SIZE_MAX = 0x10000,
++
+     BOUNDARY_64K    = 0xffff
+ };
+ 
++#define VIRTUAL_PAGE_SIZE getpagesize()
++#define VIRTUAL_PAGE_MASK ( VIRTUAL_PAGE_SIZE - 1 )
++
+ /*++
+ Function :
+     VIRTUALInitialize
+diff --git a/src/pal/src/thread/process.cpp b/src/pal/src/thread/process.cpp
+index e7380ee..03356c9 100644
+--- a/src/pal/src/thread/process.cpp
++++ b/src/pal/src/thread/process.cpp
+@@ -97,7 +97,7 @@ CObjectType CorUnix::otProcess(
+ //
+ // Helper memory page used by the FlushProcessWriteBuffers
+ //
+-static int s_helperPage[VIRTUAL_PAGE_SIZE / sizeof(int)] __attribute__((aligned(VIRTUAL_PAGE_SIZE)));
++static int* s_helperPage = 0;
+ 
+ //
+ // Mutex to make the FlushProcessWriteBuffersMutex thread safe
+@@ -3001,6 +3001,8 @@ Return
+ BOOL 
+ InitializeFlushProcessWriteBuffers()
+ {
++    s_helperPage = static_cast<int*>(mmap(0, VIRTUAL_PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0));
++
+     // Verify that the s_helperPage is really aligned to the VIRTUAL_PAGE_SIZE
+     _ASSERTE((((SIZE_T)s_helperPage) & (VIRTUAL_PAGE_SIZE - 1)) == 0);
+ 
+diff --git a/src/utilcode/util.cpp b/src/utilcode/util.cpp
+index c215a49..3a39562 100644
+--- a/src/utilcode/util.cpp
++++ b/src/utilcode/util.cpp
+@@ -551,6 +551,8 @@ LPVOID ClrVirtualAllocAligned(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocatio
+ 
+ #else // !FEATURE_PAL
+ 
++    if(alignment < PAGE_SIZE) alignment = PAGE_SIZE;
++
+     // UNIXTODO: Add a specialized function to PAL so that we don't have to waste memory
+     dwSize += alignment;
+     SIZE_T addr = (SIZE_T)ClrVirtualAlloc(lpAddress, dwSize, flAllocationType, flProtect);
+@@ -1312,6 +1314,22 @@ DWORD_PTR GetCurrentProcessCpuMask()
+ #endif
+ }
+ 
++size_t GetOsPageSize()
++{
++#ifdef FEATURE_PAL
++    static size_t pageSize = 0;
++    if(!pageSize)
++    {
++        SYSTEM_INFO sysInfo;
++        ::GetSystemInfo(&sysInfo);
++        pageSize = sysInfo.dwAllocationGranularity ? sysInfo.dwAllocationGranularity : 0x1000;
++    }
++    return pageSize;
++#else
++    return 0x1000;
++#endif
++}
++
+ /**************************************************************************/
+ 
+ /**************************************************************************/
+diff --git a/src/vm/syncblk.cpp b/src/vm/syncblk.cpp
+index 78e455a..50eec9b 100644
+--- a/src/vm/syncblk.cpp
++++ b/src/vm/syncblk.cpp
+@@ -35,8 +35,8 @@
+ #include "runtimecallablewrapper.h"
+ #endif // FEATURE_COMINTEROP
+ 
+-// Allocate 1 page worth. Typically enough
+-#define MAXSYNCBLOCK (PAGE_SIZE-sizeof(void*))/sizeof(SyncBlock)
++// Allocate 4K worth. Typically enough
++#define MAXSYNCBLOCK (0x1000-sizeof(void*))/sizeof(SyncBlock)
+ #define SYNC_TABLE_INITIAL_SIZE 250
+ 
+ //#define DUMP_SB
+-- 
+2.7.4
+
