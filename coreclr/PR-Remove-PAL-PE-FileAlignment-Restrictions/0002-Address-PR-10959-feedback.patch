@@ -1,0 +1,50 @@
+From 26adb5b7f82ec9421b8668b8ccb9cd0d1f2b836a Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 14 Apr 2017 14:50:46 +0000
+Subject: [PATCH] Address PR #10959 feedback
+
+---
+ src/zap/zapwriter.cpp | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/src/zap/zapwriter.cpp b/src/zap/zapwriter.cpp
+index 71cca4c..d6ca70d 100644
+--- a/src/zap/zapwriter.cpp
++++ b/src/zap/zapwriter.cpp
+@@ -55,8 +55,13 @@ void ZapWriter::Initialize()
+     m_FileAlignment = 0x200;
+ }
+ 
++#ifdef FEATURE_PAL
+ #define SECTION_ALIGNMENT   m_FileAlignment
+-#define MAX_PAGE_SIZE   0x10000
++#define PAL_MAX_PAGE_SIZE   0x10000
++#else
++#define SECTION_ALIGNMENT   0x1000
++#define PAL_MAX_PAGE_SIZE   0
++#endif
+ 
+ void ZapWriter::Save(IStream * pStream)
+ {
+@@ -120,7 +125,7 @@ void ZapWriter::ComputeRVAs()
+ 
+         pPhysicalSection->m_dwFilePos = dwFilePos;
+ 
+-        dwPos = AlignUp(dwPos, SECTION_ALIGNMENT) + MAX_PAGE_SIZE;
++        dwPos = AlignUp(dwPos, SECTION_ALIGNMENT) + PAL_MAX_PAGE_SIZE;
+         pPhysicalSection->SetRVA(dwPos);
+ 
+         DWORD dwEndOfRawData = dwPos;
+@@ -194,7 +199,7 @@ void ZapWriter::SaveContent()
+         WritePad(dwAlignedFilePos - dwFilePos);
+         dwFilePos = dwAlignedFilePos;
+ 
+-        dwPos = AlignUp(dwPos, SECTION_ALIGNMENT) + MAX_PAGE_SIZE;
++        dwPos = AlignUp(dwPos, SECTION_ALIGNMENT) + PAL_MAX_PAGE_SIZE;
+ 
+         if (m_fWritingRelocs)
+         {
+-- 
+2.7.4
+
