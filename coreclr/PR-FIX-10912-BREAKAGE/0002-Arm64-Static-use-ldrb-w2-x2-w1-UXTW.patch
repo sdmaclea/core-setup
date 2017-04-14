@@ -1,0 +1,58 @@
+From aadc240465dd9ff264996a836ddb60540208630a Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 14 Apr 2017 21:18:50 +0000
+Subject: [PATCH] [Arm64] Static use ldrb w2, [x2, w1, UXTW]
+
+---
+ src/vm/arm64/asmhelpers.S   | 4 ++--
+ src/vm/arm64/asmhelpers.asm | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
+index ccce045..15b8057 100644
+--- a/src/vm/arm64/asmhelpers.S
++++ b/src/vm/arm64/asmhelpers.S
+@@ -1223,7 +1223,7 @@ LEAF_END setFPReturn, _TEXT
+ LEAF_ENTRY JIT_GetSharedNonGCStaticBase_SingleAppDomain, _TEXT
+     // If class is not initialized, bail to C++ helper
+     add x2, x0, #DomainLocalModule__m_pDataBlob
+-    ldrb w2, [x2, x1]
++    ldrb w2, [x2, w1, UXTW]
+     tst w2, #1
+     beq LOCAL_LABEL(JIT_GetSharedNonGCStaticBase_SingleAppDomain_CallHelper)
+ 
+@@ -1249,7 +1249,7 @@ LEAF_END JIT_GetSharedNonGCStaticBaseNoCtor_SingleAppDomain, _TEXT
+ LEAF_ENTRY JIT_GetSharedGCStaticBase_SingleAppDomain, _TEXT
+     // If class is not initialized, bail to C++ helper
+     add x2, x0, #DomainLocalModule__m_pDataBlob
+-    ldrb w2, [x2, x1]
++    ldrb w2, [x2, w1, UXTW]
+     tst w2, #1
+     beq LOCAL_LABEL(JIT_GetSharedGCStaticBase_SingleAppDomain_CallHelper)
+ 
+diff --git a/src/vm/arm64/asmhelpers.asm b/src/vm/arm64/asmhelpers.asm
+index f408bb0..6c3c426 100644
+--- a/src/vm/arm64/asmhelpers.asm
++++ b/src/vm/arm64/asmhelpers.asm
+@@ -1339,7 +1339,7 @@ Fail
+     LEAF_ENTRY JIT_GetSharedNonGCStaticBase_SingleAppDomain
+     ; If class is not initialized, bail to C++ helper
+     add x2, x0, #DomainLocalModule__m_pDataBlob
+-    ldrb w2, [x2, x1]
++    ldrb w2, [x2, w1, UXTW]
+     tst w2, #1
+     beq CallHelper1
+ 
+@@ -1365,7 +1365,7 @@ CallHelper1
+     LEAF_ENTRY JIT_GetSharedGCStaticBase_SingleAppDomain
+     ; If class is not initialized, bail to C++ helper
+     add x2, x0, #DomainLocalModule__m_pDataBlob
+-    ldrb w2, [x2, x1]
++    ldrb w2, [x2, w1, UXTW]
+     tst w2, #1
+     beq CallHelper2
+ 
+-- 
+2.7.4
+
