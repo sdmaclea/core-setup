@@ -1,0 +1,244 @@
+From ec0d9857526e6ff74f4a2fd0afd168ae4e83fa99 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 17 Apr 2017 20:46:12 +0000
+Subject: [PATCH] [Arm64/Unix] Respond to feedback to 64K page support
+
+---
+ src/gc/env/gcenv.os.h            |  5 ++++-
+ src/gc/gc.cpp                    |  2 +-
+ src/gc/gcpriv.h                  |  4 ----
+ src/gc/softwarewritewatch.cpp    |  4 ++--
+ src/gc/unix/gcenv.unix.cpp       | 21 +++++++++++----------
+ src/gc/windows/gcenv.windows.cpp | 10 ++++------
+ src/pal/src/thread/process.cpp   |  7 +++++++
+ src/utilcode/util.cpp            | 21 ++++++++++++++-------
+ 8 files changed, 43 insertions(+), 31 deletions(-)
+
+diff --git a/src/gc/env/gcenv.os.h b/src/gc/env/gcenv.os.h
+index 0936185..cf89bfe 100644
+--- a/src/gc/env/gcenv.os.h
++++ b/src/gc/env/gcenv.os.h
+@@ -128,6 +128,9 @@ typedef void (*GCThreadFunction)(void* param);
+ // Interface that the GC uses to invoke OS specific functionality
+ class GCToOSInterface
+ {
++protected:
++    static size_t s_pageSize;
++
+ public:
+ 
+     //
+@@ -325,7 +328,7 @@ public:
+     static void GetMemoryStatus(uint32_t* memory_load, uint64_t* available_physical, uint64_t* available_page_file);
+ 
+     // Get size of an OS memory page
+-    static uint64_t GetPageSize();
++    static size_t GetPageSize() { return s_pageSize; }
+ 
+     //
+     // Misc
+diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
+index eb285ef..0dbd6c8 100644
+--- a/src/gc/gc.cpp
++++ b/src/gc/gc.cpp
+@@ -1973,7 +1973,7 @@ BOOL Aligned (size_t n)
+ #define OBJECT_ALIGNMENT_OFFSET (sizeof(MethodTable *))
+ 
+ #ifdef FEATURE_STRUCTALIGN
+-#define MAX_STRUCTALIGN OS_PAGE_SIZE
++#define MAX_STRUCTALIGN GC_PAGE_SIZE
+ #else // FEATURE_STRUCTALIGN
+ #define MAX_STRUCTALIGN 0
+ #endif // FEATURE_STRUCTALIGN
+diff --git a/src/gc/gcpriv.h b/src/gc/gcpriv.h
+index 29a76ba..3b83260 100644
+--- a/src/gc/gcpriv.h
++++ b/src/gc/gcpriv.h
+@@ -4302,11 +4302,7 @@ dynamic_data* gc_heap::dynamic_data_of (int gen_number)
+     return &dynamic_data_table [ gen_number ];
+ }
+ 
+-#ifdef FEATURE_PAL
+ #define GC_PAGE_SIZE 0x1000
+-#else
+-#define GC_PAGE_SIZE OS_PAGE_SIZE
+-#endif
+ 
+ #define card_word_width ((size_t)32)
+ 
+diff --git a/src/gc/softwarewritewatch.cpp b/src/gc/softwarewritewatch.cpp
+index b852938..f875191 100644
+--- a/src/gc/softwarewritewatch.cpp
++++ b/src/gc/softwarewritewatch.cpp
+@@ -10,8 +10,6 @@
+ #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ #ifndef DACCESS_COMPILE
+ 
+-static_assert((static_cast<size_t>(1) << SOFTWARE_WRITE_WATCH_AddressToTableByteIndexShift) == OS_PAGE_SIZE, "Unexpected OS_PAGE_SIZE");
+-
+ extern "C"
+ {
+     uint8_t *g_gc_sw_ww_table = nullptr;
+@@ -46,6 +44,7 @@ bool SoftwareWriteWatch::GetDirtyFromBlock(
+     assert(endByteIndex <= sizeof(size_t));
+     assert(dirtyPages != nullptr);
+     assert(dirtyPageIndexRef != nullptr);
++    assert((static_cast<size_t>(1) << SOFTWARE_WRITE_WATCH_AddressToTableByteIndexShift) == OS_PAGE_SIZE);
+ 
+     size_t &dirtyPageIndex = *dirtyPageIndexRef;
+     assert(dirtyPageIndex < dirtyPageCount);
+@@ -121,6 +120,7 @@ void SoftwareWriteWatch::GetDirty(
+     VerifyMemoryRegion(baseAddress, regionByteSize);
+     assert(dirtyPages != nullptr);
+     assert(dirtyPageCountRef != nullptr);
++    assert((static_cast<size_t>(1) << SOFTWARE_WRITE_WATCH_AddressToTableByteIndexShift) == OS_PAGE_SIZE);
+ 
+     size_t dirtyPageCount = *dirtyPageCountRef;
+     if (dirtyPageCount == 0)
+diff --git a/src/gc/unix/gcenv.unix.cpp b/src/gc/unix/gcenv.unix.cpp
+index 8948069..3298b42 100644
+--- a/src/gc/unix/gcenv.unix.cpp
++++ b/src/gc/unix/gcenv.unix.cpp
+@@ -77,6 +77,10 @@ static size_t g_RestrictedPhysicalMemoryLimit = 0;
+ //  true if it has succeeded, false if it has failed
+ bool GCToOSInterface::Initialize()
+ {
++    int pageSize = sysconf( _SC_PAGE_SIZE );
++
++    s_pageSize = (pageSize > 0) pageSize : 0x1000;
++
+     // Calculate and cache the number of processors on this machine
+     int cpuCount = sysconf(_SC_NPROCESSORS_ONLN);
+     if (cpuCount == -1)
+@@ -90,6 +94,11 @@ bool GCToOSInterface::Initialize()
+ 
+     g_helperPage = static_cast<uint8_t*>(mmap(0, OS_PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0));
+ 
++    if(g_helperPage == MAP_FAILED)
++    {
++        return false;
++    }
++
+     // Verify that the s_helperPage is really aligned to the g_SystemInfo.dwPageSize
+     assert((((size_t)g_helperPage) & (OS_PAGE_SIZE - 1)) == 0);
+ 
+@@ -477,7 +486,7 @@ uint64_t GCToOSInterface::GetPhysicalMemoryLimit()
+     long pages = sysconf(_SC_PHYS_PAGES);
+     if (pages == -1) 
+     {
+-        return 0;
++        return 0;SC_PAGE_SIZE
+     }
+ 
+     long pageSize = sysconf(_SC_PAGE_SIZE);
+@@ -523,14 +532,6 @@ void GCToOSInterface::GetMemoryStatus(uint32_t* memory_load, uint64_t* available
+         *available_page_file = 0;
+ }
+ 
+-// Get size of an OS memory page
+-void GCToOSInterface::GetPageSize()
+-{
+-    static pageSize = (sysconf( _SC_PAGE_SIZE ) != -1) ? sysconf( _SC_PAGE_SIZE ) : 4096;
+-
+-    return pageSize;
+-}
+-
+ // Get a high precision performance counter
+ // Return:
+ //  The counter value
+@@ -608,7 +609,7 @@ static void* GCThreadStub(void* param)
+ //  true if it has succeeded, false if it has failed
+ bool GCToOSInterface::CreateThread(GCThreadFunction function, void* param, GCThreadAffinity* affinity)
+ {
+-    std::unique_ptr<GCThreadStubParam> stubParam(new (std::nothrow) GCThreadStubParam());
++    std::unique_ptr<GCThreadStubParSC_PAGE_SIZEam> stubParam(new (std::nothrow) GCThreadStubParam());
+     if (!stubParam)
+     {
+         return false;
+diff --git a/src/gc/windows/gcenv.windows.cpp b/src/gc/windows/gcenv.windows.cpp
+index 6dc502c..68c05ee 100644
+--- a/src/gc/windows/gcenv.windows.cpp
++++ b/src/gc/windows/gcenv.windows.cpp
+@@ -139,6 +139,10 @@ bool GCToOSInterface::Initialize()
+     g_SystemInfo.dwPageSize = systemInfo.dwPageSize;
+     g_SystemInfo.dwAllocationGranularity = systemInfo.dwAllocationGranularity;
+ 
++    assert(systemInfo.dwPageSize == 0x1000);
++
++    s_pageSize = systemInfo.dwPageSize;
++
+     return true;
+ }
+ 
+@@ -484,12 +488,6 @@ void GCToOSInterface::GetMemoryStatus(uint32_t* memory_load, uint64_t* available
+         *available_page_file = ms.ullAvailPageFile;
+ }
+ 
+-// Get size of an OS memory page
+-void GCToOSInterface::GetPageSize()
+-{
+-    return 4096;
+-}
+-
+ // Get a high precision performance counter
+ // Return:
+ //  The counter value
+diff --git a/src/pal/src/thread/process.cpp b/src/pal/src/thread/process.cpp
+index 03356c9..625c72f 100644
+--- a/src/pal/src/thread/process.cpp
++++ b/src/pal/src/thread/process.cpp
+@@ -3001,8 +3001,15 @@ Return
+ BOOL 
+ InitializeFlushProcessWriteBuffers()
+ {
++    _ASSERTE(s_helperPage == 0);
++
+     s_helperPage = static_cast<int*>(mmap(0, VIRTUAL_PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0));
+ 
++    if(s_helperPage == MAP_FAILED)
++    {
++        return false;
++    }
++
+     // Verify that the s_helperPage is really aligned to the VIRTUAL_PAGE_SIZE
+     _ASSERTE((((SIZE_T)s_helperPage) & (VIRTUAL_PAGE_SIZE - 1)) == 0);
+ 
+diff --git a/src/utilcode/util.cpp b/src/utilcode/util.cpp
+index 3a39562..d4f64ed 100644
+--- a/src/utilcode/util.cpp
++++ b/src/utilcode/util.cpp
+@@ -1314,16 +1314,23 @@ DWORD_PTR GetCurrentProcessCpuMask()
+ #endif
+ }
+ 
+-size_t GetOsPageSize()
++size_t GetOsPageSizeUncached()
+ {
+-#ifdef FEATURE_PAL
+-    static size_t pageSize = 0;
+-    if(!pageSize)
+-    {
+     SYSTEM_INFO sysInfo;
+     ::GetSystemInfo(&sysInfo);
+-        pageSize = sysInfo.dwAllocationGranularity ? sysInfo.dwAllocationGranularity : 0x1000;
+-    }
++    return sysInfo.dwAllocationGranularity ? sysInfo.dwAllocationGranularity : 0x1000;
++}
++
++size_t GetOsPageSize()
++{
++#ifdef FEATURE_PAL
++    // Initialization of function-local statics is guaranteed to occur only
++    // once even when called from multiple threads
++    //
++    // However there is a real potential performance cost.  This will need to
++    // be optimized if GetOsPageSize() shows up in profiles.
++    static const size_t pageSize(GetOsPageSizeUncached());
++
+     return pageSize;
+ #else
+     return 0x1000;
+-- 
+2.7.4
+
