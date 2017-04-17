@@ -1,0 +1,25 @@
+From 110fabccafc88d8851119ecae8b78309eb9950ef Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea@qti.qualcomm.com>
+Date: Mon, 17 Apr 2017 17:05:10 -0400
+Subject: [PATCH] Remove typo
+
+---
+ src/gc/unix/gcenv.unix.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gc/unix/gcenv.unix.cpp b/src/gc/unix/gcenv.unix.cpp
+index 3298b42..09a668b 100644
+--- a/src/gc/unix/gcenv.unix.cpp
++++ b/src/gc/unix/gcenv.unix.cpp
+@@ -609,7 +609,7 @@ static void* GCThreadStub(void* param)
+ //  true if it has succeeded, false if it has failed
+ bool GCToOSInterface::CreateThread(GCThreadFunction function, void* param, GCThreadAffinity* affinity)
+ {
+-    std::unique_ptr<GCThreadStubParSC_PAGE_SIZEam> stubParam(new (std::nothrow) GCThreadStubParam());
++    std::unique_ptr<GCThreadStubParam> stubParam(new (std::nothrow) GCThreadStubParam());
+     if (!stubParam)
+     {
+         return false;
+-- 
+2.7.4
+
