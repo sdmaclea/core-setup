@@ -1,0 +1,40 @@
+From 42393cbae8997a75df1397879e98b77c0dfb1784 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 18 Apr 2017 18:13:59 +0000
+Subject: [PATCH] Respond to review feedback
+
+---
+ src/vm/peimagelayout.cpp | 2 +-
+ src/zap/zapwriter.cpp    | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/vm/peimagelayout.cpp b/src/vm/peimagelayout.cpp
+index 3805a82..2416681 100644
+--- a/src/vm/peimagelayout.cpp
++++ b/src/vm/peimagelayout.cpp
+@@ -183,7 +183,7 @@ void PEImageLayout::ApplyBaseRelocations()
+                 dwOldProtection = 0;
+             }
+ 
+-            USHORT fixup = fixupsCount ? VAL16(fixups[0]) : 0;
++            USHORT fixup = VAL16(fixups[0]);
+ 
+             IMAGE_SECTION_HEADER *pSection = RvaToSection(rva + (fixup & 0xfff));
+             PREFIX_ASSUME(pSection != NULL);
+diff --git a/src/zap/zapwriter.cpp b/src/zap/zapwriter.cpp
+index d6ca70d..d91a565 100644
+--- a/src/zap/zapwriter.cpp
++++ b/src/zap/zapwriter.cpp
+@@ -55,7 +55,7 @@ void ZapWriter::Initialize()
+     m_FileAlignment = 0x200;
+ }
+ 
+-#ifdef FEATURE_PAL
++#if defined(FEATURE_PAL) && defined(BIT64)
+ #define SECTION_ALIGNMENT   m_FileAlignment
+ #define PAL_MAX_PAGE_SIZE   0x10000
+ #else
+-- 
+2.7.4
+
