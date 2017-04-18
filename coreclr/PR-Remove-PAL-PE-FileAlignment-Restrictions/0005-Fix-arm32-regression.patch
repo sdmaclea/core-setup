@@ -1,0 +1,29 @@
+From f83bc0d8aad7a124728c415bf43cabc6ee8c44f6 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 18 Apr 2017 20:08:58 +0000
+Subject: [PATCH] Fix arm32 regression
+
+---
+ src/zap/zapimage.cpp | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/zap/zapimage.cpp b/src/zap/zapimage.cpp
+index 0d501d2..27b4652 100644
+--- a/src/zap/zapimage.cpp
++++ b/src/zap/zapimage.cpp
+@@ -1545,7 +1545,10 @@ void ZapImage::OutputTables()
+         SetSizeOfStackCommit(m_ModuleDecoder.GetSizeOfStackCommit());
+     }
+ 
+-#if defined(_TARGET_ARM_) && defined(FEATURE_CORESYSTEM)
++#if defined(FEATURE_PAL) && !defined(BIT64)
++    // To minimize wasted VA space on 32 bit systems align file to page bounaries (presumed to be 4K).
++    SetFileAlignment(0x1000);
++#elif defined(_TARGET_ARM_) && defined(FEATURE_CORESYSTEM)
+     if (!IsReadyToRunCompilation())
+     {
+         // On ARM CoreSys builds, crossgen will use 4k file alignment, as requested by Phone perf team
+-- 
+2.7.4
+
