@@ -1,0 +1,548 @@
+From 080a8827cb38977ec67d432808daa88c96c65fc3 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 19 Apr 2017 14:37:40 +0000
+Subject: [PATCH] PAL use VirtualPageSize()
+
+---
+ src/pal/src/debug/debug.cpp               |  2 +-
+ src/pal/src/exception/signal.cpp          | 12 ++---
+ src/pal/src/include/pal/virtual.h         |  4 +-
+ src/pal/src/init/pal.cpp                  | 11 ----
+ src/pal/src/loader/module.cpp             |  2 +-
+ src/pal/src/map/virtual.cpp               | 87 +++++++++++++++++--------------
+ src/pal/src/misc/cgroup.cpp               |  2 +-
+ src/pal/src/sharedmemory/sharedmemory.cpp |  6 +--
+ src/pal/src/thread/process.cpp            | 14 ++---
+ src/pal/src/thread/thread.cpp             |  6 +--
+ 10 files changed, 71 insertions(+), 75 deletions(-)
+
+diff --git a/src/pal/src/debug/debug.cpp b/src/pal/src/debug/debug.cpp
+index eb69be3..1ecff6f 100644
+--- a/src/pal/src/debug/debug.cpp
++++ b/src/pal/src/debug/debug.cpp
+@@ -610,7 +610,7 @@ PAL_ProbeMemory(
+         }
+ 
+         // Round to the beginning of the next page
+-        pBuffer = ALIGN_UP(pBuffer, VIRTUAL_PAGE_SIZE);
++        pBuffer = ALIGN_UP(pBuffer, VirtualPageSize());
+     }
+ 
+     close(fds[0]);
+diff --git a/src/pal/src/exception/signal.cpp b/src/pal/src/exception/signal.cpp
+index 57ae62e..2e70bba 100644
+--- a/src/pal/src/exception/signal.cpp
++++ b/src/pal/src/exception/signal.cpp
+@@ -152,13 +152,13 @@ BOOL EnsureSignalAlternateStack()
+ 
+         // We include the size of the SignalHandlerWorkerReturnPoint in the alternate stack size since the 
+         // context contained in it is large and the SIGSTKSZ was not sufficient on ARM64 during testing.
+-        int altStackSize = SIGSTKSZ + ALIGN_UP(sizeof(SignalHandlerWorkerReturnPoint), 16) + VIRTUAL_PAGE_SIZE;
++        int altStackSize = SIGSTKSZ + ALIGN_UP(sizeof(SignalHandlerWorkerReturnPoint), 16) + VirtualPageSize();
+         void* altStack;
+-        int st = posix_memalign(&altStack, VIRTUAL_PAGE_SIZE, altStackSize);
++        int st = posix_memalign(&altStack, VirtualPageSize(), altStackSize);
+         if (st == 0)
+         {
+             // create a guard page for the alternate stack
+-            st = mprotect(altStack, VIRTUAL_PAGE_SIZE, PROT_NONE);
++            st = mprotect(altStack, VirtualPageSize(), PROT_NONE);
+             if (st == 0)
+             {
+                 stack_t ss;
+@@ -169,7 +169,7 @@ BOOL EnsureSignalAlternateStack()
+                 if (st != 0)
+                 {
+                     // Installation of the alternate stack failed, so revert the guard page protection
+-                    int st2 = mprotect(altStack, VIRTUAL_PAGE_SIZE, PROT_READ | PROT_WRITE);
++                    int st2 = mprotect(altStack, VirtualPageSize(), PROT_READ | PROT_WRITE);
+                     _ASSERTE(st2 == 0);
+                 }
+             }
+@@ -203,7 +203,7 @@ void FreeSignalAlternateStack()
+     int st = sigaltstack(&ss, &oss);
+     if ((st == 0) && (oss.ss_flags != SS_DISABLE))
+     {
+-        int st = mprotect(oss.ss_sp, VIRTUAL_PAGE_SIZE, PROT_READ | PROT_WRITE);
++        int st = mprotect(oss.ss_sp, VirtualPageSize(), PROT_READ | PROT_WRITE);
+         _ASSERTE(st == 0);
+         free(oss.ss_sp);
+     }
+@@ -436,7 +436,7 @@ static void sigsegv_handler(int code, siginfo_t *siginfo, void *context)
+ 
+         // If the failure address is at most one page above or below the stack pointer, 
+         // we have a stack overflow. 
+-        if ((failureAddress - (sp - VIRTUAL_PAGE_SIZE)) < 2 * VIRTUAL_PAGE_SIZE)
++        if ((failureAddress - (sp - VirtualPageSize())) < 2 * VirtualPageSize())
+         {
+             (void)write(STDERR_FILENO, StackOverflowMessage, sizeof(StackOverflowMessage) - 1);
+             PROCAbort();
+diff --git a/src/pal/src/include/pal/virtual.h b/src/pal/src/include/pal/virtual.h
+index c8df4f8..7736427 100644
+--- a/src/pal/src/include/pal/virtual.h
++++ b/src/pal/src/include/pal/virtual.h
+@@ -57,11 +57,9 @@ enum VIRTUAL_CONSTANTS
+     VIRTUAL_NOACCESS,
+     VIRTUAL_EXECUTE,
+     VIRTUAL_EXECUTE_READ,
+-
+-    VIRTUAL_PAGE_SIZE_MAX = 0x10000,
+ };
+ 
+-#define VIRTUAL_PAGE_SIZE getpagesize()
++size_t VirtualPageSize();
+ 
+ /*++
+ Function :
+diff --git a/src/pal/src/init/pal.cpp b/src/pal/src/init/pal.cpp
+index 8b0e0f5..490c0cb 100644
+--- a/src/pal/src/init/pal.cpp
++++ b/src/pal/src/init/pal.cpp
+@@ -264,17 +264,6 @@ Initialize(
+             goto CLEANUP0;
+         }
+ 
+-#if _DEBUG
+-        // Verify that our page size is what we think it is. If it's
+-        // different, we can't run.
+-        if (VIRTUAL_PAGE_SIZE != getpagesize())
+-        {
+-            ASSERT("VIRTUAL_PAGE_SIZE is incorrect for this system!\n"
+-                "Change include/pal/virtual.h and clr/src/inc/stdmacros.h "
+-                "to reflect the correct page size of %d.\n", getpagesize());
+-        }
+-#endif  // _DEBUG
+-
+         if (!INIT_IncreaseDescriptorLimit())
+         {
+             ERROR("Unable to increase the file descriptor limit!\n");
+diff --git a/src/pal/src/loader/module.cpp b/src/pal/src/loader/module.cpp
+index bbe8b9d..2213134 100644
+--- a/src/pal/src/loader/module.cpp
++++ b/src/pal/src/loader/module.cpp
+@@ -285,7 +285,7 @@ GetProcAddress(
+        because of the address range reserved for ordinals contain can
+        be a valid string address on non-Windows systems
+     */
+-    if ((DWORD_PTR)lpProcName < VIRTUAL_PAGE_SIZE)
++    if ((DWORD_PTR)lpProcName < VirtualPageSize())
+     {
+         ASSERT("Attempt to locate symbol by ordinal?!\n");
+     }
+diff --git a/src/pal/src/map/virtual.cpp b/src/pal/src/map/virtual.cpp
+index e5370cf..d3a742c 100644
+--- a/src/pal/src/map/virtual.cpp
++++ b/src/pal/src/map/virtual.cpp
+@@ -52,6 +52,8 @@ CRITICAL_SECTION virtual_critsec;
+ // The first node in our list of allocated blocks.
+ static PCMI pVirtualMemory;
+ 
++static size_t s_virtualPageSize;
++
+ /* We need MAP_ANON. However on some platforms like HP-UX, it is defined as MAP_ANONYMOUS */
+ #if !defined(MAP_ANON) && defined(MAP_ANONYMOUS)
+ #define MAP_ANON MAP_ANONYMOUS
+@@ -173,6 +175,8 @@ VIRTUALInitialize(bool initializeExecutableMemoryAllocator)
+         g_executableMemoryAllocator.Initialize();
+     }
+ 
++    s_virtualPageSize = getpagesize();
++
+     return TRUE;
+ }
+ 
+@@ -655,12 +659,12 @@ static void VIRTUALDisplayList( void  )
+         DBGOUT( "\t memSize %d \n", p->memSize );
+ 
+         DBGOUT( "\t pAllocState " );
+-        for ( index = 0; index < p->memSize / VIRTUAL_PAGE_SIZE; index++)
++        for ( index = 0; index < p->memSize / VirtualPageSize(); index++)
+         {
+             DBGOUT( "[%d] ", VIRTUALGetAllocationType( index, p ) );
+         }
+         DBGOUT( "\t pProtectionState " );
+-        for ( index = 0; index < p->memSize / VIRTUAL_PAGE_SIZE; index++ )
++        for ( index = 0; index < p->memSize / VirtualPageSize(); index++ )
+         {
+             DBGOUT( "[%d] ", (UINT)p->pProtectionState[ index ] );
+         }
+@@ -718,7 +722,7 @@ static BOOL VIRTUALStoreAllocationInfo(
+     PCMI pMemInfo        = nullptr;
+     SIZE_T nBufferSize   = 0;
+ 
+-    if (!IS_ALIGNED(memSize, VIRTUAL_PAGE_SIZE))
++    if (!IS_ALIGNED(memSize, VirtualPageSize()))
+     {
+         ERROR("The memory size was not a multiple of the page size. \n");
+         return FALSE;
+@@ -735,14 +739,14 @@ static BOOL VIRTUALStoreAllocationInfo(
+     pNewEntry->allocationType   = flAllocationType;
+     pNewEntry->accessProtection = flProtection;
+ 
+-    nBufferSize = memSize / VIRTUAL_PAGE_SIZE / CHAR_BIT;
+-    if ((memSize / VIRTUAL_PAGE_SIZE) % CHAR_BIT != 0)
++    nBufferSize = memSize / VirtualPageSize() / CHAR_BIT;
++    if ((memSize / VirtualPageSize()) % CHAR_BIT != 0)
+     {
+         nBufferSize++;
+     }
+ 
+     pNewEntry->pAllocState      = (BYTE*)InternalMalloc(nBufferSize);
+-    pNewEntry->pProtectionState = (BYTE*)InternalMalloc((memSize / VIRTUAL_PAGE_SIZE));
++    pNewEntry->pProtectionState = (BYTE*)InternalMalloc((memSize / VirtualPageSize()));
+ 
+     if (pNewEntry->pAllocState && pNewEntry->pProtectionState)
+     {
+@@ -750,7 +754,7 @@ static BOOL VIRTUALStoreAllocationInfo(
+         VIRTUALSetAllocState(MEM_RESERVE, 0, nBufferSize * CHAR_BIT, pNewEntry);
+         memset(pNewEntry->pProtectionState,
+                VIRTUALConvertWinFlags(flProtection),
+-               memSize / VIRTUAL_PAGE_SIZE);
++               memSize / VirtualPageSize());
+     }
+     else
+     {
+@@ -828,8 +832,8 @@ static LPVOID VIRTUALResetMemory(
+ 
+     TRACE( "Resetting the memory now..\n");
+ 
+-    StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VIRTUAL_PAGE_SIZE);
+-    MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VIRTUAL_PAGE_SIZE) - StartBoundary;
++    StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VirtualPageSize());
++    MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VirtualPageSize()) - StartBoundary;
+ 
+     int st;
+ #if HAVE_MADV_FREE
+@@ -885,8 +889,8 @@ static LPVOID VIRTUALReserveMemory(
+     // First, figure out where we're trying to reserve the memory and
+     // how much we need. On most systems, requests to mmap must be
+     // page-aligned and at multiples of the page size.
+-    StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VIRTUAL_PAGE_SIZE);
+-    MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VIRTUAL_PAGE_SIZE) - StartBoundary;
++    StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VirtualPageSize());
++    MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VirtualPageSize()) - StartBoundary;
+ 
+     // If this is a request for special executable (JIT'ed) memory then, first of all,
+     // try to get memory from the executable memory allocator to satisfy the request.
+@@ -906,8 +910,8 @@ static LPVOID VIRTUALReserveMemory(
+         if ( !lpAddress )
+         {
+             /* Compute the real values instead of the null values. */
+-            StartBoundary = (UINT_PTR) ALIGN_DOWN(pRetVal, VIRTUAL_PAGE_SIZE);
+-            MemSize = ALIGN_UP((UINT_PTR)pRetVal + dwSize, VIRTUAL_PAGE_SIZE) - StartBoundary;
++            StartBoundary = (UINT_PTR) ALIGN_DOWN(pRetVal, VirtualPageSize());
++            MemSize = ALIGN_UP((UINT_PTR)pRetVal + dwSize, VirtualPageSize()) - StartBoundary;
+         }
+ 
+         if ( !VIRTUALStoreAllocationInfo( StartBoundary, MemSize,
+@@ -1045,12 +1049,12 @@ VIRTUALCommitMemory(
+ 
+     if ( lpAddress )
+     {
+-        StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VIRTUAL_PAGE_SIZE);
+-        MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VIRTUAL_PAGE_SIZE) - StartBoundary;
++        StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VirtualPageSize());
++        MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VirtualPageSize()) - StartBoundary;
+     }
+     else
+     {
+-        MemSize = ALIGN_UP(dwSize, VIRTUAL_PAGE_SIZE);
++        MemSize = ALIGN_UP(dwSize, VirtualPageSize());
+     }
+ 
+     /* See if we have already reserved this memory. */
+@@ -1070,8 +1074,8 @@ VIRTUALCommitMemory(
+         if ( pReservedMemory )
+         {
+             /* Re-align the addresses and try again to find the memory. */
+-            StartBoundary = (UINT_PTR) ALIGN_DOWN(pReservedMemory, VIRTUAL_PAGE_SIZE);
+-            MemSize = ALIGN_UP((UINT_PTR)pReservedMemory + dwSize, VIRTUAL_PAGE_SIZE) - StartBoundary;
++            StartBoundary = (UINT_PTR) ALIGN_DOWN(pReservedMemory, VirtualPageSize());
++            MemSize = ALIGN_UP((UINT_PTR)pReservedMemory + dwSize, VirtualPageSize()) - StartBoundary;
+             
+             pInformation = VIRTUALFindRegionInformation( StartBoundary );
+ 
+@@ -1105,9 +1109,9 @@ VIRTUALCommitMemory(
+     // if a run is already committed and has the right permissions, 
+     // we don't need to do anything to it.
+     
+-    totalPages = MemSize / VIRTUAL_PAGE_SIZE;
++    totalPages = MemSize / VirtualPageSize();
+     runStart = (StartBoundary - pInformation->startBoundary) /
+-                VIRTUAL_PAGE_SIZE;   // Page index
++                VirtualPageSize();   // Page index
+     initialRunStart = runStart;
+     allocationType = VIRTUALGetAllocationType(runStart, pInformation);
+     protectionState = pInformation->pProtectionState[runStart];
+@@ -1117,7 +1121,7 @@ VIRTUALCommitMemory(
+     nProtect = W32toUnixAccessControl(flProtect);
+     vProtect = VIRTUALConvertWinFlags(flProtect);
+ 
+-    if (totalPages > pInformation->memSize / VIRTUAL_PAGE_SIZE - runStart)
++    if (totalPages > pInformation->memSize / VirtualPageSize() - runStart)
+     {
+         ERROR("Trying to commit beyond the end of the region!\n");
+         goto error;
+@@ -1139,9 +1143,9 @@ VIRTUALCommitMemory(
+             runLength++;
+         }
+ 
+-        StartBoundary = pInformation->startBoundary + runStart * VIRTUAL_PAGE_SIZE;
++        StartBoundary = pInformation->startBoundary + runStart * VirtualPageSize();
+         pRetVal = (void *)StartBoundary;
+-        MemSize = runLength * VIRTUAL_PAGE_SIZE;
++        MemSize = runLength * VirtualPageSize();
+ 
+         if (allocationType != MEM_COMMIT)
+         {
+@@ -1187,7 +1191,7 @@ VIRTUALCommitMemory(
+         protectionState = curProtectionState;
+     }
+ 
+-    pRetVal = (void *) (pInformation->startBoundary + initialRunStart * VIRTUAL_PAGE_SIZE);
++    pRetVal = (void *) (pInformation->startBoundary + initialRunStart * VirtualPageSize());
+     goto done;
+ 
+ error:
+@@ -1411,8 +1415,8 @@ VirtualFree(
+          * released or decommitted. So round the dwSize up to the next page 
+          * boundary and round the lpAddress down to the next page boundary.
+          */
+-        StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VIRTUAL_PAGE_SIZE);
+-        MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VIRTUAL_PAGE_SIZE) - StartBoundary;
++        StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VirtualPageSize());
++        MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VirtualPageSize()) - StartBoundary;
+ 
+         PCMI pUnCommittedMem;
+         pUnCommittedMem = VIRTUALFindRegionInformation( StartBoundary );
+@@ -1448,9 +1452,9 @@ VirtualFree(
+             SIZE_T nNumOfPagesToChange = 0;
+ 
+             /* We can now commit this memory by calling VirtualAlloc().*/
+-            index = (StartBoundary - pUnCommittedMem->startBoundary) / VIRTUAL_PAGE_SIZE;
++            index = (StartBoundary - pUnCommittedMem->startBoundary) / VirtualPageSize();
+             
+-            nNumOfPagesToChange = MemSize / VIRTUAL_PAGE_SIZE;
++            nNumOfPagesToChange = MemSize / VirtualPageSize();
+             VIRTUALSetAllocState( MEM_RESERVE, index, 
+                                   nNumOfPagesToChange, pUnCommittedMem );
+ 
+@@ -1559,8 +1563,8 @@ VirtualProtect(
+     pthrCurrent = InternalGetCurrentThread();
+     InternalEnterCriticalSection(pthrCurrent, &virtual_critsec);
+     
+-    StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VIRTUAL_PAGE_SIZE);
+-    MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VIRTUAL_PAGE_SIZE) - StartBoundary;
++    StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VirtualPageSize());
++    MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VirtualPageSize()) - StartBoundary;
+ 
+     if ( VIRTUALContainsInvalidProtectionFlags( flNewProtect ) )
+     {
+@@ -1583,8 +1587,8 @@ VirtualProtect(
+     {
+         /* See if the pages are committed. */
+         Index = OffSet = StartBoundary - pEntry->startBoundary == 0 ?
+-             0 : ( StartBoundary - pEntry->startBoundary ) / VIRTUAL_PAGE_SIZE;
+-        NumberOfPagesToChange = MemSize / VIRTUAL_PAGE_SIZE;
++             0 : ( StartBoundary - pEntry->startBoundary ) / VirtualPageSize();
++        NumberOfPagesToChange = MemSize / VirtualPageSize();
+ 
+         TRACE( "Number of pages to check %d, starting page %d \n", NumberOfPagesToChange, Index );
+ 
+@@ -1827,7 +1831,7 @@ VirtualQuery(
+         goto ExitVirtualQuery;
+     }
+ 
+-    StartBoundary = ALIGN_DOWN((SIZE_T)lpAddress, VIRTUAL_PAGE_SIZE);
++    StartBoundary = ALIGN_DOWN((SIZE_T)lpAddress, VirtualPageSize());
+ 
+ #if MMAP_IGNORES_HINT
+     // Make sure we have memory to map before we try to query it.
+@@ -1880,7 +1884,7 @@ VirtualQuery(
+     else
+     {
+         /* Starting page. */
+-        SIZE_T Index = ( StartBoundary - pEntry->startBoundary ) / VIRTUAL_PAGE_SIZE;
++        SIZE_T Index = ( StartBoundary - pEntry->startBoundary ) / VirtualPageSize();
+ 
+         /* Attributes to check for. */
+         BYTE AccessProtection = pEntry->pProtectionState[ Index ];
+@@ -1888,13 +1892,13 @@ VirtualQuery(
+         SIZE_T RegionSize = 0;
+ 
+         TRACE( "Index = %d, Number of Pages = %d. \n",
+-               Index, pEntry->memSize / VIRTUAL_PAGE_SIZE );
++               Index, pEntry->memSize / VirtualPageSize() );
+ 
+-        while ( Index < pEntry->memSize / VIRTUAL_PAGE_SIZE &&
++        while ( Index < pEntry->memSize / VirtualPageSize() &&
+                 VIRTUALGetAllocationType( Index, pEntry ) == AllocationType &&
+                 pEntry->pProtectionState[ Index ] == AccessProtection )
+         {
+-            RegionSize += VIRTUAL_PAGE_SIZE;
++            RegionSize += VirtualPageSize();
+             Index++;
+         }
+ 
+@@ -1922,6 +1926,11 @@ ExitVirtualQuery:
+     return sizeof( *lpBuffer );
+ }
+ 
++size_t VirtualPageSize()
++{
++    return s_virtualPageSize; 
++}
++
+ /*++
+ Function:
+   GetWriteWatch
+@@ -2089,7 +2098,7 @@ void* ExecutableMemoryAllocator::AllocateMemory(SIZE_T allocationSize)
+     void* allocatedMemory = NULL;
+ 
+     // Allocation size must be in multiples of the virtual page size.
+-    _ASSERTE(IS_ALIGNED(allocationSize, VIRTUAL_PAGE_SIZE));
++    _ASSERTE(IS_ALIGNED(allocationSize, VirtualPageSize()));
+ 
+     // The code below assumes that the caller owns the virtual_critsec lock.
+     // So the calculations are not done in thread-safe manner.
+@@ -2122,5 +2131,5 @@ int32_t ExecutableMemoryAllocator::GenerateRandomStartOffset()
+     srandom(time(NULL));
+     pageCount = (int32_t)(MaxStartPageOffset * (int64_t)random() / RAND_MAX);
+ 
+-    return pageCount * VIRTUAL_PAGE_SIZE;
++    return pageCount * VirtualPageSize();
+ }
+diff --git a/src/pal/src/misc/cgroup.cpp b/src/pal/src/misc/cgroup.cpp
+index 4017803..c319549 100644
+--- a/src/pal/src/misc/cgroup.cpp
++++ b/src/pal/src/misc/cgroup.cpp
+@@ -323,7 +323,7 @@ PAL_GetWorkingSetSize(size_t* val)
+         *val = strtoull(strTok, nullptr, 0); 
+         if(errno == 0)
+         {
+-            *val = *val * VIRTUAL_PAGE_SIZE;
++            *val = *val * VirtualPageSize();
+             result = true;
+         }
+     }
+diff --git a/src/pal/src/sharedmemory/sharedmemory.cpp b/src/pal/src/sharedmemory/sharedmemory.cpp
+index 7f25cae..13e04c1 100644
+--- a/src/pal/src/sharedmemory/sharedmemory.cpp
++++ b/src/pal/src/sharedmemory/sharedmemory.cpp
+@@ -304,7 +304,7 @@ void *SharedMemoryHelpers::MemoryMapFile(int fileDescriptor, SIZE_T byteCount)
+ {
+     _ASSERTE(fileDescriptor != -1);
+     _ASSERTE(byteCount > sizeof(SharedMemorySharedDataHeader));
+-    _ASSERTE(AlignDown(byteCount, VIRTUAL_PAGE_SIZE) == byteCount);
++    _ASSERTE(AlignDown(byteCount, VirtualPageSize()) == byteCount);
+ 
+     void *sharedMemoryBuffer = mmap(nullptr, byteCount, PROT_READ | PROT_WRITE, MAP_SHARED, fileDescriptor, 0);
+     if (sharedMemoryBuffer != MAP_FAILED)
+@@ -468,7 +468,7 @@ SIZE_T SharedMemoryId::AppendSessionDirectoryName(
+ 
+ SIZE_T SharedMemorySharedDataHeader::DetermineTotalByteCount(SIZE_T dataByteCount)
+ {
+-    return SharedMemoryHelpers::AlignUp(sizeof(SharedMemorySharedDataHeader) + dataByteCount, VIRTUAL_PAGE_SIZE);
++    return SharedMemoryHelpers::AlignUp(sizeof(SharedMemorySharedDataHeader) + dataByteCount, VirtualPageSize());
+ }
+ 
+ SharedMemorySharedDataHeader::SharedMemorySharedDataHeader(SharedMemoryType type, UINT8 version)
+@@ -777,7 +777,7 @@ SharedMemoryProcessDataHeader::SharedMemoryProcessDataHeader(
+     _ASSERTE(fileDescriptor != -1);
+     _ASSERTE(sharedDataHeader != nullptr);
+     _ASSERTE(sharedDataTotalByteCount > sizeof(SharedMemorySharedDataHeader));
+-    _ASSERTE(SharedMemoryHelpers::AlignDown(sharedDataTotalByteCount, VIRTUAL_PAGE_SIZE) == sharedDataTotalByteCount);
++    _ASSERTE(SharedMemoryHelpers::AlignDown(sharedDataTotalByteCount, VirtualPageSize()) == sharedDataTotalByteCount);
+ 
+     // Copy the name and initialize the ID
+     char *nameCopy = reinterpret_cast<char *>(this + 1);
+diff --git a/src/pal/src/thread/process.cpp b/src/pal/src/thread/process.cpp
+index 625c72f..b4b040b 100644
+--- a/src/pal/src/thread/process.cpp
++++ b/src/pal/src/thread/process.cpp
+@@ -3003,20 +3003,20 @@ InitializeFlushProcessWriteBuffers()
+ {
+     _ASSERTE(s_helperPage == 0);
+ 
+-    s_helperPage = static_cast<int*>(mmap(0, VIRTUAL_PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0));
++    s_helperPage = static_cast<int*>(mmap(0, VirtualPageSize(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0));
+ 
+     if(s_helperPage == MAP_FAILED)
+     {
+         return false;
+     }
+ 
+-    // Verify that the s_helperPage is really aligned to the VIRTUAL_PAGE_SIZE
+-    _ASSERTE((((SIZE_T)s_helperPage) & (VIRTUAL_PAGE_SIZE - 1)) == 0);
++    // Verify that the s_helperPage is really aligned to the VirtualPageSize()
++    _ASSERTE((((SIZE_T)s_helperPage) & (VirtualPageSize() - 1)) == 0);
+ 
+     // Locking the page ensures that it stays in memory during the two mprotect
+     // calls in the FlushProcessWriteBuffers below. If the page was unmapped between
+     // those calls, they would not have the expected effect of generating IPI.
+-    int status = mlock(s_helperPage, VIRTUAL_PAGE_SIZE);
++    int status = mlock(s_helperPage, VirtualPageSize());
+ 
+     if (status != 0)
+     {
+@@ -3026,7 +3026,7 @@ InitializeFlushProcessWriteBuffers()
+     status = pthread_mutex_init(&flushProcessWriteBuffersMutex, NULL);
+     if (status != 0)
+     {
+-        munlock(s_helperPage, VIRTUAL_PAGE_SIZE);
++        munlock(s_helperPage, VirtualPageSize());
+     }
+ 
+     return status == 0;
+@@ -3059,14 +3059,14 @@ FlushProcessWriteBuffers()
+     // Changing a helper memory page protection from read / write to no access 
+     // causes the OS to issue IPI to flush TLBs on all processors. This also
+     // results in flushing the processor buffers.
+-    status = mprotect(s_helperPage, VIRTUAL_PAGE_SIZE, PROT_READ | PROT_WRITE);
++    status = mprotect(s_helperPage, VirtualPageSize(), PROT_READ | PROT_WRITE);
+     FATAL_ASSERT(status == 0, "Failed to change helper page protection to read / write");
+ 
+     // Ensure that the page is dirty before we change the protection so that
+     // we prevent the OS from skipping the global TLB flush.
+     InterlockedIncrement(s_helperPage);
+ 
+-    status = mprotect(s_helperPage, VIRTUAL_PAGE_SIZE, PROT_NONE);
++    status = mprotect(s_helperPage, VirtualPageSize(), PROT_NONE);
+     FATAL_ASSERT(status == 0, "Failed to change helper page protection to no access");
+ 
+     status = pthread_mutex_unlock(&flushProcessWriteBuffersMutex);
+diff --git a/src/pal/src/thread/thread.cpp b/src/pal/src/thread/thread.cpp
+index df42ebc..05866a1 100644
+--- a/src/pal/src/thread/thread.cpp
++++ b/src/pal/src/thread/thread.cpp
+@@ -579,7 +579,7 @@ CorUnix::InternalCreateThread(
+     if (alignedStackSize != 0)
+     {
+         // Some systems require the stack size to be aligned to the page size
+-        if (sizeof(alignedStackSize) <= sizeof(dwStackSize) && alignedStackSize + (VIRTUAL_PAGE_SIZE - 1) < alignedStackSize)
++        if (sizeof(alignedStackSize) <= sizeof(dwStackSize) && alignedStackSize + (VirtualPageSize() - 1) < alignedStackSize)
+         {
+             // When coming here from the public API surface, the incoming value is originally a nonnegative signed int32, so
+             // this shouldn't happen
+@@ -589,7 +589,7 @@ CorUnix::InternalCreateThread(
+             palError = ERROR_INVALID_PARAMETER;
+             goto EXIT;
+         }
+-        alignedStackSize = ALIGN_UP(alignedStackSize, VIRTUAL_PAGE_SIZE);
++        alignedStackSize = ALIGN_UP(alignedStackSize, VirtualPageSize());
+     }
+ 
+     // Ignore the STACK_SIZE_PARAM_IS_A_RESERVATION flag
+@@ -641,7 +641,7 @@ CorUnix::InternalCreateThread(
+ #else // !PTHREAD_STACK_MIN
+         const size_t MinStackSize = 64 * 1024; // this value is typically accepted by pthread_attr_setstacksize()
+ #endif // PTHREAD_STACK_MIN
+-        _ASSERTE(IS_ALIGNED(MinStackSize, VIRTUAL_PAGE_SIZE));
++        _ASSERTE(IS_ALIGNED(MinStackSize, VirtualPageSize()));
+         if (alignedStackSize < MinStackSize)
+         {
+             // Adjust the stack size to a minimum value that is likely to be accepted by pthread_attr_setstacksize(). If this
+-- 
+2.7.4
+

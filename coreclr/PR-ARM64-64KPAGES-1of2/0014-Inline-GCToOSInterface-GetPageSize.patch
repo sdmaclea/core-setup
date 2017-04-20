@@ -1,0 +1,239 @@
+From 805a368723308bdbfc766810a50dc18eb67acca8 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 19 Apr 2017 19:09:59 +0000
+Subject: [PATCH] Inline GCToOSInterface::GetPageSize()
+
+---
+ src/gc/env/gcenv.os.h        | 16 ++++++++++++----
+ src/gc/env/gcenv.unix.inl    | 17 +++++++++++++++++
+ src/gc/env/gcenv.windows.inl | 16 ++++++++++++++++
+ src/gc/gc.h                  | 11 -----------
+ src/gc/sample/gcenv.h        |  6 ++++++
+ src/gc/unix/gcenv.unix.cpp   |  4 +++-
+ src/vm/gcenv.h               |  6 ++++++
+ src/vm/gcenv.os.cpp          | 10 ++++++++++
+ src/vm/gcenv.unix.inl        |  5 +++++
+ src/vm/gcenv.windows.inl     |  5 +++++
+ 10 files changed, 80 insertions(+), 16 deletions(-)
+ create mode 100644 src/gc/env/gcenv.unix.inl
+ create mode 100644 src/gc/env/gcenv.windows.inl
+ create mode 100644 src/vm/gcenv.unix.inl
+ create mode 100644 src/vm/gcenv.windows.inl
+
+diff --git a/src/gc/env/gcenv.os.h b/src/gc/env/gcenv.os.h
+index cf89bfe..f8bc6c5 100644
+--- a/src/gc/env/gcenv.os.h
++++ b/src/gc/env/gcenv.os.h
+@@ -7,6 +7,17 @@
+ #ifndef __GCENV_OS_H__
+ #define __GCENV_OS_H__
+ 
++#ifdef Sleep
++// This is a funny workaround for the fact that "common.h" defines Sleep to be
++// Dont_Use_Sleep, with the hope of causing linker errors whenever someone tries to use sleep.
++//
++// However, GCToOSInterface defines a function called Sleep, which (due to this define) becomes
++// "Dont_Use_Sleep", which the GC in turn happily uses. The symbol that GCToOSInterface actually
++// exported was called "GCToOSInterface::Dont_Use_Sleep". While we progress in making the GC standalone,
++// we'll need to break the dependency on common.h (the VM header) and this problem will become moot.
++#undef Sleep
++#endif // Sleep
++
+ // Critical section used by the GC
+ class CLRCriticalSection
+ {
+@@ -128,9 +139,6 @@ typedef void (*GCThreadFunction)(void* param);
+ // Interface that the GC uses to invoke OS specific functionality
+ class GCToOSInterface
+ {
+-protected:
+-    static size_t s_pageSize;
+-
+ public:
+ 
+     //
+@@ -328,7 +336,7 @@ public:
+     static void GetMemoryStatus(uint32_t* memory_load, uint64_t* available_physical, uint64_t* available_page_file);
+ 
+     // Get size of an OS memory page
+-    static size_t GetPageSize() { return s_pageSize; }
++    static size_t GetPageSize();
+ 
+     //
+     // Misc
+diff --git a/src/gc/env/gcenv.unix.inl b/src/gc/env/gcenv.unix.inl
+new file mode 100644
+index 0000000..4e8c5a0
+--- /dev/null
++++ b/src/gc/env/gcenv.unix.inl
+@@ -0,0 +1,17 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++#ifndef __GCENV_UNIX_INL__
++#define __GCENV_UNIX_INL__
++
++#include "gcenv.os.h"
++
++extern size_t g_pageSizeUnixInl;
++
++__forceinline size_t GCToOSInterface::GetPageSize()
++{
++    return g_pageSizeUnixInl;
++}
++
++#endif // __GCENV_UNIX_INL__
+diff --git a/src/gc/env/gcenv.windows.inl b/src/gc/env/gcenv.windows.inl
+new file mode 100644
+index 0000000..6e4562d
+--- /dev/null
++++ b/src/gc/env/gcenv.windows.inl
+@@ -0,0 +1,16 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++#ifndef __GCENV_WINDOWS_INL__
++#define __GCENV_WINDOWS_INL__
++
++#include "gcenv.os.h"
++
++
++__forceinline static size_t GCToOSInterface::GetPageSize()
++{
++    return 0x1000;
++}
++
++#endif // __GCENV_WINDOWS_INL__
+diff --git a/src/gc/gc.h b/src/gc/gc.h
+index 07ae6c9..f60eedc 100644
+--- a/src/gc/gc.h
++++ b/src/gc/gc.h
+@@ -14,17 +14,6 @@ Module Name:
+ #ifndef __GC_H
+ #define __GC_H
+ 
+-#ifdef Sleep
+-// This is a funny workaround for the fact that "common.h" defines Sleep to be
+-// Dont_Use_Sleep, with the hope of causing linker errors whenever someone tries to use sleep.
+-//
+-// However, GCToOSInterface defines a function called Sleep, which (due to this define) becomes
+-// "Dont_Use_Sleep", which the GC in turn happily uses. The symbol that GCToOSInterface actually
+-// exported was called "GCToOSInterface::Dont_Use_Sleep". While we progress in making the GC standalone,
+-// we'll need to break the dependency on common.h (the VM header) and this problem will become moot.
+-#undef Sleep
+-#endif // Sleep
+-
+ #include "gcinterface.h"
+ #include "env/gcenv.os.h"
+ #include "env/gcenv.ee.h"
+diff --git a/src/gc/sample/gcenv.h b/src/gc/sample/gcenv.h
+index 4505f1a..d2ee3f2 100644
+--- a/src/gc/sample/gcenv.h
++++ b/src/gc/sample/gcenv.h
+@@ -30,6 +30,12 @@
+ #include "gcenv.sync.h"
+ #include "gcenv.ee.h"
+ 
++#ifdef PLATFORM_UNIX
++#include "gcenv.unix.inl"
++#else
++#include "gcenv.windows.inl"
++#endif
++
+ #define MAX_LONGPATH 1024
+ 
+ #ifdef _MSC_VER
+diff --git a/src/gc/unix/gcenv.unix.cpp b/src/gc/unix/gcenv.unix.cpp
+index fac7142..2a7365a 100644
+--- a/src/gc/unix/gcenv.unix.cpp
++++ b/src/gc/unix/gcenv.unix.cpp
+@@ -72,6 +72,8 @@ bool GetWorkingSetSize(size_t* val);
+ 
+ static size_t g_RestrictedPhysicalMemoryLimit = 0;
+ 
++size_t g_pageSizeUnixInl = 0;
++
+ // Initialize the interface implementation
+ // Return:
+ //  true if it has succeeded, false if it has failed
+@@ -79,7 +81,7 @@ bool GCToOSInterface::Initialize()
+ {
+     int pageSize = sysconf( _SC_PAGE_SIZE );
+ 
+-    s_pageSize = (pageSize > 0) pageSize : 0x1000;
++    g_pageSizeUnixInl = (pageSize > 0) pageSize : 0x1000;
+ 
+     // Calculate and cache the number of processors on this machine
+     int cpuCount = sysconf(_SC_NPROCESSORS_ONLN);
+diff --git a/src/vm/gcenv.h b/src/vm/gcenv.h
+index 865eb28..767adb8 100644
+--- a/src/vm/gcenv.h
++++ b/src/vm/gcenv.h
+@@ -44,6 +44,12 @@
+ #include "gcenv.interlocked.h"
+ #include "gcenv.interlocked.inl"
+ 
++#ifdef PLATFORM_UNIX
++#include "gcenv.unix.inl"
++#else
++#include "gcenv.windows.inl"
++#endif
++
+ namespace ETW
+ {
+     typedef  enum _GC_ROOT_KIND {
+diff --git a/src/vm/gcenv.os.cpp b/src/vm/gcenv.os.cpp
+index 22ed482..2534107 100644
+--- a/src/vm/gcenv.os.cpp
++++ b/src/vm/gcenv.os.cpp
+@@ -26,12 +26,22 @@
+ 
+ #define MAX_PTR ((uint8_t*)(~(ptrdiff_t)0))
+ 
++#ifdef FEATURE_PAL
++size_t g_pageSizeUnixInl = 0;
++#endif
++
++
+ // Initialize the interface implementation
+ // Return:
+ //  true if it has succeeded, false if it has failed
+ bool GCToOSInterface::Initialize()
+ {
+     LIMITED_METHOD_CONTRACT;
++
++#ifdef FEATURE_PAL
++    g_pageSizeUnixInl = GetOsPageSize();
++#endif
++
+     return true;
+ }
+ 
+diff --git a/src/vm/gcenv.unix.inl b/src/vm/gcenv.unix.inl
+new file mode 100644
+index 0000000..7523864
+--- /dev/null
++++ b/src/vm/gcenv.unix.inl
+@@ -0,0 +1,5 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++#include "../gc/env/gcenv.unix.inl"
+diff --git a/src/vm/gcenv.windows.inl b/src/vm/gcenv.windows.inl
+new file mode 100644
+index 0000000..aeb35f6
+--- /dev/null
++++ b/src/vm/gcenv.windows.inl
+@@ -0,0 +1,5 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++#include "../gc/env/gcenv.windows.inl"
+-- 
+2.7.4
+

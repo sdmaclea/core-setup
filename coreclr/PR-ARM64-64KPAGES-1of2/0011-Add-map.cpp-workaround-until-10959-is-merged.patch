@@ -1,0 +1,30 @@
+From 5ba60cc82cdf910f0578df293ac702ce53153302 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 19 Apr 2017 23:56:01 +0000
+Subject: [PATCH] Add map.cpp workaround until #10959 is merged
+
+---
+ src/pal/src/map/map.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/pal/src/map/map.cpp b/src/pal/src/map/map.cpp
+index f3ec47b..e1825d1 100644
+--- a/src/pal/src/map/map.cpp
++++ b/src/pal/src/map/map.cpp
+@@ -44,6 +44,12 @@ using namespace CorUnix;
+ 
+ SET_DEFAULT_DEBUG_CHANNEL(VIRTUAL);
+ 
++// This is temporary until #10959 is merged
++// It is designed to create a merge conflict with the inverse workaround in #10959
++// This is to prevent both from being merged without removing both workarounds
++#define VIRTUAL_PAGE_SIZE VirtualPageSize()
++#define VIRTUAL_PAGE_MASK (VIRTUAL_PAGE_SIZE-1)
++
+ //
+ // The mapping critical section guards access to the list
+ // of currently mapped views. If a thread needs to access
+-- 
+2.7.4
+

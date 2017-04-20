@@ -1,0 +1,26 @@
+From 468325d09a085a7e20d5df774d747cad8958ffd9 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 18 Apr 2017 18:27:23 +0000
+Subject: [PATCH] Fix another typo
+
+---
+ src/gc/unix/gcenv.unix.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gc/unix/gcenv.unix.cpp b/src/gc/unix/gcenv.unix.cpp
+index 09a668b..33dbf17 100644
+--- a/src/gc/unix/gcenv.unix.cpp
++++ b/src/gc/unix/gcenv.unix.cpp
+@@ -486,7 +486,7 @@ uint64_t GCToOSInterface::GetPhysicalMemoryLimit()
+     long pages = sysconf(_SC_PHYS_PAGES);
+     if (pages == -1) 
+     {
+-        return 0;SC_PAGE_SIZE
++        return 0;
+     }
+ 
+     long pageSize = sysconf(_SC_PAGE_SIZE);
+-- 
+2.7.4
+
