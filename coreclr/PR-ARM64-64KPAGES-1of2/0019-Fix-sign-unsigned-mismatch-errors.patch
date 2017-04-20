@@ -1,0 +1,59 @@
+From 5a1b3604bb5bf1b3d2452deb91ec505fad0fcc28 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 20 Apr 2017 22:08:25 +0000
+Subject: [PATCH] Fix sign/unsigned mismatch errors
+
+---
+ src/vm/eetwain.cpp              | 4 ++--
+ src/vm/i386/jitinterfacex86.cpp | 4 ++--
+ src/vm/threads.cpp              | 2 +-
+ 3 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/vm/eetwain.cpp b/src/vm/eetwain.cpp
+index 32c1735..f558810 100644
+--- a/src/vm/eetwain.cpp
++++ b/src/vm/eetwain.cpp
+@@ -3019,9 +3019,9 @@ unsigned SKIP_ALLOC_FRAME(int size, PTR_CBYTE base, unsigned offset)
+         return (SKIP_PUSH_REG(base, offset));
+     }
+ 
+-    if (size >= GetOsPageSize())
++    if (size >= (int)GetOsPageSize())
+     {
+-        if (size < (3 * GetOsPageSize()))
++        if (size < int(3 * GetOsPageSize()))
+         {
+             // add 7 bytes for one or two TEST EAX, [ESP+GetOsPageSize()]
+             offset += (size / GetOsPageSize()) * 7;
+diff --git a/src/vm/i386/jitinterfacex86.cpp b/src/vm/i386/jitinterfacex86.cpp
+index 2d882e5..4ffed2d 100644
+--- a/src/vm/i386/jitinterfacex86.cpp
++++ b/src/vm/i386/jitinterfacex86.cpp
+@@ -1530,8 +1530,8 @@ void InitJITHelpers1()
+ 
+     // All write barrier helpers should fit into one page.
+     // If you hit this assert on retail build, there is most likely problem with BBT script.
+-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (BYTE*)JIT_WriteBarrierGroup_End - (BYTE*)JIT_WriteBarrierGroup < GetOsPageSize());
+-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (BYTE*)JIT_PatchedWriteBarrierGroup_End - (BYTE*)JIT_PatchedWriteBarrierGroup < GetOsPageSize());
++    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (BYTE*)JIT_WriteBarrierGroup_End - (BYTE*)JIT_WriteBarrierGroup < (ptrdiff_t)GetOsPageSize());
++    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (BYTE*)JIT_PatchedWriteBarrierGroup_End - (BYTE*)JIT_PatchedWriteBarrierGroup < (ptrdiff_t)GetOsPageSize());
+ 
+     // Copy the write barriers to their final resting place.
+     for (int iBarrier = 0; iBarrier < NUM_WRITE_BARRIERS; iBarrier++)
+diff --git a/src/vm/threads.cpp b/src/vm/threads.cpp
+index 289e597..7fcbad7 100644
+--- a/src/vm/threads.cpp
++++ b/src/vm/threads.cpp
+@@ -1354,7 +1354,7 @@ void InitThreadManager()
+ 
+     // All patched helpers should fit into one page.
+     // If you hit this assert on retail build, there is most likely problem with BBT script.
+-    _ASSERTE_ALL_BUILDS("clr/src/VM/threads.cpp", (BYTE*)JIT_PatchedCodeLast - (BYTE*)JIT_PatchedCodeStart < GetOsPageSize());
++    _ASSERTE_ALL_BUILDS("clr/src/VM/threads.cpp", (BYTE*)JIT_PatchedCodeLast - (BYTE*)JIT_PatchedCodeStart < (ptrdiff_t)GetOsPageSize());
+ 
+     // I am using virtual protect to cover the entire range that this code falls in.
+     // 
+-- 
+2.7.4
+
