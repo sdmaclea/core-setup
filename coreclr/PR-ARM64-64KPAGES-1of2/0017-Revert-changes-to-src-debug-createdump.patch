@@ -1,0 +1,111 @@
+From d4a47e6a8b0f3bfe670ac05bb10906a0b0886c29 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 20 Apr 2017 17:06:58 -0400
+Subject: [PATCH] Revert changes to src/debug/createdump/*
+
+---
+ src/debug/createdump/crashinfo.cpp  | 8 ++++----
+ src/debug/createdump/dumpwriter.cpp | 2 +-
+ src/debug/createdump/memoryregion.h | 8 ++++----
+ src/debug/createdump/threadinfo.cpp | 8 ++++----
+ 4 files changed, 13 insertions(+), 13 deletions(-)
+
+diff --git a/src/debug/createdump/crashinfo.cpp b/src/debug/createdump/crashinfo.cpp
+index f52fbf0..8f72542 100644
+--- a/src/debug/createdump/crashinfo.cpp
++++ b/src/debug/createdump/crashinfo.cpp
+@@ -493,11 +493,11 @@ void
+ CrashInfo::InsertMemoryRegion(uint64_t address, size_t size)
+ {
+     // Round to page boundary
+-    uint64_t start = ROUND_DOWN_TO_PAGE(address);
++    uint64_t start = address & PAGE_MASK;
+     assert(start > 0);
+ 
+     // Round up to page boundary
+-    uint64_t end = ROUND_UP_TO_PAGE(address + size);
++    uint64_t end = ((address + size) + (PAGE_SIZE - 1)) & PAGE_MASK;
+     assert(end > 0);
+ 
+     MemoryRegion memoryRegionFull(start, end);
+@@ -518,9 +518,9 @@ CrashInfo::InsertMemoryRegion(uint64_t address, size_t size)
+             // add one page at a time to avoid the overlapping pages.
+             uint64_t numberPages = (end - start) >> PAGE_SHIFT;
+ 
+-            for (int p = 0; p < numberPages; p++, start += GetOsPageSize())
++            for (int p = 0; p < numberPages; p++, start += PAGE_SIZE)
+             {
+-                MemoryRegion memoryRegion(start, start + GetOsPageSize());
++                MemoryRegion memoryRegion(start, start + PAGE_SIZE);
+ 
+                 const auto& found = m_memoryRegions.find(memoryRegion);
+                 if (found == m_memoryRegions.end())
+diff --git a/src/debug/createdump/dumpwriter.cpp b/src/debug/createdump/dumpwriter.cpp
+index 8e14840..ef3adac 100644
+--- a/src/debug/createdump/dumpwriter.cpp
++++ b/src/debug/createdump/dumpwriter.cpp
+@@ -371,7 +371,7 @@ DumpWriter::WriteNTFileInfo()
+     nhdr.n_descsz = GetNTFileInfoSize(&alignmentBytesNeeded) - sizeof(nhdr) - 8;
+ 
+     size_t count = m_crashInfo.ModuleMappings().size();
+-    size_t pageSize = GetOsPageSize();
++    size_t pageSize = PAGE_SIZE;
+ 
+     printf("Writing %ld NT_FILE entries to core file\n", m_crashInfo.ModuleMappings().size());
+ 
+diff --git a/src/debug/createdump/memoryregion.h b/src/debug/createdump/memoryregion.h
+index baba287..16c4d1c 100644
+--- a/src/debug/createdump/memoryregion.h
++++ b/src/debug/createdump/memoryregion.h
+@@ -21,8 +21,8 @@ public:
+         m_offset(0),
+         m_fileName(nullptr)
+     {
+-        assert(start == ROUND_DOWN_TO_PAGE(start));
+-        assert(end == ROUND_DOWN_TO_PAGE(end));
++        assert((start & ~PAGE_MASK) == 0);
++        assert((end & ~PAGE_MASK) == 0);
+     }
+ 
+     MemoryRegion(uint32_t permissions, uint64_t start, uint64_t end, uint64_t offset, char* filename) : 
+@@ -32,8 +32,8 @@ public:
+         m_offset(offset),
+         m_fileName(filename)
+     {
+-        assert(start == ROUND_DOWN_TO_PAGE(start));
+-        assert(end == ROUND_DOWN_TO_PAGE(end));
++        assert((start & ~PAGE_MASK) == 0);
++        assert((end & ~PAGE_MASK) == 0);
+     }
+ 
+     const uint32_t Permissions() const
+diff --git a/src/debug/createdump/threadinfo.cpp b/src/debug/createdump/threadinfo.cpp
+index 34aec6a..52af060 100644
+--- a/src/debug/createdump/threadinfo.cpp
++++ b/src/debug/createdump/threadinfo.cpp
+@@ -64,8 +64,8 @@ ThreadInfo::GetRegisters()
+ void
+ ThreadInfo::GetThreadStack(const CrashInfo& crashInfo, uint64_t* startAddress, size_t* size) const
+ {
+-    *startAddress = m_gpRegisters.rsp & (GetOsPageSize()-1);
+-    *size = 4 * GetOsPageSize();
++    *startAddress = m_gpRegisters.rsp & PAGE_MASK;
++    *size = 4 * PAGE_SIZE;
+ 
+     for (const MemoryRegion& mapping : crashInfo.OtherMappings())
+     {
+@@ -87,8 +87,8 @@ ThreadInfo::GetThreadStack(const CrashInfo& crashInfo, uint64_t* startAddress, s
+ void
+ ThreadInfo::GetThreadCode(uint64_t* startAddress, size_t* size) const
+ {
+-    *startAddress = m_gpRegisters.rip & (GetOsPageSize()-1);
+-    *size = GetOsPageSize();
++    *startAddress = m_gpRegisters.rip & PAGE_MASK;
++    *size = PAGE_SIZE;
+ }
+ 
+ void 
+-- 
+2.7.4
+
