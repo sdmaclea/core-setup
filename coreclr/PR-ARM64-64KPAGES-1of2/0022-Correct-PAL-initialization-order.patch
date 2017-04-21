@@ -1,0 +1,57 @@
+From bbc953eed506f091c8a627871aeb46842b4c87ad Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 21 Apr 2017 18:34:43 -0400
+Subject: [PATCH] Correct PAL initialization order
+
+---
+ src/pal/src/init/pal.cpp | 26 +++++++++++++-------------
+ 1 file changed, 13 insertions(+), 13 deletions(-)
+
+diff --git a/src/pal/src/init/pal.cpp b/src/pal/src/init/pal.cpp
+index 490c0cb..324ba31 100644
+--- a/src/pal/src/init/pal.cpp
++++ b/src/pal/src/init/pal.cpp
+@@ -453,19 +453,6 @@ Initialize(
+             goto CLEANUP2;
+         }
+ 
+-        if (flags & PAL_INITIALIZE_SYNC_THREAD)
+-        {
+-            //
+-            // Tell the synchronization manager to start its worker thread
+-            //
+-            palError = CPalSynchMgrController::StartWorker(pThread);
+-            if (NO_ERROR != palError)
+-            {
+-                ERROR("Synch manager failed to start worker thread\n");
+-                goto CLEANUP5;
+-            }
+-        }
+-
+         palError = ERROR_GEN_FAILURE;
+ 
+         /* initialize structured exception handling stuff (signals, etc) */
+@@ -496,6 +483,19 @@ Initialize(
+             goto CLEANUP10;
+         }
+ 
++        if (flags & PAL_INITIALIZE_SYNC_THREAD)
++        {
++            //
++            // Tell the synchronization manager to start its worker thread
++            //
++            palError = CPalSynchMgrController::StartWorker(pThread);
++            if (NO_ERROR != palError)
++            {
++                ERROR("Synch manager failed to start worker thread\n");
++                goto CLEANUP13;
++            }
++        }
++
+         if (flags & PAL_INITIALIZE_STD_HANDLES)
+         {
+             /* create file objects for standard handles */
+-- 
+2.7.4
+
