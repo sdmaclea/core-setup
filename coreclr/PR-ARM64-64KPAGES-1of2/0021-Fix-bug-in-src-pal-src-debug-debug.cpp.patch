@@ -1,0 +1,26 @@
+From 781d160d7a452eb0b2c37285b9c9c7efdcf0bad1 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 21 Apr 2017 16:36:42 -0400
+Subject: [PATCH] Fix bug in src/pal/src/debug/debug.cpp
+
+---
+ src/pal/src/debug/debug.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/pal/src/debug/debug.cpp b/src/pal/src/debug/debug.cpp
+index 6642f0d..d31d66f 100644
+--- a/src/pal/src/debug/debug.cpp
++++ b/src/pal/src/debug/debug.cpp
+@@ -610,7 +610,7 @@ PAL_ProbeMemory(
+         }
+ 
+         // Round to the beginning of the next page
+-        pBuffer = ALIGN_UP(pBuffer, GetVirtualPageSize());
++        pBuffer = PVOID(ALIGN_DOWN((SIZE_T)pBuffer, GetVirtualPageSize()) + GetVirtualPageSize());
+     }
+ 
+     close(fds[0]);
+-- 
+2.7.4
+
