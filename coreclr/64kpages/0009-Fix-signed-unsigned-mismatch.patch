@@ -1,0 +1,26 @@
+From 2d45d526c278bc146af02138f5503b6096c7a75f Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 17 Apr 2017 21:37:52 +0000
+Subject: [PATCH] Fix signed/unsigned mismatch
+
+---
+ src/gc/gc.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
+index 0dbd6c8..9bf3577 100644
+--- a/src/gc/gc.cpp
++++ b/src/gc/gc.cpp
+@@ -9214,7 +9214,7 @@ void gc_heap::delete_heap_segment (heap_segment* seg, BOOL consider_hoarding)
+ 
+     if (consider_hoarding)
+     {
+-        assert ((heap_segment_mem (seg) - (uint8_t*)seg) <= 2*OS_PAGE_SIZE);
++        assert ((heap_segment_mem (seg) - (uint8_t*)seg) <= ptrdiff_t(2*OS_PAGE_SIZE));
+         size_t ss = (size_t) (heap_segment_reserved (seg) - (uint8_t*)seg);
+         //Don't keep the big ones.
+         if (ss <= INITIAL_ALLOC)
+-- 
+2.7.4
+

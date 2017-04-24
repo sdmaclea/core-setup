@@ -1,0 +1,26 @@
+From b5f29a75d5c5118f76f53f9cbe9f5f4a0473120f Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 14 Apr 2017 18:40:48 -0400
+Subject: [PATCH] Fix amd64 crossgen error
+
+---
+ src/pal/src/map/map.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/pal/src/map/map.cpp b/src/pal/src/map/map.cpp
+index 80efc84..55f4a68 100644
+--- a/src/pal/src/map/map.cpp
++++ b/src/pal/src/map/map.cpp
+@@ -2439,7 +2439,7 @@ void * MAPMapPEFile(HANDLE hFile)
+     // First try to reserve virtual memory using ExecutableAllcator. This allows all PE images to be
+     // near each other and close to the coreclr library which also allows the runtime to generate
+     // more efficient code (by avoiding usage of jump stubs).
+-    loadedBase = ReserveMemoryFromExecutableAllocator(pThread, virtualSize);
++    loadedBase = ReserveMemoryFromExecutableAllocator(pThread, ((virtualSize-1) & ~VIRTUAL_PAGE_MASK) + VIRTUAL_PAGE_SIZE);
+     if (loadedBase == NULL)
+     {
+         // MAC64 requires we pass MAP_SHARED (or MAP_PRIVATE) flags - otherwise, the call is failed.
+-- 
+2.7.4
+

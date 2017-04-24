@@ -1,0 +1,453 @@
+From 1a66b3e1c1a7079f4c5ec81ba7e62b7a4b76daa7 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 24 Apr 2017 14:47:06 +0000
+Subject: [PATCH] Reintroduce OS_PAGE_SIZE in gc code.
+
+---
+ src/gc/env/gcenv.unix.inl        |  2 ++
+ src/gc/env/gcenv.windows.inl     |  2 ++
+ src/gc/gc.cpp                    | 62 ++++++++++++++++++++--------------------
+ src/gc/softwarewritewatch.cpp    | 10 +++----
+ src/gc/softwarewritewatch.h      |  2 +-
+ src/gc/unix/gcenv.unix.cpp       | 20 ++++++-------
+ src/gc/windows/gcenv.windows.cpp |  2 +-
+ 7 files changed, 52 insertions(+), 48 deletions(-)
+
+diff --git a/src/gc/env/gcenv.unix.inl b/src/gc/env/gcenv.unix.inl
+index 64c56ff..50683ae 100644
+--- a/src/gc/env/gcenv.unix.inl
++++ b/src/gc/env/gcenv.unix.inl
+@@ -9,6 +9,8 @@
+ 
+ extern uint32_t g_pageSizeUnixInl;
+ 
++#define OS_PAGE_SIZE GCToOSInterface::GetPageSize()
++
+ __forceinline uint32_t GCToOSInterface::GetPageSize()
+ {
+     return g_pageSizeUnixInl;
+diff --git a/src/gc/env/gcenv.windows.inl b/src/gc/env/gcenv.windows.inl
+index 8046b7f..3b15dfd 100644
+--- a/src/gc/env/gcenv.windows.inl
++++ b/src/gc/env/gcenv.windows.inl
+@@ -8,6 +8,8 @@
+ #include "gcenv.os.h"
+ 
+ 
++#define OS_PAGE_SIZE GCToOSInterface::GetPageSize()
++
+ __forceinline uint32_t GCToOSInterface::GetPageSize()
+ {
+     return 0x1000;
+diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
+index a3a0ad8..a54fb0b 100644
+--- a/src/gc/gc.cpp
++++ b/src/gc/gc.cpp
+@@ -2083,9 +2083,9 @@ uint8_t* gc_heap::pad_for_alignment_large (uint8_t* newAlloc, int requiredAlignm
+ #define END_SPACE_AFTER_GC (LARGE_OBJECT_SIZE + MAX_STRUCTALIGN)
+ 
+ #ifdef BACKGROUND_GC
+-#define SEGMENT_INITIAL_COMMIT (2*GCToOSInterface::GetPageSize())
++#define SEGMENT_INITIAL_COMMIT (2*OS_PAGE_SIZE)
+ #else
+-#define SEGMENT_INITIAL_COMMIT (GCToOSInterface::GetPageSize())
++#define SEGMENT_INITIAL_COMMIT (OS_PAGE_SIZE)
+ #endif //BACKGROUND_GC
+ 
+ #ifdef SERVER_GC
+@@ -2141,7 +2141,7 @@ const int max_snoop_level = 128;
+ inline
+ size_t align_on_page (size_t add)
+ {
+-    return ((add + GCToOSInterface::GetPageSize() - 1) & ~((size_t)GCToOSInterface::GetPageSize() - 1));
++    return ((add + OS_PAGE_SIZE - 1) & ~((size_t)OS_PAGE_SIZE - 1));
+ }
+ 
+ inline
+@@ -2153,7 +2153,7 @@ uint8_t* align_on_page (uint8_t* add)
+ inline
+ size_t align_lower_page (size_t add)
+ {
+-    return (add & ~((size_t)GCToOSInterface::GetPageSize() - 1));
++    return (add & ~((size_t)OS_PAGE_SIZE - 1));
+ }
+ 
+ inline
+@@ -6293,7 +6293,7 @@ void gc_heap::make_c_mark_list (uint8_t** arr)
+ {
+     c_mark_list = arr;
+     c_mark_list_index = 0;
+-    c_mark_list_length = 1 + (GCToOSInterface::GetPageSize() / MIN_OBJECT_SIZE);
++    c_mark_list_length = 1 + (OS_PAGE_SIZE / MIN_OBJECT_SIZE);
+ }
+ #endif //BACKGROUND_GC
+ 
+@@ -7135,10 +7135,10 @@ int gc_heap::grow_brick_card_tables (uint8_t* start,
+             if (saved_g_lowest_address < g_gc_lowest_address)
+             {
+                 if (ps > (size_t)g_gc_lowest_address)
+-                    saved_g_lowest_address = (uint8_t*)(size_t)GCToOSInterface::GetPageSize();
++                    saved_g_lowest_address = (uint8_t*)(size_t)OS_PAGE_SIZE;
+                 else
+                 {
+-                    assert (((size_t)g_gc_lowest_address - ps) >= GCToOSInterface::GetPageSize());
++                    assert (((size_t)g_gc_lowest_address - ps) >= OS_PAGE_SIZE);
+                     saved_g_lowest_address = min (saved_g_lowest_address, (g_gc_lowest_address - ps));
+                 }
+             }
+@@ -9174,7 +9174,7 @@ heap_segment* gc_heap::make_heap_segment (uint8_t* new_pages, size_t size, int h
+     //leave the first page to contain only segment info
+     //because otherwise we could need to revisit the first page frequently in 
+     // background GC.
+-    start = new_pages + GCToOSInterface::GetPageSize();
++    start = new_pages + OS_PAGE_SIZE;
+ #else
+     start = new_pages +
+         Align (sizeof (heap_segment), get_alignment_constant (FALSE));
+@@ -9212,7 +9212,7 @@ void gc_heap::delete_heap_segment (heap_segment* seg, BOOL consider_hoarding)
+ 
+     if (consider_hoarding)
+     {
+-        assert ((heap_segment_mem (seg) - (uint8_t*)seg) <= ptrdiff_t(2*GCToOSInterface::GetPageSize()));
++        assert ((heap_segment_mem (seg) - (uint8_t*)seg) <= ptrdiff_t(2*OS_PAGE_SIZE));
+         size_t ss = (size_t) (heap_segment_reserved (seg) - (uint8_t*)seg);
+         //Don't keep the big ones.
+         if (ss <= INITIAL_ALLOC)
+@@ -9276,10 +9276,10 @@ void gc_heap::decommit_heap_segment_pages (heap_segment* seg,
+     uint8_t*  page_start = align_on_page (heap_segment_allocated(seg));
+     size_t size = heap_segment_committed (seg) - page_start;
+     extra_space = align_on_page (extra_space);
+-    if (size >= max ((extra_space + 2*GCToOSInterface::GetPageSize()), 100*GCToOSInterface::GetPageSize()))
++    if (size >= max ((extra_space + 2*OS_PAGE_SIZE), 100*OS_PAGE_SIZE))
+     {
+-        page_start += max(extra_space, 32*GCToOSInterface::GetPageSize());
+-        size -= max (extra_space, 32*GCToOSInterface::GetPageSize());
++        page_start += max(extra_space, 32*OS_PAGE_SIZE);
++        size -= max (extra_space, 32*OS_PAGE_SIZE);
+ 
+         GCToOSInterface::VirtualDecommit (page_start, size);
+         dprintf (3, ("Decommitting heap segment [%Ix, %Ix[(%d)", 
+@@ -9302,7 +9302,7 @@ void gc_heap::decommit_heap_segment (heap_segment* seg)
+     dprintf (3, ("Decommitting heap segment %Ix", (size_t)seg));
+ 
+ #ifdef BACKGROUND_GC
+-    page_start += GCToOSInterface::GetPageSize();
++    page_start += OS_PAGE_SIZE;
+ #endif //BACKGROUND_GC
+ 
+     size_t size = heap_segment_committed (seg) - page_start;
+@@ -9522,7 +9522,7 @@ void gc_heap::update_card_table_bundle()
+                 size_t bcardw = (uint32_t*)(max(g_addresses[i],base_address)) - &card_table[0];
+ 
+                 // Offset of the end of the page from the start of the card table (clamped to high addr)
+-                size_t ecardw = (uint32_t*)(min(g_addresses[i]+GCToOSInterface::GetPageSize(), high_address)) - &card_table[0];
++                size_t ecardw = (uint32_t*)(min(g_addresses[i]+OS_PAGE_SIZE, high_address)) - &card_table[0];
+                 assert (bcardw >= card_word (card_of (g_gc_lowest_address)));
+ 
+                 // Set the card bundle bits representing the dirty card table page
+@@ -9534,7 +9534,7 @@ void gc_heap::update_card_table_bundle()
+ 
+             if (bcount >= array_size)
+             {
+-                base_address = g_addresses [array_size-1] + GCToOSInterface::GetPageSize();
++                base_address = g_addresses [array_size-1] + OS_PAGE_SIZE;
+                 bcount = array_size;
+             }
+ 
+@@ -10868,7 +10868,7 @@ BOOL gc_heap::grow_heap_segment (heap_segment* seg, uint8_t* high_address)
+         return TRUE;
+ 
+     size_t c_size = align_on_page ((size_t)(high_address - heap_segment_committed (seg)));
+-    c_size = max (c_size, 16*GCToOSInterface::GetPageSize());
++    c_size = max (c_size, 16*OS_PAGE_SIZE);
+     c_size = min (c_size, (size_t)(heap_segment_reserved (seg) - heap_segment_committed (seg)));
+ 
+     if (c_size == 0)
+@@ -12622,7 +12622,7 @@ size_t gc_heap::get_large_seg_size (size_t size)
+     int align_const = get_alignment_constant (FALSE);
+     size_t large_seg_size = align_on_page (
+         max (default_seg_size,
+-            ((size + 2 * Align(min_obj_size, align_const) + GCToOSInterface::GetPageSize() +
++            ((size + 2 * Align(min_obj_size, align_const) + OS_PAGE_SIZE +
+             align_size) / align_size * align_size)));
+     return large_seg_size;
+ }
+@@ -15893,7 +15893,7 @@ start_no_gc_region_status gc_heap::prepare_for_no_gc_region (uint64_t total_size
+ 
+     size_t soh_segment_size = get_valid_segment_size();
+     int soh_align_const = get_alignment_constant (TRUE);
+-    size_t max_soh_allocated = (soh_segment_size - GCToOSInterface::GetPageSize() - eph_gen_starts_size);
++    size_t max_soh_allocated = (soh_segment_size - OS_PAGE_SIZE - eph_gen_starts_size);
+ 
+     int num_heaps = 1;
+ #ifdef MULTIPLE_HEAPS
+@@ -18794,7 +18794,7 @@ void gc_heap::fix_card_table ()
+                 }
+                 dprintf (2,("Set Cards [%Ix:%Ix, %Ix:%Ix[",
+                       card_of (g_addresses [i]), (size_t)g_addresses [i],
+-                      card_of (g_addresses [i]+GCToOSInterface::GetPageSize()), (size_t)g_addresses [i]+GCToOSInterface::GetPageSize()));
++                      card_of (g_addresses [i]+OS_PAGE_SIZE), (size_t)g_addresses [i]+OS_PAGE_SIZE));
+ 
+ #ifdef FEATURE_MANUALLY_MANAGED_CARD_BUNDLES
+     // We don't need to update card bundles here because this function is only used when
+@@ -18804,7 +18804,7 @@ void gc_heap::fix_card_table ()
+             }
+ 
+             if (bcount >= array_size){
+-                base_address = g_addresses [array_size-1] + GCToOSInterface::GetPageSize();
++                base_address = g_addresses [array_size-1] + OS_PAGE_SIZE;
+                 bcount = array_size;
+             }
+         } while (bcount >= array_size);
+@@ -21946,13 +21946,13 @@ void gc_heap::plan_phase (int condemned_gen_number)
+             {
+                 if (allocate_in_condemned &&
+                     (settings.condemned_generation == max_generation) &&
+-                    (ps > GCToOSInterface::GetPageSize()))
++                    (ps > OS_PAGE_SIZE))
+                 {
+                     ptrdiff_t reloc = plug_start - generation_allocation_pointer (consing_gen);
+                     //reloc should >=0 except when we relocate
+                     //across segments and the dest seg is higher then the src
+ 
+-                    if ((ps > (8*GCToOSInterface::GetPageSize())) &&
++                    if ((ps > (8*OS_PAGE_SIZE)) &&
+                         (reloc > 0) &&
+                         ((size_t)reloc < (ps/16)))
+                     {
+@@ -26306,7 +26306,7 @@ void gc_heap::revisit_written_page (uint8_t* page,
+     }
+     else
+     {
+-        if (((last_page + GCToOSInterface::GetPageSize()) == page)
++        if (((last_page + OS_PAGE_SIZE) == page)
+             || (start_address <= last_object))
+         {
+             o = last_object;
+@@ -26321,9 +26321,9 @@ void gc_heap::revisit_written_page (uint8_t* page,
+ 
+     dprintf (3,("page %Ix start: %Ix, %Ix[ ",
+                (size_t)page, (size_t)o,
+-               (size_t)(min (high_address, page + GCToOSInterface::GetPageSize()))));
++               (size_t)(min (high_address, page + OS_PAGE_SIZE))));
+ 
+-    while (o < (min (high_address, page + GCToOSInterface::GetPageSize())))
++    while (o < (min (high_address, page + OS_PAGE_SIZE)))
+     {
+         size_t s;
+ 
+@@ -26378,7 +26378,7 @@ void gc_heap::revisit_written_page (uint8_t* page,
+             {
+                 dprintf (3, ("going through %Ix", (size_t)o));
+                 go_through_object (method_table(o), o, s, poo, start_address, use_start, (o + s),
+-                                    if ((uint8_t*)poo >= min (high_address, page + GCToOSInterface::GetPageSize()))
++                                    if ((uint8_t*)poo >= min (high_address, page + OS_PAGE_SIZE))
+                                     {
+                                         no_more_loop_p = TRUE;
+                                         goto end_limit;
+@@ -26395,7 +26395,7 @@ void gc_heap::revisit_written_page (uint8_t* page,
+                 large_objects_p &&
+ #endif // !FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+                 ((CObjectHeader*)o)->IsFree() &&
+-                (next_o > min (high_address, page + GCToOSInterface::GetPageSize())))
++                (next_o > min (high_address, page + OS_PAGE_SIZE)))
+             {
+                 // We need to not skip the object here because of this corner scenario:
+                 // A large object was being allocated during BGC mark so we first made it 
+@@ -26432,7 +26432,7 @@ end_limit:
+ #ifdef MULTIPLE_HEAPS
+     if (concurrent_p)
+     {
+-        assert (last_object < (min (high_address, page + GCToOSInterface::GetPageSize())));
++        assert (last_object < (min (high_address, page + OS_PAGE_SIZE)));
+     }
+     else
+ #endif //MULTIPLE_HEAPS
+@@ -26628,7 +26628,7 @@ void gc_heap::revisit_written_pages (BOOL concurrent_p, BOOL reset_only_p)
+                     }
+ 
+                     if (bcount >= array_size){
+-                        base_address = background_written_addresses [array_size-1] + GCToOSInterface::GetPageSize();
++                        base_address = background_written_addresses [array_size-1] + OS_PAGE_SIZE;
+                         bcount = array_size;
+                     }
+                 }
+@@ -26868,7 +26868,7 @@ BOOL gc_heap::create_bgc_thread_support()
+     }
+ 
+     //needs to have room for enough smallest objects fitting on a page
+-    parr = new (nothrow) uint8_t*[1 + GCToOSInterface::GetPageSize() / MIN_OBJECT_SIZE];
++    parr = new (nothrow) uint8_t*[1 + OS_PAGE_SIZE / MIN_OBJECT_SIZE];
+     if (!parr)
+     {
+         goto cleanup;
+@@ -36598,7 +36598,7 @@ void GCHeap::DiagScanDependentHandles (handle_scan_fn fn, int gen_number, ScanCo
+ // Go through and touch (read) each page straddled by a memory block.
+ void TouchPages(void * pStart, size_t cb)
+ {
+-    const uint32_t pagesize = GCToOSInterface::GetPageSize();
++    const uint32_t pagesize = OS_PAGE_SIZE;
+     _ASSERTE(0 == (pagesize & (pagesize-1))); // Must be a power of 2.
+     if (cb)
+     {
+diff --git a/src/gc/softwarewritewatch.cpp b/src/gc/softwarewritewatch.cpp
+index 4e5d7f4..f875191 100644
+--- a/src/gc/softwarewritewatch.cpp
++++ b/src/gc/softwarewritewatch.cpp
+@@ -44,7 +44,7 @@ bool SoftwareWriteWatch::GetDirtyFromBlock(
+     assert(endByteIndex <= sizeof(size_t));
+     assert(dirtyPages != nullptr);
+     assert(dirtyPageIndexRef != nullptr);
+-    assert((static_cast<size_t>(1) << SOFTWARE_WRITE_WATCH_AddressToTableByteIndexShift) == GCToOSInterface::GetPageSize());
++    assert((static_cast<size_t>(1) << SOFTWARE_WRITE_WATCH_AddressToTableByteIndexShift) == OS_PAGE_SIZE);
+ 
+     size_t &dirtyPageIndex = *dirtyPageIndexRef;
+     assert(dirtyPageIndex < dirtyPageCount);
+@@ -94,7 +94,7 @@ bool SoftwareWriteWatch::GetDirtyFromBlock(
+             block[byteIndex] = 0;
+         }
+ 
+-        void *pageAddress = firstPageAddressInBlock + byteIndex * GCToOSInterface::GetPageSize();
++        void *pageAddress = firstPageAddressInBlock + byteIndex * OS_PAGE_SIZE;
+         assert(pageAddress >= GetHeapStartAddress());
+         assert(pageAddress < GetHeapEndAddress());
+         assert(dirtyPageIndex < dirtyPageCount);
+@@ -120,7 +120,7 @@ void SoftwareWriteWatch::GetDirty(
+     VerifyMemoryRegion(baseAddress, regionByteSize);
+     assert(dirtyPages != nullptr);
+     assert(dirtyPageCountRef != nullptr);
+-    assert((static_cast<size_t>(1) << SOFTWARE_WRITE_WATCH_AddressToTableByteIndexShift) == GCToOSInterface::GetPageSize());
++    assert((static_cast<size_t>(1) << SOFTWARE_WRITE_WATCH_AddressToTableByteIndexShift) == OS_PAGE_SIZE);
+ 
+     size_t dirtyPageCount = *dirtyPageCountRef;
+     if (dirtyPageCount == 0)
+@@ -184,7 +184,7 @@ void SoftwareWriteWatch::GetDirty(
+                 break;
+             }
+             currentBlock += sizeof(size_t);
+-            firstPageAddressInCurrentBlock += sizeof(size_t) * GCToOSInterface::GetPageSize();
++            firstPageAddressInCurrentBlock += sizeof(size_t) * OS_PAGE_SIZE;
+         }
+ 
+         while (currentBlock < fullBlockEnd)
+@@ -202,7 +202,7 @@ void SoftwareWriteWatch::GetDirty(
+                 break;
+             }
+             currentBlock += sizeof(size_t);
+-            firstPageAddressInCurrentBlock += sizeof(size_t) * GCToOSInterface::GetPageSize();
++            firstPageAddressInCurrentBlock += sizeof(size_t) * OS_PAGE_SIZE;
+         }
+         if (currentBlock < fullBlockEnd)
+         {
+diff --git a/src/gc/softwarewritewatch.h b/src/gc/softwarewritewatch.h
+index b35c423..0e6e6c8 100644
+--- a/src/gc/softwarewritewatch.h
++++ b/src/gc/softwarewritewatch.h
+@@ -249,7 +249,7 @@ inline void *SoftwareWriteWatch::GetPageAddress(size_t tableByteIndex)
+     void *pageAddress = reinterpret_cast<void *>(tableByteIndex << AddressToTableByteIndexShift);
+     assert(pageAddress >= GetHeapStartAddress());
+     assert(pageAddress < GetHeapEndAddress());
+-    assert(ALIGN_DOWN(pageAddress, GCToOSInterface::GetPageSize()) == pageAddress);
++    assert(ALIGN_DOWN(pageAddress, OS_PAGE_SIZE) == pageAddress);
+     return pageAddress;
+ }
+ 
+diff --git a/src/gc/unix/gcenv.unix.cpp b/src/gc/unix/gcenv.unix.cpp
+index 2704409..b5c3dfc 100644
+--- a/src/gc/unix/gcenv.unix.cpp
++++ b/src/gc/unix/gcenv.unix.cpp
+@@ -95,7 +95,7 @@ bool GCToOSInterface::Initialize()
+ 
+     assert(g_helperPage == 0);
+ 
+-    g_helperPage = static_cast<uint8_t*>(mmap(0, GCToOSInterface::GetPageSize(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0));
++    g_helperPage = static_cast<uint8_t*>(mmap(0, OS_PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0));
+ 
+     if(g_helperPage == MAP_FAILED)
+     {
+@@ -103,12 +103,12 @@ bool GCToOSInterface::Initialize()
+     }
+ 
+     // Verify that the s_helperPage is really aligned to the g_SystemInfo.dwPageSize
+-    assert((((size_t)g_helperPage) & (GCToOSInterface::GetPageSize() - 1)) == 0);
++    assert((((size_t)g_helperPage) & (OS_PAGE_SIZE - 1)) == 0);
+ 
+     // Locking the page ensures that it stays in memory during the two mprotect
+     // calls in the FlushProcessWriteBuffers below. If the page was unmapped between
+     // those calls, they would not have the expected effect of generating IPI.
+-    int status = mlock(g_helperPage, GCToOSInterface::GetPageSize());
++    int status = mlock(g_helperPage, OS_PAGE_SIZE);
+ 
+     if (status != 0)
+     {
+@@ -118,7 +118,7 @@ bool GCToOSInterface::Initialize()
+     status = pthread_mutex_init(&g_flushProcessWriteBuffersMutex, NULL);
+     if (status != 0)
+     {
+-        munlock(g_helperPage, GCToOSInterface::GetPageSize());
++        munlock(g_helperPage, OS_PAGE_SIZE);
+         return false;
+     }
+ 
+@@ -136,12 +136,12 @@ bool GCToOSInterface::Initialize()
+ // Shutdown the interface implementation
+ void GCToOSInterface::Shutdown()
+ {
+-    int ret = munlock(g_helperPage, GCToOSInterface::GetPageSize());
++    int ret = munlock(g_helperPage, OS_PAGE_SIZE);
+     assert(ret == 0);
+     ret = pthread_mutex_destroy(&g_flushProcessWriteBuffersMutex);
+     assert(ret == 0);
+ 
+-    munmap(g_helperPage, GCToOSInterface::GetPageSize());
++    munmap(g_helperPage, OS_PAGE_SIZE);
+ }
+ 
+ // Get numeric id of the current thread if possible on the
+@@ -208,14 +208,14 @@ void GCToOSInterface::FlushProcessWriteBuffers()
+     // Changing a helper memory page protection from read / write to no access
+     // causes the OS to issue IPI to flush TLBs on all processors. This also
+     // results in flushing the processor buffers.
+-    status = mprotect(g_helperPage, GCToOSInterface::GetPageSize(), PROT_READ | PROT_WRITE);
++    status = mprotect(g_helperPage, OS_PAGE_SIZE, PROT_READ | PROT_WRITE);
+     assert(status == 0 && "Failed to change helper page protection to read / write");
+ 
+     // Ensure that the page is dirty before we change the protection so that
+     // we prevent the OS from skipping the global TLB flush.
+     __sync_add_and_fetch((size_t*)g_helperPage, 1);
+ 
+-    status = mprotect(g_helperPage, GCToOSInterface::GetPageSize(), PROT_NONE);
++    status = mprotect(g_helperPage, OS_PAGE_SIZE, PROT_NONE);
+     assert(status == 0 && "Failed to change helper page protection to no access");
+ 
+     status = pthread_mutex_unlock(&g_flushProcessWriteBuffersMutex);
+@@ -289,10 +289,10 @@ void* GCToOSInterface::VirtualReserve(size_t size, size_t alignment, uint32_t fl
+     assert(!(flags & VirtualReserveFlags::WriteWatch) && "WriteWatch not supported on Unix");
+     if (alignment == 0)
+     {
+-        alignment = GCToOSInterface::GetPageSize();
++        alignment = OS_PAGE_SIZE;
+     }
+ 
+-    size_t alignedSize = size + (alignment - GCToOSInterface::GetPageSize());
++    size_t alignedSize = size + (alignment - OS_PAGE_SIZE);
+     void * pRetVal = mmap(nullptr, alignedSize, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
+ 
+     if (pRetVal != NULL)
+diff --git a/src/gc/windows/gcenv.windows.cpp b/src/gc/windows/gcenv.windows.cpp
+index 62e6ba1..7ab4d22 100644
+--- a/src/gc/windows/gcenv.windows.cpp
++++ b/src/gc/windows/gcenv.windows.cpp
+@@ -368,7 +368,7 @@ bool GCToOSInterface::GetWriteWatch(bool resetState, void* address, size_t size,
+     bool success = ::GetWriteWatch(flags, address, size, pageAddresses, (ULONG_PTR*)pageAddressesCount, &granularity) == 0;
+     if (success)
+     {
+-        assert(granularity == GCToOSInterface::GetPageSize());
++        assert(granularity == OS_PAGE_SIZE);
+     }
+ 
+     return success;
+-- 
+2.7.4
+

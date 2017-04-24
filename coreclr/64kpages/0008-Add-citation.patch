@@ -1,0 +1,25 @@
+From 000caceed196b4b5a03ea0889f2a0499bf5ee797 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea@qti.qualcomm.com>
+Date: Mon, 17 Apr 2017 17:07:16 -0400
+Subject: [PATCH] Add citation
+
+---
+ src/utilcode/util.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/utilcode/util.cpp b/src/utilcode/util.cpp
+index d4f64ed..0773fbc 100644
+--- a/src/utilcode/util.cpp
++++ b/src/utilcode/util.cpp
+@@ -1325,7 +1325,7 @@ size_t GetOsPageSize()
+ {
+ #ifdef FEATURE_PAL
+     // Initialization of function-local statics is guaranteed to occur only
+-    // once even when called from multiple threads
++    // once even when called from multiple threads (from http://en.cppreference.com/w/cpp/thread/call_once)
+     //
+     // However there is a real potential performance cost.  This will need to
+     // be optimized if GetOsPageSize() shows up in profiles.
+-- 
+2.7.4
+

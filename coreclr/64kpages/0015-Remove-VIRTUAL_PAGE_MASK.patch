@@ -1,0 +1,186 @@
+From 061d953f5100afdaaf6df443d754f886df2da315 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 18 Apr 2017 23:38:10 +0000
+Subject: [PATCH] Remove VIRTUAL_PAGE_MASK
+
+---
+ src/pal/src/debug/debug.cpp       |  3 ++-
+ src/pal/src/include/pal/virtual.h |  3 ---
+ src/pal/src/map/virtual.cpp       | 49 ++++++++++++++++-----------------------
+ 3 files changed, 22 insertions(+), 33 deletions(-)
+
+diff --git a/src/pal/src/debug/debug.cpp b/src/pal/src/debug/debug.cpp
+index 2eaaec9..eb69be3 100644
+--- a/src/pal/src/debug/debug.cpp
++++ b/src/pal/src/debug/debug.cpp
+@@ -41,6 +41,7 @@ SET_DEFAULT_DEBUG_CHANNEL(DEBUG); // some headers have code with asserts, so do
+ #include "pal/module.h"
+ #include "pal/stackstring.hpp"
+ #include "pal/virtual.h"
++#include "pal/utils.h"
+ 
+ #include <signal.h>
+ #include <unistd.h>
+@@ -609,7 +610,7 @@ PAL_ProbeMemory(
+         }
+ 
+         // Round to the beginning of the next page
+-        pBuffer = (PVOID)(((SIZE_T)pBuffer & ~VIRTUAL_PAGE_MASK) + VIRTUAL_PAGE_SIZE);
++        pBuffer = ALIGN_UP(pBuffer, VIRTUAL_PAGE_SIZE);
+     }
+ 
+     close(fds[0]);
+diff --git a/src/pal/src/include/pal/virtual.h b/src/pal/src/include/pal/virtual.h
+index 3badbe2..c8df4f8 100644
+--- a/src/pal/src/include/pal/virtual.h
++++ b/src/pal/src/include/pal/virtual.h
+@@ -59,12 +59,9 @@ enum VIRTUAL_CONSTANTS
+     VIRTUAL_EXECUTE_READ,
+ 
+     VIRTUAL_PAGE_SIZE_MAX = 0x10000,
+-
+-    BOUNDARY_64K    = 0xffff
+ };
+ 
+ #define VIRTUAL_PAGE_SIZE getpagesize()
+-#define VIRTUAL_PAGE_MASK ( VIRTUAL_PAGE_SIZE - 1 )
+ 
+ /*++
+ Function :
+diff --git a/src/pal/src/map/virtual.cpp b/src/pal/src/map/virtual.cpp
+index d52ba1e..e5370cf 100644
+--- a/src/pal/src/map/virtual.cpp
++++ b/src/pal/src/map/virtual.cpp
+@@ -45,6 +45,8 @@ using namespace CorUnix;
+ 
+ SET_DEFAULT_DEBUG_CHANNEL(VIRTUAL);
+ 
++#include "pal/utils.h"
++
+ CRITICAL_SECTION virtual_critsec;
+ 
+ // The first node in our list of allocated blocks.
+@@ -716,7 +718,7 @@ static BOOL VIRTUALStoreAllocationInfo(
+     PCMI pMemInfo        = nullptr;
+     SIZE_T nBufferSize   = 0;
+ 
+-    if ((memSize & VIRTUAL_PAGE_MASK) != 0)
++    if (!IS_ALIGNED(memSize, VIRTUAL_PAGE_SIZE))
+     {
+         ERROR("The memory size was not a multiple of the page size. \n");
+         return FALSE;
+@@ -826,10 +828,8 @@ static LPVOID VIRTUALResetMemory(
+ 
+     TRACE( "Resetting the memory now..\n");
+ 
+-    StartBoundary = (UINT_PTR)lpAddress & ~VIRTUAL_PAGE_MASK;
+-    // Add the sizes, and round down to the nearest page boundary. 
+-    MemSize = ( ((UINT_PTR)lpAddress + dwSize + VIRTUAL_PAGE_MASK) & ~VIRTUAL_PAGE_MASK ) - 
+-               StartBoundary;
++    StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VIRTUAL_PAGE_SIZE);
++    MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VIRTUAL_PAGE_SIZE) - StartBoundary;
+ 
+     int st;
+ #if HAVE_MADV_FREE
+@@ -885,10 +885,8 @@ static LPVOID VIRTUALReserveMemory(
+     // First, figure out where we're trying to reserve the memory and
+     // how much we need. On most systems, requests to mmap must be
+     // page-aligned and at multiples of the page size.
+-    StartBoundary = (UINT_PTR)lpAddress & ~BOUNDARY_64K;
+-    /* Add the sizes, and round down to the nearest page boundary. */
+-    MemSize = ( ((UINT_PTR)lpAddress + dwSize + VIRTUAL_PAGE_MASK) & ~VIRTUAL_PAGE_MASK ) - 
+-               StartBoundary;
++    StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VIRTUAL_PAGE_SIZE);
++    MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VIRTUAL_PAGE_SIZE) - StartBoundary;
+ 
+     // If this is a request for special executable (JIT'ed) memory then, first of all,
+     // try to get memory from the executable memory allocator to satisfy the request.
+@@ -908,9 +906,8 @@ static LPVOID VIRTUALReserveMemory(
+         if ( !lpAddress )
+         {
+             /* Compute the real values instead of the null values. */
+-            StartBoundary = (UINT_PTR)pRetVal & ~VIRTUAL_PAGE_MASK;
+-            MemSize = ( ((UINT_PTR)pRetVal + dwSize + VIRTUAL_PAGE_MASK) & ~VIRTUAL_PAGE_MASK ) -
+-                      StartBoundary;
++            StartBoundary = (UINT_PTR) ALIGN_DOWN(pRetVal, VIRTUAL_PAGE_SIZE);
++            MemSize = ALIGN_UP((UINT_PTR)pRetVal + dwSize, VIRTUAL_PAGE_SIZE) - StartBoundary;
+         }
+ 
+         if ( !VIRTUALStoreAllocationInfo( StartBoundary, MemSize,
+@@ -1048,14 +1045,12 @@ VIRTUALCommitMemory(
+ 
+     if ( lpAddress )
+     {
+-        StartBoundary = (UINT_PTR)lpAddress & ~VIRTUAL_PAGE_MASK;
+-        /* Add the sizes, and round down to the nearest page boundary. */
+-        MemSize = ( ((UINT_PTR)lpAddress + dwSize + VIRTUAL_PAGE_MASK) & ~VIRTUAL_PAGE_MASK ) - 
+-                  StartBoundary;
++        StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VIRTUAL_PAGE_SIZE);
++        MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VIRTUAL_PAGE_SIZE) - StartBoundary;
+     }
+     else
+     {
+-        MemSize = ( dwSize + VIRTUAL_PAGE_MASK ) & ~VIRTUAL_PAGE_MASK;
++        MemSize = ALIGN_UP(dwSize, VIRTUAL_PAGE_SIZE);
+     }
+ 
+     /* See if we have already reserved this memory. */
+@@ -1075,9 +1070,8 @@ VIRTUALCommitMemory(
+         if ( pReservedMemory )
+         {
+             /* Re-align the addresses and try again to find the memory. */
+-            StartBoundary = (UINT_PTR)pReservedMemory & ~VIRTUAL_PAGE_MASK;
+-            MemSize = ( ((UINT_PTR)pReservedMemory + dwSize + VIRTUAL_PAGE_MASK) 
+-                        & ~VIRTUAL_PAGE_MASK ) - StartBoundary;
++            StartBoundary = (UINT_PTR) ALIGN_DOWN(pReservedMemory, VIRTUAL_PAGE_SIZE);
++            MemSize = ALIGN_UP((UINT_PTR)pReservedMemory + dwSize, VIRTUAL_PAGE_SIZE) - StartBoundary;
+             
+             pInformation = VIRTUALFindRegionInformation( StartBoundary );
+ 
+@@ -1417,10 +1411,8 @@ VirtualFree(
+          * released or decommitted. So round the dwSize up to the next page 
+          * boundary and round the lpAddress down to the next page boundary.
+          */
+-        MemSize = (((UINT_PTR)(dwSize) + ((UINT_PTR)(lpAddress) & VIRTUAL_PAGE_MASK) 
+-                    + VIRTUAL_PAGE_MASK) & ~VIRTUAL_PAGE_MASK);
+-
+-        StartBoundary = (UINT_PTR)lpAddress & ~VIRTUAL_PAGE_MASK;
++        StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VIRTUAL_PAGE_SIZE);
++        MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VIRTUAL_PAGE_SIZE) - StartBoundary;
+ 
+         PCMI pUnCommittedMem;
+         pUnCommittedMem = VIRTUALFindRegionInformation( StartBoundary );
+@@ -1567,9 +1559,8 @@ VirtualProtect(
+     pthrCurrent = InternalGetCurrentThread();
+     InternalEnterCriticalSection(pthrCurrent, &virtual_critsec);
+     
+-    StartBoundary = (UINT_PTR)lpAddress & ~VIRTUAL_PAGE_MASK;
+-    MemSize = (((UINT_PTR)(dwSize) + ((UINT_PTR)(lpAddress) & VIRTUAL_PAGE_MASK)
+-                + VIRTUAL_PAGE_MASK) & ~VIRTUAL_PAGE_MASK);
++    StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, VIRTUAL_PAGE_SIZE);
++    MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, VIRTUAL_PAGE_SIZE) - StartBoundary;
+ 
+     if ( VIRTUALContainsInvalidProtectionFlags( flNewProtect ) )
+     {
+@@ -1836,7 +1827,7 @@ VirtualQuery(
+         goto ExitVirtualQuery;
+     }
+ 
+-    StartBoundary = (UINT_PTR)lpAddress & ~VIRTUAL_PAGE_MASK;
++    StartBoundary = ALIGN_DOWN((SIZE_T)lpAddress, VIRTUAL_PAGE_SIZE);
+ 
+ #if MMAP_IGNORES_HINT
+     // Make sure we have memory to map before we try to query it.
+@@ -2098,7 +2089,7 @@ void* ExecutableMemoryAllocator::AllocateMemory(SIZE_T allocationSize)
+     void* allocatedMemory = NULL;
+ 
+     // Allocation size must be in multiples of the virtual page size.
+-    _ASSERTE((allocationSize & VIRTUAL_PAGE_MASK) == 0);
++    _ASSERTE(IS_ALIGNED(allocationSize, VIRTUAL_PAGE_SIZE));
+ 
+     // The code below assumes that the caller owns the virtual_critsec lock.
+     // So the calculations are not done in thread-safe manner.
+-- 
+2.7.4
+

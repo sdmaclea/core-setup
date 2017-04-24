@@ -1,0 +1,239 @@
+From 096721fdb9eec91982185f069f135a3d465fa5b9 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 20 Apr 2017 18:36:00 +0000
+Subject: [PATCH] Fix Window warnings treated as errors
+
+---
+ src/gc/env/gcenv.os.h            | 2 +-
+ src/gc/env/gcenv.unix.inl        | 4 ++--
+ src/gc/env/gcenv.windows.inl     | 2 +-
+ src/gc/gc.cpp                    | 6 +++---
+ src/gc/unix/gcenv.unix.cpp       | 4 ++--
+ src/gc/windows/gcenv.windows.cpp | 2 --
+ src/inc/utilcode.h               | 2 +-
+ src/utilcode/util.cpp            | 6 +++---
+ src/vm/codeman.h                 | 4 ++--
+ src/vm/dynamicmethod.cpp         | 2 +-
+ src/vm/gcenv.os.cpp              | 2 +-
+ src/vm/threads.cpp               | 2 +-
+ src/vm/win32threadpool.cpp       | 2 +-
+ 13 files changed, 19 insertions(+), 21 deletions(-)
+
+diff --git a/src/gc/env/gcenv.os.h b/src/gc/env/gcenv.os.h
+index f8bc6c5..2cd7fb0 100644
+--- a/src/gc/env/gcenv.os.h
++++ b/src/gc/env/gcenv.os.h
+@@ -336,7 +336,7 @@ public:
+     static void GetMemoryStatus(uint32_t* memory_load, uint64_t* available_physical, uint64_t* available_page_file);
+ 
+     // Get size of an OS memory page
+-    static size_t GetPageSize();
++    static uint32_t GetPageSize();
+ 
+     //
+     // Misc
+diff --git a/src/gc/env/gcenv.unix.inl b/src/gc/env/gcenv.unix.inl
+index 4e8c5a0..64c56ff 100644
+--- a/src/gc/env/gcenv.unix.inl
++++ b/src/gc/env/gcenv.unix.inl
+@@ -7,9 +7,9 @@
+ 
+ #include "gcenv.os.h"
+ 
+-extern size_t g_pageSizeUnixInl;
++extern uint32_t g_pageSizeUnixInl;
+ 
+-__forceinline size_t GCToOSInterface::GetPageSize()
++__forceinline uint32_t GCToOSInterface::GetPageSize()
+ {
+     return g_pageSizeUnixInl;
+ }
+diff --git a/src/gc/env/gcenv.windows.inl b/src/gc/env/gcenv.windows.inl
+index 6e4562d..8046b7f 100644
+--- a/src/gc/env/gcenv.windows.inl
++++ b/src/gc/env/gcenv.windows.inl
+@@ -8,7 +8,7 @@
+ #include "gcenv.os.h"
+ 
+ 
+-__forceinline static size_t GCToOSInterface::GetPageSize()
++__forceinline uint32_t GCToOSInterface::GetPageSize()
+ {
+     return 0x1000;
+ }
+diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
+index 71fd549..a3a0ad8 100644
+--- a/src/gc/gc.cpp
++++ b/src/gc/gc.cpp
+@@ -2141,7 +2141,7 @@ const int max_snoop_level = 128;
+ inline
+ size_t align_on_page (size_t add)
+ {
+-    return ((add + GCToOSInterface::GetPageSize() - 1) & ~(GCToOSInterface::GetPageSize() - 1));
++    return ((add + GCToOSInterface::GetPageSize() - 1) & ~((size_t)GCToOSInterface::GetPageSize() - 1));
+ }
+ 
+ inline
+@@ -2153,7 +2153,7 @@ uint8_t* align_on_page (uint8_t* add)
+ inline
+ size_t align_lower_page (size_t add)
+ {
+-    return (add & ~(GCToOSInterface::GetPageSize() - 1));
++    return (add & ~((size_t)GCToOSInterface::GetPageSize() - 1));
+ }
+ 
+ inline
+@@ -7135,7 +7135,7 @@ int gc_heap::grow_brick_card_tables (uint8_t* start,
+             if (saved_g_lowest_address < g_gc_lowest_address)
+             {
+                 if (ps > (size_t)g_gc_lowest_address)
+-                    saved_g_lowest_address = (uint8_t*)GCToOSInterface::GetPageSize();
++                    saved_g_lowest_address = (uint8_t*)(size_t)GCToOSInterface::GetPageSize();
+                 else
+                 {
+                     assert (((size_t)g_gc_lowest_address - ps) >= GCToOSInterface::GetPageSize());
+diff --git a/src/gc/unix/gcenv.unix.cpp b/src/gc/unix/gcenv.unix.cpp
+index 2a7365a..2dc91b1 100644
+--- a/src/gc/unix/gcenv.unix.cpp
++++ b/src/gc/unix/gcenv.unix.cpp
+@@ -72,7 +72,7 @@ bool GetWorkingSetSize(size_t* val);
+ 
+ static size_t g_RestrictedPhysicalMemoryLimit = 0;
+ 
+-size_t g_pageSizeUnixInl = 0;
++uint32_t g_pageSizeUnixInl = 0;
+ 
+ // Initialize the interface implementation
+ // Return:
+@@ -81,7 +81,7 @@ bool GCToOSInterface::Initialize()
+ {
+     int pageSize = sysconf( _SC_PAGE_SIZE );
+ 
+-    g_pageSizeUnixInl = (pageSize > 0) pageSize : 0x1000;
++    g_pageSizeUnixInl = uint32_t((pageSize > 0) pageSize : 0x1000);
+ 
+     // Calculate and cache the number of processors on this machine
+     int cpuCount = sysconf(_SC_NPROCESSORS_ONLN);
+diff --git a/src/gc/windows/gcenv.windows.cpp b/src/gc/windows/gcenv.windows.cpp
+index a93ca96..a9b0da1 100644
+--- a/src/gc/windows/gcenv.windows.cpp
++++ b/src/gc/windows/gcenv.windows.cpp
+@@ -141,8 +141,6 @@ bool GCToOSInterface::Initialize()
+ 
+     assert(systemInfo.dwPageSize == 0x1000);
+ 
+-    s_pageSize = systemInfo.dwPageSize;
+-
+     return true;
+ }
+ 
+diff --git a/src/inc/utilcode.h b/src/inc/utilcode.h
+index fe3ee17..4096fb2 100644
+--- a/src/inc/utilcode.h
++++ b/src/inc/utilcode.h
+@@ -1490,7 +1490,7 @@ public:
+ int GetCurrentProcessCpuCount();
+ DWORD_PTR GetCurrentProcessCpuMask();
+ 
+-size_t GetOsPageSize();
++uint32_t GetOsPageSize();
+ 
+ 
+ //*****************************************************************************
+diff --git a/src/utilcode/util.cpp b/src/utilcode/util.cpp
+index 295da71..8482d72 100644
+--- a/src/utilcode/util.cpp
++++ b/src/utilcode/util.cpp
+@@ -1315,7 +1315,7 @@ DWORD_PTR GetCurrentProcessCpuMask()
+ #endif
+ }
+ 
+-size_t GetOsPageSizeUncached()
++uint32_t GetOsPageSizeUncached()
+ {
+     SYSTEM_INFO sysInfo;
+     ::GetSystemInfo(&sysInfo);
+@@ -1324,10 +1324,10 @@ size_t GetOsPageSizeUncached()
+ 
+ namespace
+ {
+-    Volatile<size_t> g_pageSize = 0;
++    Volatile<uint32_t> g_pageSize = 0;
+ }
+ 
+-size_t GetOsPageSize()
++uint32_t GetOsPageSize()
+ {
+ #ifdef FEATURE_PAL
+     size_t result = g_pageSize.LoadWithoutBarrier();
+diff --git a/src/vm/codeman.h b/src/vm/codeman.h
+index 06f849c..9b79988 100644
+--- a/src/vm/codeman.h
++++ b/src/vm/codeman.h
+@@ -91,8 +91,8 @@ typedef struct
+ } EH_CLAUSE_ENUMERATOR;
+ class EECodeInfo;
+ 
+-#define ROUND_DOWN_TO_PAGE(x)   ( (size_t) (x)                        & ~(GetOsPageSize()-1))
+-#define ROUND_UP_TO_PAGE(x)     (((size_t) (x) + (GetOsPageSize()-1)) & ~(GetOsPageSize()-1))
++#define ROUND_DOWN_TO_PAGE(x)   ( (size_t) (x)                        & ~((size_t)GetOsPageSize()-1))
++#define ROUND_UP_TO_PAGE(x)     (((size_t) (x) + (GetOsPageSize()-1)) & ~((size_t)GetOsPageSize()-1))
+ 
+ enum StubCodeBlockKind : int
+ {
+diff --git a/src/vm/dynamicmethod.cpp b/src/vm/dynamicmethod.cpp
+index 23b77e3..b3094bd 100644
+--- a/src/vm/dynamicmethod.cpp
++++ b/src/vm/dynamicmethod.cpp
+@@ -754,7 +754,7 @@ void* HostCodeHeap::AllocMemory_NoThrow(size_t size, DWORD alignment)
+         }
+         _ASSERTE(size > availableInFreeList);
+         size_t sizeToCommit = size - availableInFreeList; 
+-        sizeToCommit = (size + GetOsPageSize() - 1) & (~(GetOsPageSize() - 1)); // round up to page
++        sizeToCommit = ROUND_UP_TO_PAGE(size); // round up to page
+ 
+         if (m_pLastAvailableCommittedAddr + sizeToCommit <= m_pBaseAddr + m_TotalBytesAvailable)
+         {
+diff --git a/src/vm/gcenv.os.cpp b/src/vm/gcenv.os.cpp
+index 2534107..0557757 100644
+--- a/src/vm/gcenv.os.cpp
++++ b/src/vm/gcenv.os.cpp
+@@ -27,7 +27,7 @@
+ #define MAX_PTR ((uint8_t*)(~(ptrdiff_t)0))
+ 
+ #ifdef FEATURE_PAL
+-size_t g_pageSizeUnixInl = 0;
++uint32_t g_pageSizeUnixInl = 0;
+ #endif
+ 
+ 
+diff --git a/src/vm/threads.cpp b/src/vm/threads.cpp
+index 8127e25..289e597 100644
+--- a/src/vm/threads.cpp
++++ b/src/vm/threads.cpp
+@@ -2550,7 +2550,7 @@ DWORD WINAPI Thread::intermediateThreadProc(PVOID arg)
+     WRAPPER_NO_CONTRACT;
+ 
+     m_offset_counter++;
+-    if (m_offset_counter * offset_multiplier > GetOsPageSize())
++    if (m_offset_counter * offset_multiplier > (int) GetOsPageSize())
+         m_offset_counter = 0;
+ 
+     (void)_alloca(m_offset_counter * offset_multiplier);
+diff --git a/src/vm/win32threadpool.cpp b/src/vm/win32threadpool.cpp
+index b32bdc6..f73093d 100644
+--- a/src/vm/win32threadpool.cpp
++++ b/src/vm/win32threadpool.cpp
+@@ -1758,7 +1758,7 @@ DWORD WINAPI ThreadpoolMgr::intermediateThreadProc(PVOID arg)
+     STATIC_CONTRACT_SO_INTOLERANT;
+ 
+     offset_counter++;
+-    if (offset_counter * offset_multiplier > GetOsPageSize())
++    if (offset_counter * offset_multiplier > (int)GetOsPageSize())
+         offset_counter = 0;
+ 
+     (void)_alloca(offset_counter * offset_multiplier);
+-- 
+2.7.4
+

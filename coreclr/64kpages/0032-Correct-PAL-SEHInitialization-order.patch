@@ -1,0 +1,69 @@
+From e5d1d621cd7f463302cbdaa566965fceaf821e3c Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 21 Apr 2017 20:26:30 -0400
+Subject: [PATCH] Correct PAL SEHInitialization order
+
+---
+ src/pal/src/init/pal.cpp | 20 ++++++++++----------
+ 1 file changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/src/pal/src/init/pal.cpp b/src/pal/src/init/pal.cpp
+index 324ba31..8ee6c22 100644
+--- a/src/pal/src/init/pal.cpp
++++ b/src/pal/src/init/pal.cpp
+@@ -455,13 +455,6 @@ Initialize(
+ 
+         palError = ERROR_GEN_FAILURE;
+ 
+-        /* initialize structured exception handling stuff (signals, etc) */
+-        if (FALSE == SEHInitialize(pThread, flags))
+-        {
+-            ERROR("Unable to initialize SEH support\n");
+-            goto CLEANUP5;
+-        }
+-
+         if (FALSE == TIMEInitialize())
+         {
+             ERROR("Unable to initialize TIME support\n");
+@@ -496,13 +489,20 @@ Initialize(
+             }
+         }
+ 
++        /* initialize structured exception handling stuff (signals, etc) */
++        if (FALSE == SEHInitialize(pThread, flags))
++        {
++            ERROR("Unable to initialize SEH support\n");
++            goto CLEANUP13;
++        }
++
+         if (flags & PAL_INITIALIZE_STD_HANDLES)
+         {
+             /* create file objects for standard handles */
+             if (!FILEInitStdHandles())
+             {
+                 ERROR("Unable to initialize standard file handles\n");
+-                goto CLEANUP13;
++                goto CLEANUP14;
+             }
+         }
+ 
+@@ -540,13 +540,13 @@ Initialize(
+     /* No cleanup required for CRTInitStdStreams */ 
+ CLEANUP15:
+     FILECleanupStdHandles();
++CLEANUP14:
++    SEHCleanup();
+ CLEANUP13:
+     VIRTUALCleanup();
+ CLEANUP10:
+     MAPCleanup();
+ CLEANUP6:
+-    SEHCleanup();
+-CLEANUP5:
+     PROCCleanupInitialProcess();
+ CLEANUP2:
+     free(exe_path);
+-- 
+2.7.4
+

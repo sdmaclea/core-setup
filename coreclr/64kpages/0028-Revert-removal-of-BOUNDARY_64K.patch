@@ -1,0 +1,40 @@
+From 5374c42f3e4e51e157d24d7b8403a82bd51f775d Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 21 Apr 2017 15:18:20 +0000
+Subject: [PATCH] Revert removal of BOUNDARY_64K
+
+---
+ src/pal/src/include/pal/virtual.h | 2 ++
+ src/pal/src/map/virtual.cpp       | 2 +-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/pal/src/include/pal/virtual.h b/src/pal/src/include/pal/virtual.h
+index 42185fc..af5cbd8 100644
+--- a/src/pal/src/include/pal/virtual.h
++++ b/src/pal/src/include/pal/virtual.h
+@@ -57,6 +57,8 @@ enum VIRTUAL_CONSTANTS
+     VIRTUAL_NOACCESS,
+     VIRTUAL_EXECUTE,
+     VIRTUAL_EXECUTE_READ,
++
++    BOUNDARY_64K    = 0xffff
+ };
+ 
+ size_t GetVirtualPageSize();
+diff --git a/src/pal/src/map/virtual.cpp b/src/pal/src/map/virtual.cpp
+index 6132e6f..7194a55 100644
+--- a/src/pal/src/map/virtual.cpp
++++ b/src/pal/src/map/virtual.cpp
+@@ -889,7 +889,7 @@ static LPVOID VIRTUALReserveMemory(
+     // First, figure out where we're trying to reserve the memory and
+     // how much we need. On most systems, requests to mmap must be
+     // page-aligned and at multiples of the page size.
+-    StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, GetVirtualPageSize());
++    StartBoundary = (UINT_PTR)lpAddress & ~BOUNDARY_64K;
+     MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, GetVirtualPageSize()) - StartBoundary;
+ 
+     // If this is a request for special executable (JIT'ed) memory then, first of all,
+-- 
+2.7.4
+
