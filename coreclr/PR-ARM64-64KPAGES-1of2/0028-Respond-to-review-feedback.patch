@@ -1,0 +1,44 @@
+From b2d489b9be3aedc623408ff2ce17a3ddcaa47344 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 24 Apr 2017 16:58:54 +0000
+Subject: [PATCH] Respond to review feedback
+
+---
+ src/gc/gc.cpp | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
+index a54fb0b..d4858cc 100644
+--- a/src/gc/gc.cpp
++++ b/src/gc/gc.cpp
+@@ -1973,7 +1973,7 @@ BOOL Aligned (size_t n)
+ #define OBJECT_ALIGNMENT_OFFSET (sizeof(MethodTable *))
+ 
+ #ifdef FEATURE_STRUCTALIGN
+-#define MAX_STRUCTALIGN GC_PAGE_SIZE
++#define MAX_STRUCTALIGN OS_PAGE_SIZE
+ #else // FEATURE_STRUCTALIGN
+ #define MAX_STRUCTALIGN 0
+ #endif // FEATURE_STRUCTALIGN
+@@ -10703,7 +10703,7 @@ gc_heap::destroy_semi_shared()
+ //TODO: will need to move this to per heap
+ //#ifdef BACKGROUND_GC
+ //    if (c_mark_list)
+-//        delete [] c_mark_list;
++//        delete c_mark_list;
+ //#endif //BACKGROUND_GC
+ 
+ #ifdef MARK_LIST
+@@ -26683,7 +26683,7 @@ void gc_heap::background_grow_c_mark_list()
+         assert (new_c_mark_list);
+         memcpy (new_c_mark_list, c_mark_list, c_mark_list_length*sizeof(uint8_t*));
+         c_mark_list_length = c_mark_list_length*2;
+-        delete [] c_mark_list;
++        delete c_mark_list;
+         c_mark_list = new_c_mark_list;
+     }
+ }
+-- 
+2.7.4
+
