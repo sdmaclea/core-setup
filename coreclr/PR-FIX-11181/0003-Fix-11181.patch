@@ -1,0 +1,26 @@
+From f341937dd2843b26672a20a616c1e40c7783e87c Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 24 Apr 2017 19:33:13 +0000
+Subject: [PATCH] Fix 11181
+
+---
+ src/vm/codeman.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/vm/codeman.cpp b/src/vm/codeman.cpp
+index db9d786..a30e70e 100644
+--- a/src/vm/codeman.cpp
++++ b/src/vm/codeman.cpp
+@@ -5082,7 +5082,7 @@ PCODE ExecutionManager::getNextJumpStub(MethodDesc* pMD, PCODE target,
+ 
+         numJumpStubs = 4;
+ 
+-#ifdef _TARGET_ARM64_
++#ifdef _TARGET_AMD64_
+         // Note this these values are not requirements, instead we are 
+         // just confirming the values that are mentioned in the comments.
+         _ASSERTE(BACK_TO_BACK_JUMP_ALLOCATE_SIZE == 12);
+-- 
+2.7.4
+
