@@ -1,0 +1,127 @@
+From 5e673b070a994479b7f1278fd4dada8e19b7ada2 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 26 Apr 2017 19:46:07 +0000
+Subject: [PATCH] [Arm64] CpObj ldp/stp review feedback
+
+Rework asserts
+Add comments
+Format
+---
+ src/jit/codegenarm64.cpp | 48 +++++++++++++++++++++++++++++++-----------------
+ src/jit/lsraarmarch.cpp  | 12 +++++++++---
+ 2 files changed, 40 insertions(+), 20 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 1095d52..c075c0a 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3463,11 +3463,22 @@ void CodeGen::genCodeForCpObj(GenTreeObj* cpObjNode)
+ 
+     unsigned slots = cpObjNode->gtSlots;
+ 
+-    // Temp register used to perform the sequence of loads and stores.
++    // Temp register(s) used to perform the sequence of loads and stores.
+     regNumber tmpReg  = cpObjNode->ExtractTempReg();
+-    regNumber tmpReg2 = (slots > 1) ? cpObjNode->GetSingleTempReg() : REG_NA;
+-    assert(genIsValidIntReg(tmpReg) && (tmpReg != REG_WRITE_BARRIER_SRC_BYREF) && (tmpReg != REG_WRITE_BARRIER_DST_BYREF));
+-    assert((slots == 1) || (genIsValidIntReg(tmpReg2) && (tmpReg2 != tmpReg) && (tmpReg2 != REG_WRITE_BARRIER_SRC_BYREF) && (tmpReg2 != REG_WRITE_BARRIER_DST_BYREF)));
++    regNumber tmpReg2 = REG_NA;
++
++    assert(genIsValidIntReg(tmpReg));
++    assert(tmpReg != REG_WRITE_BARRIER_SRC_BYREF);
++    assert(tmpReg != REG_WRITE_BARRIER_DST_BYREF);
++
++    if (slots > 1)
++    {
++        tmpReg2 = cpObjNode->GetSingleTempReg();
++        assert(tmpReg2 != tmpReg);
++        assert(genIsValidIntReg(tmpReg2));
++        assert(tmpReg2 != REG_WRITE_BARRIER_DST_BYREF);
++        assert(tmpReg2 != REG_WRITE_BARRIER_SRC_BYREF);
++    }
+ 
+     emitter* emit = getEmitter();
+ 
+@@ -3484,13 +3495,15 @@ void CodeGen::genCodeForCpObj(GenTreeObj* cpObjNode)
+             else if (gcPtrs[i] == GCT_BYREF)
+                 attr = EA_BYREF;
+ 
+-            if((i + 1 < slots) && (gcPtrs[i] == gcPtrs[i + 1]))
++            // Check if two or more remaining slots and use a ldp/stp sequence
++            // TODO-ARM64-CQ: Current limitations only allows using ldp/stp when both of the GC types match
++            if ((i + 1 < slots) && (gcPtrs[i] == gcPtrs[i + 1]))
+             {
+-                emit->emitIns_R_R_R_I(INS_ldp, attr, tmpReg, tmpReg2, REG_WRITE_BARRIER_SRC_BYREF, 2*TARGET_POINTER_SIZE,
+-                                      INS_OPTS_POST_INDEX);
+-                emit->emitIns_R_R_R_I(INS_stp, attr, tmpReg, tmpReg2, REG_WRITE_BARRIER_DST_BYREF, 2*TARGET_POINTER_SIZE,
+-                                      INS_OPTS_POST_INDEX);
+-                ++i;
++                emit->emitIns_R_R_R_I(INS_ldp, attr, tmpReg, tmpReg2, REG_WRITE_BARRIER_SRC_BYREF,
++                                      2 * TARGET_POINTER_SIZE, INS_OPTS_POST_INDEX);
++                emit->emitIns_R_R_R_I(INS_stp, attr, tmpReg, tmpReg2, REG_WRITE_BARRIER_DST_BYREF,
++                                      2 * TARGET_POINTER_SIZE, INS_OPTS_POST_INDEX);
++                ++i; // extra increment of i, since we are copying two items
+             }
+             else
+             {
+@@ -3511,13 +3524,14 @@ void CodeGen::genCodeForCpObj(GenTreeObj* cpObjNode)
+             switch (gcPtrs[i])
+             {
+                 case TYPE_GC_NONE:
+-                    if((i + 1 < slots) && (gcPtrs[i] == gcPtrs[i + 1]))
+-                    {
+-                        emit->emitIns_R_R_R_I(INS_ldp, EA_8BYTE, tmpReg, tmpReg2, REG_WRITE_BARRIER_SRC_BYREF, 2*TARGET_POINTER_SIZE,
+-                                              INS_OPTS_POST_INDEX);
+-                        emit->emitIns_R_R_R_I(INS_stp, EA_8BYTE, tmpReg, tmpReg2, REG_WRITE_BARRIER_DST_BYREF, 2*TARGET_POINTER_SIZE,
+-                                              INS_OPTS_POST_INDEX);
+-                        ++i;
++                    // Check if the next slot's type is also TYP_GC_NONE and use ldp/stp
++                    if ((i + 1 < slots) && (gcPtrs[i + 1] == TYPE_GC_NONE))
++                    {
++                        emit->emitIns_R_R_R_I(INS_ldp, EA_8BYTE, tmpReg, tmpReg2, REG_WRITE_BARRIER_SRC_BYREF,
++                                              2 * TARGET_POINTER_SIZE, INS_OPTS_POST_INDEX);
++                        emit->emitIns_R_R_R_I(INS_stp, EA_8BYTE, tmpReg, tmpReg2, REG_WRITE_BARRIER_DST_BYREF,
++                                              2 * TARGET_POINTER_SIZE, INS_OPTS_POST_INDEX);
++                        ++i; // extra increment of i, since we are copying two items
+                     }
+                     else
+                     {
+diff --git a/src/jit/lsraarmarch.cpp b/src/jit/lsraarmarch.cpp
+index 107c831..bde3173 100644
+--- a/src/jit/lsraarmarch.cpp
++++ b/src/jit/lsraarmarch.cpp
+@@ -794,13 +794,18 @@ void Lowering::TreeNodeInfoInitBlockStore(GenTreeBlk* blkNode)
+ 
+             if (size >= 2 * REGSIZE_BYTES)
+             {
+-                // Use ldp/stp to reduce code size and improve performance
++                // We will use ldp/stp to reduce code size and improve performance
++                // so we need to reserve an extra internal register
+                 blkNode->gtLsraInfo.internalIntCount++;
+             }
+ 
+-            blkNode->gtLsraInfo.setInternalCandidates(l, RBM_ALLINT & ~(RBM_WRITE_BARRIER_DST_BYREF | RBM_WRITE_BARRIER_SRC_BYREF));
++            // We can't use the special Write Barrier registers, so exclude them from the mask
++            regMaskTP internalIntCandidates = RBM_ALLINT & ~(RBM_WRITE_BARRIER_DST_BYREF | RBM_WRITE_BARRIER_SRC_BYREF);
++            blkNode->gtLsraInfo.setInternalCandidates(l, internalIntCandidates);
+ 
++            // If we have a source address we want it in RBM_WRITE_BARRIER_DST_BYREF.
+             dstAddr->gtLsraInfo.setSrcCandidates(l, RBM_WRITE_BARRIER_DST_BYREF);
++
+             // If we have a source address we want it in REG_WRITE_BARRIER_SRC_BYREF.
+             // Otherwise, if it is a local, codegen will put its address in REG_WRITE_BARRIER_SRC_BYREF,
+             // which is killed by a StoreObj (and thus needn't be reserved).
+@@ -832,7 +837,8 @@ void Lowering::TreeNodeInfoInitBlockStore(GenTreeBlk* blkNode)
+ 
+                 if (size >= 2 * REGSIZE_BYTES)
+                 {
+-                    // Use ldp/stp to reduce code size and improve performance
++                    // We will use ldp/stp to reduce code size and improve performance
++                    // so we need to reserve an extra internal register
+                     internalIntCount++;
+                 }
+ 
+-- 
+2.7.4
+
