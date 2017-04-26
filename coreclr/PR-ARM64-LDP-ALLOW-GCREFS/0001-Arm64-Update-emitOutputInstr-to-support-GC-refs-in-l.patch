@@ -1,0 +1,37 @@
+From 47261a0e9b82b735d1efcbd8c0ca0a2a3a75b8c9 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 26 Apr 2017 22:39:03 +0000
+Subject: [PATCH] [Arm64] Update emitOutputInstr to support GC refs in ldp
+ forms
+
+---
+ src/jit/emitarm64.cpp | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index 0328cb6..1a56e86 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -9331,9 +9331,18 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
+         {
+             // INS_ldp etc...
+             // We assume that "idReg1" and "idReg2" are the destination register for all instructions
++            // TODO-ARM64-CQ: Current limitations only allows using ldp/stp when both of the GC types match
++            if (id->idGCref() != GCT_NONE)
++            {
++                emitGCregLiveUpd(id->idGCref(), id->idReg1(), dst);
++                emitGCregLiveUpd(id->idGCref(), id->idReg2(), dst);
++            }
++            else
++            {
+                 emitGCregDeadUpd(id->idReg1(), dst);
+                 emitGCregDeadUpd(id->idReg2(), dst);
+             }
++        }
+         else
+         {
+             // We assume that "idReg1" is the destination register for all instructions
+-- 
+2.7.4
+
