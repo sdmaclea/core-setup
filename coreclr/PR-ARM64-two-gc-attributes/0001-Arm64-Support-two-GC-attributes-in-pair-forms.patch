@@ -1,0 +1,262 @@
+From 9097ae792196146865d018dd25a28d27d9470dfc Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 27 Apr 2017 19:15:16 +0000
+Subject: [PATCH] [Arm64] Support two GC attributes in pair forms
+
+Also use in genCodeForCpObj
+---
+ src/jit/codegenarm64.cpp | 36 +++++++++++++++++-------------------
+ src/jit/emit.cpp         |  4 ++++
+ src/jit/emit.h           | 26 ++++++++++++++++++++------
+ src/jit/emitarm64.cpp    | 43 ++++++++++++++++++++++++++-----------------
+ src/jit/emitarm64.h      |  3 ++-
+ 5 files changed, 69 insertions(+), 43 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index c075c0a..a8c92c2 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3487,33 +3487,31 @@ void CodeGen::genCodeForCpObj(GenTreeObj* cpObjNode)
+     // If we can prove it's on the stack we don't need to use the write barrier.
+     if (dstOnStack)
+     {
+-        for (unsigned i = 0; i < slots; ++i)
+-        {
+-            emitAttr attr = EA_8BYTE;
+-            if (gcPtrs[i] == GCT_GCREF)
+-                attr = EA_GCREF;
+-            else if (gcPtrs[i] == GCT_BYREF)
+-                attr = EA_BYREF;
+-
++        unsigned i = 0;
+         // Check if two or more remaining slots and use a ldp/stp sequence
+-            // TODO-ARM64-CQ: Current limitations only allows using ldp/stp when both of the GC types match
+-            if ((i + 1 < slots) && (gcPtrs[i] == gcPtrs[i + 1]))
++        while (i < slots - 1)
+         {
+-                emit->emitIns_R_R_R_I(INS_ldp, attr, tmpReg, tmpReg2, REG_WRITE_BARRIER_SRC_BYREF,
+-                                      2 * TARGET_POINTER_SIZE, INS_OPTS_POST_INDEX);
+-                emit->emitIns_R_R_R_I(INS_stp, attr, tmpReg, tmpReg2, REG_WRITE_BARRIER_DST_BYREF,
+-                                      2 * TARGET_POINTER_SIZE, INS_OPTS_POST_INDEX);
+-                ++i; // extra increment of i, since we are copying two items
++            emitAttr attr0 = emitTypeSize(compiler->getJitGCType(gcPtrs[i + 0]));
++            emitAttr attr1 = emitTypeSize(compiler->getJitGCType(gcPtrs[i + 1]));
++
++            emit->emitIns_R_R_R_I(INS_ldp, attr0, tmpReg, tmpReg2, REG_WRITE_BARRIER_SRC_BYREF, 2 * TARGET_POINTER_SIZE,
++                                  INS_OPTS_POST_INDEX, attr1);
++            emit->emitIns_R_R_R_I(INS_stp, attr0, tmpReg, tmpReg2, REG_WRITE_BARRIER_DST_BYREF, 2 * TARGET_POINTER_SIZE,
++                                  INS_OPTS_POST_INDEX, attr1);
++            i += 2;
+         }
+-            else
++
++        // Use a ldr/str sequence for the last remainder
++        if (i < slots)
+         {
+-                emit->emitIns_R_R_I(INS_ldr, attr, tmpReg, REG_WRITE_BARRIER_SRC_BYREF, TARGET_POINTER_SIZE,
++            emitAttr attr0 = emitTypeSize(compiler->getJitGCType(gcPtrs[i + 0]));
++
++            emit->emitIns_R_R_I(INS_ldr, attr0, tmpReg, REG_WRITE_BARRIER_SRC_BYREF, TARGET_POINTER_SIZE,
+                                 INS_OPTS_POST_INDEX);
+-                emit->emitIns_R_R_I(INS_str, attr, tmpReg, REG_WRITE_BARRIER_DST_BYREF, TARGET_POINTER_SIZE,
++            emit->emitIns_R_R_I(INS_str, attr0, tmpReg, REG_WRITE_BARRIER_DST_BYREF, TARGET_POINTER_SIZE,
+                                 INS_OPTS_POST_INDEX);
+         }
+     }
+-    }
+     else
+     {
+         unsigned gcPtrCount = cpObjNode->gtGcPtrCount;
+diff --git a/src/jit/emit.cpp b/src/jit/emit.cpp
+index 3b765b9..22d6112 100644
+--- a/src/jit/emit.cpp
++++ b/src/jit/emit.cpp
+@@ -1381,6 +1381,10 @@ void* emitter::emitAllocInstr(size_t sz, emitAttr opsz)
+         id->idOpSize(EA_SIZE(opsz));
+     }
+ 
++#ifdef _TARGET_ARM64_
++    id->idGCrefReg2(GCT_NONE);
++#endif
++
+     // Amd64: ip-relative addressing is supported even when not generating relocatable ngen code
+     if (EA_IS_DSP_RELOC(opsz)
+ #ifndef _TARGET_AMD64_
+diff --git a/src/jit/emit.h b/src/jit/emit.h
+index e1c924f..8744483 100644
+--- a/src/jit/emit.h
++++ b/src/jit/emit.h
+@@ -655,6 +655,9 @@ protected:
+         // unnecessarily since the GC-ness of the second register is only needed for call instructions.
+         // The instrDescCGCA struct's member keeping the GC-ness of the first return register is _idcSecondRetRegGCType.
+         GCtype _idGCref : 2; // GCref operand? (value is a "GCtype")
++#ifdef _TARGET_ARM64_
++        GCtype _idGCref2 : 2; // GCref operand fir register 2? (value is a "GCtype")
++#endif
+ 
+         // Note that we use the _idReg1 and _idReg2 fields to hold
+         // the live gcrefReg mask for the call instructions on x86/x64
+@@ -668,7 +671,7 @@ protected:
+         // x86:   30 bits
+         // amd64: 38 bits
+         // arm:   32 bits
+-        // arm64: 30 bits
++        // arm64: 32 bits
+         CLANG_FORMAT_COMMENT_ANCHOR;
+ 
+ #if HAS_TINY_DESC
+@@ -718,8 +721,8 @@ protected:
+ #define ID_EXTRA_BITFIELD_BITS (16)
+ 
+ #elif defined(_TARGET_ARM64_)
+-// For Arm64, we have used 15 bits from the second DWORD.
+-#define ID_EXTRA_BITFIELD_BITS (16)
++// For Arm64, we have used 18 bits from the second DWORD.
++#define ID_EXTRA_BITFIELD_BITS (18)
+ #elif defined(_TARGET_XARCH_) && !defined(LEGACY_BACKEND)
+ // For xarch !LEGACY_BACKEND, we have used 14 bits from the second DWORD.
+ #define ID_EXTRA_BITFIELD_BITS (14)
+@@ -735,7 +738,7 @@ protected:
+         // x86:   38 bits  // if HAS_TINY_DESC is not defined (which it is)
+         // amd64: 46 bits
+         // arm:   48 bits
+-        // arm64: 48 bits
++        // arm64: 50 bits
+         CLANG_FORMAT_COMMENT_ANCHOR;
+ 
+         unsigned _idCnsReloc : 1; // LargeCns is an RVA and needs reloc tag
+@@ -748,7 +751,7 @@ protected:
+         // x86:   40 bits
+         // amd64: 48 bits
+         // arm:   50 bits
+-        // arm64: 50 bits
++        // arm64: 52 bits
+         CLANG_FORMAT_COMMENT_ANCHOR;
+ 
+ #define ID_EXTRA_BITS (ID_EXTRA_RELOC_BITS + ID_EXTRA_BITFIELD_BITS)
+@@ -764,7 +767,7 @@ protected:
+         // x86:   24 bits
+         // amd64: 16 bits
+         // arm:   14 bits
+-        // arm64: 14 bits
++        // arm64: 12 bits
+ 
+         unsigned _idSmallCns : ID_BIT_SMALL_CNS;
+ 
+@@ -1072,6 +1075,17 @@ protected:
+             assert(reg == _idReg1);
+         }
+ 
++#ifdef _TARGET_ARM64_
++        GCtype idGCrefReg2() const
++        {
++            return (GCtype)_idGCref2;
++        }
++        void idGCrefReg2(GCtype gctype)
++        {
++            _idGCref2 = gctype;
++        }
++#endif // _TARGET_ARM64_
++
+         regNumber idReg2() const
+         {
+             return _idReg2;
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index 1a56e86..1540ccc 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -5072,7 +5072,8 @@ void emitter::emitIns_R_R_R_I(instruction ins,
+                               regNumber   reg2,
+                               regNumber   reg3,
+                               ssize_t     imm,
+-                              insOpts     opt /* = INS_OPTS_NONE */)
++                              insOpts     opt /* = INS_OPTS_NONE */,
++                              emitAttr    attrReg2 /* = EA_UNKNOWN */)
+ {
+     emitAttr  size     = EA_SIZE(attr);
+     emitAttr  elemsize = EA_UNKNOWN;
+@@ -5347,6 +5348,22 @@ void emitter::emitIns_R_R_R_I(instruction ins,
+     id->idReg2(reg2);
+     id->idReg3(reg3);
+ 
++    if (attrReg2 != EA_UNKNOWN)
++    {
++        if (EA_IS_GCREF(attrReg2))
++        {
++            /* A special value indicates a GCref pointer value */
++
++            id->idGCrefReg2(GCT_GCREF);
++        }
++        else if (EA_IS_BYREF(attrReg2))
++        {
++            /* A special value indicates a Byref pointer value */
++
++            id->idGCrefReg2(GCT_BYREF);
++        }
++    }
++
+     dispIns(id);
+     appendToCurIG(id);
+ }
+@@ -9324,35 +9341,27 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
+     // for stores, but we ignore those cases here.)
+     if (emitInsMayWriteToGCReg(id)) // True if "id->idIns()" writes to a register than can hold GC ref.
+     {
+-        // If we ever generate instructions that write to multiple registers,
+-        // then we'd need to more work here to ensure that changes in the status of GC refs are
+-        // tracked properly.
+-        if (emitInsMayWriteMultipleRegs(id))
+-        {
+-            // INS_ldp etc...
+-            // We assume that "idReg1" and "idReg2" are the destination register for all instructions
+-            // TODO-ARM64-CQ: Current limitations only allows using ldp/stp when both of the GC types match
++        // We assume that "idReg1" is the primary destination register for all instructions
+         if (id->idGCref() != GCT_NONE)
+         {
+             emitGCregLiveUpd(id->idGCref(), id->idReg1(), dst);
+-                emitGCregLiveUpd(id->idGCref(), id->idReg2(), dst);
+         }
+         else
+         {
+             emitGCregDeadUpd(id->idReg1(), dst);
+-                emitGCregDeadUpd(id->idReg2(), dst);
+-            }
+         }
+-        else
++
++        if (emitInsMayWriteMultipleRegs(id))
+         {
+-            // We assume that "idReg1" is the destination register for all instructions
+-            if (id->idGCref() != GCT_NONE)
++            // INS_ldp etc...
++            // "idReg2" is the secondary destination register
++            if (id->idGCrefReg2() != GCT_NONE)
+             {
+-                emitGCregLiveUpd(id->idGCref(), id->idReg1(), dst);
++                emitGCregLiveUpd(id->idGCrefReg2(), id->idReg2(), dst);
+             }
+             else
+             {
+-                emitGCregDeadUpd(id->idReg1(), dst);
++                emitGCregDeadUpd(id->idReg2(), dst);
+             }
+         }
+     }
+diff --git a/src/jit/emitarm64.h b/src/jit/emitarm64.h
+index 6a8e42b..8dcb328 100644
+--- a/src/jit/emitarm64.h
++++ b/src/jit/emitarm64.h
+@@ -724,7 +724,8 @@ void emitIns_R_R_R_I(instruction ins,
+                      regNumber   reg2,
+                      regNumber   reg3,
+                      ssize_t     imm,
+-                     insOpts     opt = INS_OPTS_NONE);
++                     insOpts     opt      = INS_OPTS_NONE,
++                     emitAttr    attrReg2 = EA_UNKNOWN);
+ 
+ void emitIns_R_R_R_Ext(instruction ins,
+                        emitAttr    attr,
+-- 
+2.7.4
+
