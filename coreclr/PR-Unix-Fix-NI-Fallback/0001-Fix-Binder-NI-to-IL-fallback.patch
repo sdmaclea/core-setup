@@ -1,0 +1,75 @@
+From d36a456b26026c1e4e849559d355f2aaa0463a8a Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 2 May 2017 17:01:06 +0000
+Subject: [PATCH] Fix Binder NI to IL fallback
+
+Always try NI first
+---
+ src/binder/assemblybinder.cpp | 15 ++++++++-------
+ src/vm/peimage.inl            | 13 ++++++++++++-
+ 2 files changed, 20 insertions(+), 8 deletions(-)
+
+diff --git a/src/binder/assemblybinder.cpp b/src/binder/assemblybinder.cpp
+index bd5dd18..3145ed1 100644
+--- a/src/binder/assemblybinder.cpp
++++ b/src/binder/assemblybinder.cpp
+@@ -689,11 +689,6 @@ namespace BINDER_SPACE
+         sCoreLib = sCoreLibDir;
+         sCoreLib.Append(CoreLibName_IL_W);
+         BOOL fExplicitBindToNativeImage = (fBindToNativeImage == true)? TRUE:FALSE;
+-#if defined(FEATURE_PAL) && !defined(_TARGET_AMD64_)      
+-        // Non-Amd64 platforms on non-Windows do not support generating the NI image
+-        // as CoreLib.dll. For those, we will bind as IL.
+-        fExplicitBindToNativeImage = FALSE;
+-#endif // defined(FEATURE_PAL) && !defined(_TARGET_AMD64_)
+         IF_FAIL_GO(AssemblyBinder::GetAssembly(sCoreLib,
+                                                    FALSE /* fInspectionOnly */,
+                                                    TRUE /* fIsInGAC */,
+@@ -1594,10 +1589,16 @@ namespace BINDER_SPACE
+             {
+                 BOOL hasHeader = TRUE;
+                 IF_FAIL_GO(BinderHasNativeHeader(pNativePEImage, &hasHeader));
++
+                 if (!hasHeader)
+                 {
+-                     pPEImage = pNativePEImage;
+-                     pNativePEImage = NULL;
++                    BinderReleasePEImage(pPEImage);
++                    BinderReleasePEImage(pNativePEImage);
++
++                    BINDER_LOG_ENTER(W("BinderAcquirePEImageIL"));
++                    hr = BinderAcquirePEImage(szAssemblyPath, &pPEImage, &pNativePEImage, false);
++                    BINDER_LOG_LEAVE_HR(W("BinderAcquirePEImageIL"), hr);
++                    IF_FAIL_GO(hr);
+                 }
+             }
+ 
+diff --git a/src/vm/peimage.inl b/src/vm/peimage.inl
+index 954d887..656f3f4 100644
+--- a/src/vm/peimage.inl
++++ b/src/vm/peimage.inl
+@@ -481,8 +481,19 @@ inline BOOL PEImage::HasNativeHeader()
+         return GetLoadedLayout()->HasNativeHeader();
+     else
+     {
++        bool result = false;
++        EX_TRY
++        {
+             PEImageLayoutHolder pLayout(GetLayout(PEImageLayout::LAYOUT_ANY,LAYOUT_CREATEIFNEEDED));
+-        return pLayout->HasNativeHeader();
++            result = pLayout->HasNativeHeader();
++        }
++        EX_CATCH
++        {
++            result = false;
++        }
++        EX_END_CATCH(RethrowTerminalExceptions)
++
++        return result;
+     }
+ }
+ 
+-- 
+2.7.4
+
