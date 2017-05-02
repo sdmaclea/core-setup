@@ -1,0 +1,26 @@
+From 16bfd43f11bfb7298369f3440571bfa008ea4ed8 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 2 May 2017 20:46:00 +0000
+Subject: [PATCH] Fix Windows warning as error
+
+---
+ src/vm/peimage.inl | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/vm/peimage.inl b/src/vm/peimage.inl
+index 656f3f4..6d78910 100644
+--- a/src/vm/peimage.inl
++++ b/src/vm/peimage.inl
+@@ -481,7 +481,7 @@ inline BOOL PEImage::HasNativeHeader()
+         return GetLoadedLayout()->HasNativeHeader();
+     else
+     {
+-        bool result = false;
++        BOOL result = false;
+         EX_TRY
+         {
+             PEImageLayoutHolder pLayout(GetLayout(PEImageLayout::LAYOUT_ANY,LAYOUT_CREATEIFNEEDED));
+-- 
+2.7.4
+
