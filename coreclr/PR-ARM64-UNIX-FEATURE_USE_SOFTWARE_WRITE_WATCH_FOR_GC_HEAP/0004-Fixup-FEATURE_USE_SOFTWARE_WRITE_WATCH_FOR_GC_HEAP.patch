@@ -1,0 +1,25 @@
+From bd036907a775bd74fa16d1fe816ec0f84aa3c788 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 4 May 2017 19:01:08 +0000
+Subject: [PATCH] Fixup FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+
+---
+ src/vm/arm64/asmhelpers.S | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
+index f3d9216..79e3989 100644
+--- a/src/vm/arm64/asmhelpers.S
++++ b/src/vm/arm64/asmhelpers.S
+@@ -319,6 +319,7 @@ LOCAL_LABEL(shadowupdateend):
+     ldrb w12, [x12]
+     cbz  x12, LOCAL_LABEL(CheckCardTable)
+     PREPARE_EXTERNAL_VAR g_sw_ww_table, x12
++    ldr  x12, [x12]
+     add  x12, x12, x14, lsr #0xc  // SoftwareWriteWatch::AddressToTableByteIndexShift
+     ldrb w17, [x12]
+     cbnz x17, LOCAL_LABEL(CheckCardTable)
+-- 
+2.7.4
+
