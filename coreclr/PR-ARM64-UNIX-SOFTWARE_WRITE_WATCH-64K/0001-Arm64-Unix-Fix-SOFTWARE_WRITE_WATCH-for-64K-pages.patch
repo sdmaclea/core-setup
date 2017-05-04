@@ -1,0 +1,95 @@
+From c374b02de061f906e8ff48e83d530f1f94752a59 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 4 May 2017 19:11:46 +0000
+Subject: [PATCH] [Arm64/Unix] Fix SOFTWARE_WRITE_WATCH for 64K pages
+
+---
+ src/gc/softwarewritewatch.cpp | 10 +++++-----
+ src/gc/softwarewritewatch.h   |  7 ++++++-
+ 2 files changed, 11 insertions(+), 6 deletions(-)
+
+diff --git a/src/gc/softwarewritewatch.cpp b/src/gc/softwarewritewatch.cpp
+index b852938..2838987 100644
+--- a/src/gc/softwarewritewatch.cpp
++++ b/src/gc/softwarewritewatch.cpp
+@@ -10,8 +10,6 @@
+ #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ #ifndef DACCESS_COMPILE
+ 
+-static_assert((static_cast<size_t>(1) << SOFTWARE_WRITE_WATCH_AddressToTableByteIndexShift) == OS_PAGE_SIZE, "Unexpected OS_PAGE_SIZE");
+-
+ extern "C"
+ {
+     uint8_t *g_gc_sw_ww_table = nullptr;
+@@ -46,6 +44,7 @@ bool SoftwareWriteWatch::GetDirtyFromBlock(
+     assert(endByteIndex <= sizeof(size_t));
+     assert(dirtyPages != nullptr);
+     assert(dirtyPageIndexRef != nullptr);
++    assert((static_cast<size_t>(1) << SOFTWARE_WRITE_WATCH_AddressToTableByteIndexShift) == GC_PAGE_SIZE);
+ 
+     size_t &dirtyPageIndex = *dirtyPageIndexRef;
+     assert(dirtyPageIndex < dirtyPageCount);
+@@ -95,7 +94,7 @@ bool SoftwareWriteWatch::GetDirtyFromBlock(
+             block[byteIndex] = 0;
+         }
+ 
+-        void *pageAddress = firstPageAddressInBlock + byteIndex * OS_PAGE_SIZE;
++        void *pageAddress = firstPageAddressInBlock + byteIndex * GC_PAGE_SIZE;
+         assert(pageAddress >= GetHeapStartAddress());
+         assert(pageAddress < GetHeapEndAddress());
+         assert(dirtyPageIndex < dirtyPageCount);
+@@ -121,6 +120,7 @@ void SoftwareWriteWatch::GetDirty(
+     VerifyMemoryRegion(baseAddress, regionByteSize);
+     assert(dirtyPages != nullptr);
+     assert(dirtyPageCountRef != nullptr);
++    assert((static_cast<size_t>(1) << SOFTWARE_WRITE_WATCH_AddressToTableByteIndexShift) == GC_PAGE_SIZE);
+ 
+     size_t dirtyPageCount = *dirtyPageCountRef;
+     if (dirtyPageCount == 0)
+@@ -184,7 +184,7 @@ void SoftwareWriteWatch::GetDirty(
+                 break;
+             }
+             currentBlock += sizeof(size_t);
+-            firstPageAddressInCurrentBlock += sizeof(size_t) * OS_PAGE_SIZE;
++            firstPageAddressInCurrentBlock += sizeof(size_t) * GC_PAGE_SIZE;
+         }
+ 
+         while (currentBlock < fullBlockEnd)
+@@ -202,7 +202,7 @@ void SoftwareWriteWatch::GetDirty(
+                 break;
+             }
+             currentBlock += sizeof(size_t);
+-            firstPageAddressInCurrentBlock += sizeof(size_t) * OS_PAGE_SIZE;
++            firstPageAddressInCurrentBlock += sizeof(size_t) * GC_PAGE_SIZE;
+         }
+         if (currentBlock < fullBlockEnd)
+         {
+diff --git a/src/gc/softwarewritewatch.h b/src/gc/softwarewritewatch.h
+index 0e6e6c8..5858454 100644
+--- a/src/gc/softwarewritewatch.h
++++ b/src/gc/softwarewritewatch.h
+@@ -11,6 +11,11 @@
+ #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ #ifndef DACCESS_COMPILE
+ 
++#ifndef GC_PAGE_SIZE
++#define GC_PAGE_SIZE 0x1000
++#endif
++
++
+ extern "C"
+ {
+     // Table containing the dirty state. This table is translated to exclude the lowest address it represents, see
+@@ -249,7 +254,7 @@ inline void *SoftwareWriteWatch::GetPageAddress(size_t tableByteIndex)
+     void *pageAddress = reinterpret_cast<void *>(tableByteIndex << AddressToTableByteIndexShift);
+     assert(pageAddress >= GetHeapStartAddress());
+     assert(pageAddress < GetHeapEndAddress());
+-    assert(ALIGN_DOWN(pageAddress, OS_PAGE_SIZE) == pageAddress);
++    assert(ALIGN_DOWN(pageAddress, GC_PAGE_SIZE) == pageAddress);
+     return pageAddress;
+ }
+ 
+-- 
+2.7.4
+
