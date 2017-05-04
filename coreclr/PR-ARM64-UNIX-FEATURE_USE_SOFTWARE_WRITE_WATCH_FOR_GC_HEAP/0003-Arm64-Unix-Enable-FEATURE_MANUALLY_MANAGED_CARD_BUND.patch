@@ -1,0 +1,60 @@
+From 080890da152ed3742bbc7dcae982c7e726bb3e48 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 4 May 2017 17:26:21 +0000
+Subject: [PATCH] [Arm64/Unix] Enable FEATURE_MANUALLY_MANAGED_CARD_BUNDLES
+
+---
+ clrdefinitions.cmake      |  7 ++-----
+ src/vm/arm64/asmhelpers.S | 15 +++++++++++++++
+ 2 files changed, 17 insertions(+), 5 deletions(-)
+
+diff --git a/clrdefinitions.cmake b/clrdefinitions.cmake
+index cd3707a..f15749e 100644
+--- a/clrdefinitions.cmake
++++ b/clrdefinitions.cmake
+@@ -177,13 +177,10 @@ if(CLR_CMAKE_PLATFORM_UNIX_AMD64)
+   add_definitions(-DFEATURE_UNIX_AMD64_STRUCT_PASSING)
+ endif (CLR_CMAKE_PLATFORM_UNIX_AMD64)
+ add_definitions(-DFEATURE_USE_ASM_GC_WRITE_BARRIERS)
+-if(CLR_CMAKE_PLATFORM_ARCH_AMD64 AND NOT WIN32)
++if((CLR_CMAKE_PLATFORM_ARCH_AMD64 OR CLR_CMAKE_PLATFORM_ARCH_ARM64) AND NOT WIN32)
+   add_definitions(-DFEATURE_MANUALLY_MANAGED_CARD_BUNDLES)
+   add_definitions(-DFEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP)
+-endif(CLR_CMAKE_PLATFORM_ARCH_AMD64 AND NOT WIN32)
+-if(CLR_CMAKE_PLATFORM_ARCH_ARM64 AND NOT WIN32)
+-  add_definitions(-DFEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP)
+-endif(CLR_CMAKE_PLATFORM_ARCH_AMD64 AND NOT WIN32)
++endif((CLR_CMAKE_PLATFORM_ARCH_AMD64 OR CLR_CMAKE_PLATFORM_ARCH_ARM64) AND NOT WIN32)
+ if(WIN32)
+     add_definitions(-DFEATURE_VERSIONING_LOG)
+ endif(WIN32)
+diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
+index ace2558..f3d9216 100644
+--- a/src/vm/arm64/asmhelpers.S
++++ b/src/vm/arm64/asmhelpers.S
+@@ -350,6 +350,21 @@ LOCAL_LABEL(CheckCardTable):
+ LOCAL_LABEL(UpdateCardTable):
+     mov  x12, 0xFF 
+     strb w12, [x15]
++
++#ifdef FEATURE_MANUALLY_MANAGED_CARD_BUNDLES
++    // Check if we need to update the card table
++    PREPARE_EXTERNAL_VAR g_card_bundle_table, x12
++    ldr  x12, [x12]
++    add  x15,  x12, x14, lsr #21
++    ldrb w12, [x15]
++    cmp  x12, 0xFF
++    beq  LOCAL_LABEL(Exit)
++
++LOCAL_LABEL(UpdateCardBundle):
++    mov  x12, 0xFF
++    strb w12, [x15]
++#endif
++
+ LOCAL_LABEL(Exit):
+     add  x14, x14, 8
+     ret  lr  
+-- 
+2.7.4
+
