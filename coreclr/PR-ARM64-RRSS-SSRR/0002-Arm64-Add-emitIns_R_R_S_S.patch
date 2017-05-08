@@ -1,4 +1,4 @@
-From aa87e64f8e1afebc9d849719624bad786be02f36 Mon Sep 17 00:00:00 2001
+From 16ca06c4b68502b39c105367f27a8f62368959d4 Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Mon, 1 May 2017 19:10:37 +0000
@@ -12,10 +12,10 @@ Subject: [PATCH] [Arm64] Add emitIns_R_R_S_S
  4 files changed, 104 insertions(+), 27 deletions(-)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index 60459be..0d04481 100644
+index 0e536cd..8824040 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
-@@ -3014,9 +3014,7 @@ void CodeGen::genCodeForLoadPairOffset(regNumber dst, regNumber dst2, GenTree* b
+@@ -2597,9 +2597,7 @@ void CodeGen::genCodeForLoadPairOffset(regNumber dst, regNumber dst2, GenTree* b
          if (base->gtOper == GT_LCL_FLD_ADDR)
              offset += base->gtLclFld.gtLclOffs;
  
@@ -27,10 +27,10 @@ index 60459be..0d04481 100644
      else
      {
 diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
-index 4f76488..655148d 100644
+index 61b9309..d71a0b7 100644
 --- a/src/jit/codegenarmarch.cpp
 +++ b/src/jit/codegenarmarch.cpp
-@@ -312,28 +312,9 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
+@@ -686,28 +686,9 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
  
              noway_assert(structSize <= MAX_PASS_MULTIREG_BYTES);
  
@@ -61,7 +61,7 @@ index 4f76488..655148d 100644
  
              int      remainingSize = structSize;
              unsigned structOffset  = 0;
-@@ -346,9 +327,9 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
+@@ -720,9 +701,9 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
  
                  if (varNode != nullptr)
                  {

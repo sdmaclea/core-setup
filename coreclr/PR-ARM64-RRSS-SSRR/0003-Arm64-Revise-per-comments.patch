@@ -1,0 +1,195 @@
+From 637c9db949076a595710a88aea9b6ff38694f8dc Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 8 May 2017 15:47:22 +0000
+Subject: [PATCH] [Arm64] Revise per comments
+
+---
+ src/jit/emit.cpp      |  4 ----
+ src/jit/emit.h        | 25 ++++++++++++++-----------
+ src/jit/emitarm64.cpp | 25 +++++++++++++------------
+ 3 files changed, 27 insertions(+), 27 deletions(-)
+
+diff --git a/src/jit/emit.cpp b/src/jit/emit.cpp
+index ff2475a..d2aa29f 100644
+--- a/src/jit/emit.cpp
++++ b/src/jit/emit.cpp
+@@ -1381,10 +1381,6 @@ void* emitter::emitAllocInstr(size_t sz, emitAttr opsz)
+         id->idOpSize(EA_SIZE(opsz));
+     }
+ 
+-#ifdef _TARGET_ARM64_
+-    id->idGCrefReg2(GCT_NONE);
+-#endif
+-
+     // Amd64: ip-relative addressing is supported even when not generating relocatable ngen code
+     if (EA_IS_DSP_RELOC(opsz)
+ #ifndef _TARGET_AMD64_
+diff --git a/src/jit/emit.h b/src/jit/emit.h
+index c09953f..5ec8a6a 100644
+--- a/src/jit/emit.h
++++ b/src/jit/emit.h
+@@ -655,9 +655,6 @@ protected:
+         // unnecessarily since the GC-ness of the second register is only needed for call instructions.
+         // The instrDescCGCA struct's member keeping the GC-ness of the first return register is _idcSecondRetRegGCType.
+         GCtype _idGCref : 2; // GCref operand? (value is a "GCtype")
+-#ifdef _TARGET_ARM64_
+-        GCtype _idGCref2 : 2;
+-#endif
+ 
+         // Note that we use the _idReg1 and _idReg2 fields to hold
+         // the live gcrefReg mask for the call instructions on x86/x64
+@@ -671,7 +668,7 @@ protected:
+         // x86:   30 bits
+         // amd64: 38 bits
+         // arm:   32 bits
+-        // arm64: 32 bits
++        // arm64: 30 bits
+         CLANG_FORMAT_COMMENT_ANCHOR;
+ 
+ #if HAS_TINY_DESC
+@@ -721,8 +718,8 @@ protected:
+ #define ID_EXTRA_BITFIELD_BITS (16)
+ 
+ #elif defined(_TARGET_ARM64_)
+-// For Arm64, we have used 18 bits from the second DWORD.
+-#define ID_EXTRA_BITFIELD_BITS (18)
++// For Arm64, we have used 16 bits from the second DWORD.
++#define ID_EXTRA_BITFIELD_BITS (16)
+ #elif defined(_TARGET_XARCH_) && !defined(LEGACY_BACKEND)
+ // For xarch !LEGACY_BACKEND, we have used 14 bits from the second DWORD.
+ #define ID_EXTRA_BITFIELD_BITS (14)
+@@ -738,7 +735,7 @@ protected:
+         // x86:   38 bits  // if HAS_TINY_DESC is not defined (which it is)
+         // amd64: 46 bits
+         // arm:   48 bits
+-        // arm64: 50 bits
++        // arm64: 48 bits
+         CLANG_FORMAT_COMMENT_ANCHOR;
+ 
+         unsigned _idCnsReloc : 1; // LargeCns is an RVA and needs reloc tag
+@@ -751,7 +748,7 @@ protected:
+         // x86:   40 bits
+         // amd64: 48 bits
+         // arm:   50 bits
+-        // arm64: 52 bits
++        // arm64: 50 bits
+         CLANG_FORMAT_COMMENT_ANCHOR;
+ 
+ #define ID_EXTRA_BITS (ID_EXTRA_RELOC_BITS + ID_EXTRA_BITFIELD_BITS)
+@@ -767,7 +764,7 @@ protected:
+         // x86:   24 bits
+         // amd64: 16 bits
+         // arm:   14 bits
+-        // arm64: 12 bits
++        // arm64: 14 bits
+ 
+         unsigned _idSmallCns : ID_BIT_SMALL_CNS;
+ 
+@@ -926,8 +923,10 @@ protected:
+             struct
+             {
+ #ifdef _TARGET_ARM64_
++                // For 64-bit architecture this 32-bit structure can pack with these unsigned bit fields
+                 emitLclVarAddr iiaLclVar;
+                 unsigned       _idReg3Scaled : 1; // Reg3 is scaled by idOpSize bits
++                GCtype         _idGCref2 : 2;
+ #endif
+                 regNumber _idReg3 : REGNUM_BITS;
+                 regNumber _idReg4 : REGNUM_BITS;
+@@ -1081,11 +1080,15 @@ protected:
+ #ifdef _TARGET_ARM64_
+         GCtype idGCrefReg2() const
+         {
+-            return (GCtype)_idGCref2;
++            assert(!idIsTiny());
++            assert(!idIsSmallDsc());
++            return (GCtype)idAddr()->_idGCref2;
+         }
+         void idGCrefReg2(GCtype gctype)
+         {
+-            _idGCref2 = gctype;
++            assert(!idIsTiny());
++            assert(!idIsSmallDsc());
++            idAddr()->_idGCref2 = gctype;
+         }
+ #endif // _TARGET_ARM64_
+ 
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index d398b2f..c77bc2e 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -5368,19 +5368,18 @@ void emitter::emitIns_R_R_R_I(instruction ins,
+     id->idReg2(reg2);
+     id->idReg3(reg3);
+ 
++    // Record the attribute for the second register in the pair
++    id->idGCrefReg2(GCT_NONE);
+     if (attrReg2 != EA_UNKNOWN)
+     {
++        // Record the attribute for the second register in the pair
+         assert((fmt == IF_LS_3B) || (fmt == IF_LS_3C));
+         if (EA_IS_GCREF(attrReg2))
+         {
+-            /* A special value indicates a GCref pointer value */
+-
+             id->idGCrefReg2(GCT_GCREF);
+         }
+         else if (EA_IS_BYREF(attrReg2))
+         {
+-            /* A special value indicates a Byref pointer value */
+-
+             id->idGCrefReg2(GCT_BYREF);
+         }
+     }
+@@ -6176,18 +6175,19 @@ void emitter::emitIns_R_R_S_S(
+     id->idInsFmt(fmt);
+     id->idInsOpt(INS_OPTS_NONE);
+ 
++    // Record the attribute for the second register in the pair
+     if (EA_IS_GCREF(attr2))
+     {
+-        /* A special value indicates a GCref pointer value */
+-
+         id->idGCrefReg2(GCT_GCREF);
+     }
+     else if (EA_IS_BYREF(attr2))
+     {
+-        /* A special value indicates a Byref pointer value */
+-
+         id->idGCrefReg2(GCT_BYREF);
+     }
++    else
++    {
++        id->idGCrefReg2(GCT_NONE);
++    }
+ 
+     id->idReg1(reg1);
+     id->idReg2(reg2);
+@@ -6401,18 +6401,19 @@ void emitter::emitIns_S_S_R_R(
+     id->idInsFmt(fmt);
+     id->idInsOpt(INS_OPTS_NONE);
+ 
++    // Record the attribute for the second register in the pair
+     if (EA_IS_GCREF(attr2))
+     {
+-        /* A special value indicates a GCref pointer value */
+-
+         id->idGCrefReg2(GCT_GCREF);
+     }
+     else if (EA_IS_BYREF(attr2))
+     {
+-        /* A special value indicates a Byref pointer value */
+-
+         id->idGCrefReg2(GCT_BYREF);
+     }
++    else
++    {
++        id->idGCrefReg2(GCT_NONE);
++    }
+ 
+     id->idReg1(reg1);
+     id->idReg2(reg2);
+-- 
+2.7.4
+
