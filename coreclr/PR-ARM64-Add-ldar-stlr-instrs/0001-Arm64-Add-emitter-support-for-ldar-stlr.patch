@@ -1,0 +1,104 @@
+From 56cca165927eddc98ad370b23d2b7e037464dd21 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 10 May 2017 17:50:25 +0000
+Subject: [PATCH] [Arm64] Add emitter support for ldar/stlr
+
+---
+ src/jit/codegenarm64.cpp | 11 +++++++++++
+ src/jit/emitarm64.cpp    | 20 ++++++++++++++++++++
+ src/jit/instrsarm64.h    | 18 ++++++++++++++++++
+ 3 files changed, 49 insertions(+)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 6535431..6557ff3 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -4239,6 +4239,17 @@ void CodeGen::genArm64EmitterUnitTests()
+     theEmitter->emitIns_R_R_I(INS_ldr, EA_8BYTE, REG_R8, REG_R9, 1, INS_OPTS_POST_INDEX);
+     theEmitter->emitIns_R_R_I(INS_ldr, EA_8BYTE, REG_R8, REG_R9, 1, INS_OPTS_PRE_INDEX);
+ 
++    // ldar/stlr Rt, [reg]
++    theEmitter->emitIns_R_R(INS_ldar, EA_8BYTE, REG_R9, REG_R8);
++    theEmitter->emitIns_R_R(INS_ldar, EA_4BYTE, REG_R7, REG_R10);
++    theEmitter->emitIns_R_R(INS_ldarb, EA_4BYTE, REG_R5, REG_R11);
++    theEmitter->emitIns_R_R(INS_ldarh, EA_4BYTE, REG_R5, REG_R12);
++
++    theEmitter->emitIns_R_R(INS_stlr, EA_8BYTE, REG_R9, REG_R8);
++    theEmitter->emitIns_R_R(INS_stlr, EA_4BYTE, REG_R7, REG_R13);
++    theEmitter->emitIns_R_R(INS_stlrb, EA_4BYTE, REG_R5, REG_R14);
++    theEmitter->emitIns_R_R(INS_stlrh, EA_4BYTE, REG_R3, REG_R15);
++
+ #endif // ALL_ARM64_EMITTER_UNIT_TESTS
+ 
+ #ifdef ALL_ARM64_EMITTER_UNIT_TESTS
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index c77bc2e..4097b66 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -3878,6 +3878,26 @@ void emitter::emitIns_R_R(
+             fmt = IF_DV_2M;
+             break;
+ 
++        case INS_ldar:
++        case INS_stlr:
++            assert(isValidGeneralDatasize(size));
++
++            __fallthrough;
++
++        case INS_ldarb:
++        case INS_ldarh:
++        case INS_stlrb:
++        case INS_stlrh:
++            assert(isValidGeneralLSDatasize(size));
++            assert(isGeneralRegisterOrZR(reg1));
++            assert(isGeneralRegisterOrSP(reg2));
++            assert(insOptsNone(opt));
++
++            reg2 = encodingSPtoZR(reg2);
++
++            fmt = IF_LS_2A;
++            break;
++
+         case INS_ldr:
+         case INS_ldrb:
+         case INS_ldrh:
+diff --git a/src/jit/instrsarm64.h b/src/jit/instrsarm64.h
+index e91aaa6..3512e67 100644
+--- a/src/jit/instrsarm64.h
++++ b/src/jit/instrsarm64.h
+@@ -555,6 +555,15 @@ INST2(sli,     "sli",    0, 0, IF_EN2N,   0x7F005400,  0x2F005400)
+                                    //  sli     Vd,Vn,imm            DV_2N  011111110iiiiiii 010101nnnnnddddd   7F00 5400   Vd Vn imm  (shift - scalar)
+                                    //  sli     Vd,Vn,imm            DV_2O  0Q1011110iiiiiii 010101nnnnnddddd   2F00 5400   Vd,Vn imm  (shift - vector)
+ 
++INST1(ldar,    "ldar",   0,LD, IF_LS_2A,  0x88DFFC00)
++                                   //  ldar    Rt,[Xn]              LS_2A  1X00100011011111 111111nnnnnttttt   88DF FC00
++
++INST1(ldarb,   "ldarb",  0,LD, IF_LS_2A,  0x08DFFC00)
++                                   //  ldarb   Rt,[Xn]              LS_2A  0000100011011111 111111nnnnnttttt   08DF FC00
++
++INST1(ldarh,   "ldarh",  0,LD, IF_LS_2A,  0x48DFFC00)
++                                   //  ldarh   Rt,[Xn]              LS_2A  0100100011011111 111111nnnnnttttt   48DF FC00
++
+ INST1(ldur,    "ldur",   0,LD, IF_LS_2C,  0xB8400000)  
+                                    //  ldur    Rt,[Xn+simm9]        LS_2C  1X111000010iiiii iiii00nnnnnttttt   B840 0000   [Xn imm(-256..+255)]
+ 
+@@ -573,6 +582,15 @@ INST1(ldursh,  "ldursh", 0,LD, IF_LS_2C,  0x78800000)
+ INST1(ldursw,  "ldursw", 0,LD, IF_LS_2C,  0xB8800000)  
+                                    //  ldursw  Rt,[Xn+simm9]        LS_2C  10111000100iiiii iiii00nnnnnttttt   B880 0000   [Xn imm(-256..+255)]
+ 
++INST1(stlr,    "stlr",   0,LD, IF_LS_2A,  0x889FFC00)
++                                   //  stlr    Rt,[Xn]              LS_2A  1X00100010011111 111111nnnnnttttt   889F FC00
++
++INST1(stlrb,   "stlrb",  0,LD, IF_LS_2A,  0x089FFC00)
++                                   //  stlrb   Rt,[Xn]              LS_2A  0000100010011111 111111nnnnnttttt   089F FC00
++
++INST1(stlrh,   "stlrh",  0,LD, IF_LS_2A,  0x489FFC00)
++                                   //  stlrh   Rt,[Xn]              LS_2A  0100100010011111 111111nnnnnttttt   489F FC00
++
+ INST1(stur,    "stur",   0,ST, IF_LS_2C,  0xB8000000)  
+                                    //  stur    Rt,[Xn+simm9]        LS_2C  1X111000000iiiii iiii00nnnnnttttt   B800 0000   [Xn imm(-256..+255)]
+ 
+-- 
+2.7.4
+
