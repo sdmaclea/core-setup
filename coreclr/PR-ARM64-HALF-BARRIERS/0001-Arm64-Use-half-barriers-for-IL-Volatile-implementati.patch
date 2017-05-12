@@ -1,0 +1,151 @@
+From 75cc8e2dc9a939c73d7f3c38c0b4bbf3066dd28c Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea@qti.qualcomm.com>
+Date: Fri, 12 May 2017 12:44:08 -0400
+Subject: [PATCH] [Arm64] Use half barriers for IL Volatile implementation
+
+---
+ src/jit/codegen.h          |  4 ++++
+ src/jit/codegenarm64.cpp   | 14 +++++++-------
+ src/jit/codegenarmarch.cpp | 14 ++++++++++++--
+ src/jit/instr.cpp          |  6 +++++-
+ 4 files changed, 28 insertions(+), 10 deletions(-)
+
+diff --git a/src/jit/codegen.h b/src/jit/codegen.h
+index e50e640..6a61040 100755
+--- a/src/jit/codegen.h
++++ b/src/jit/codegen.h
+@@ -959,7 +959,11 @@ public:
+ 
+     void instGen_Return(unsigned stkArgSize);
+ 
++#ifdef _TARGET_ARM64_
++    void instGen_MemoryBarrier(insBarrier barrierType = INS_BARRIER_SY);
++#else
+     void instGen_MemoryBarrier();
++#endif
+ 
+     void instGen_Set_Reg_To_Zero(emitAttr size, regNumber reg, insFlags flags = INS_FLAGS_DONT_CARE);
+ 
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 0aa1421..0c1ff9a 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -2565,7 +2565,7 @@ void CodeGen::genCodeForInitBlkUnroll(GenTreeBlk* initBlkNode)
+ 
+     if (initBlkNode->gtFlags & GTF_BLK_VOLATILE)
+     {
+-        // issue a full memory barrier before volatile an initBlockUnroll operation
++        // issue a full memory barrier before a volatile an initBlockUnroll operation
+         instGen_MemoryBarrier();
+     }
+ 
+@@ -2709,7 +2709,7 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* cpBlkNode)
+ 
+     if (cpBlkNode->gtFlags & GTF_BLK_VOLATILE)
+     {
+-        // issue a full memory barrier before & after a volatile CpBlkUnroll operation
++        // issue a full memory barrier before a volatile CpBlkUnroll operation
+         instGen_MemoryBarrier();
+     }
+ 
+@@ -2794,8 +2794,8 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* cpBlkNode)
+ 
+     if (cpBlkNode->gtFlags & GTF_BLK_VOLATILE)
+     {
+-        // issue a full memory barrier before & after a volatile CpBlkUnroll operation
+-        instGen_MemoryBarrier();
++        // issue a INS_BARRIER_LD after a volatile CpBlkUnroll operation
++        instGen_MemoryBarrier(INS_BARRIER_LD);
+     }
+ }
+ 
+@@ -2877,7 +2877,7 @@ void CodeGen::genCodeForCpObj(GenTreeObj* cpObjNode)
+ 
+     if (cpObjNode->gtFlags & GTF_BLK_VOLATILE)
+     {
+-        // issue a full memory barrier before & after a volatile CpObj operation
++        // issue a full memory barrier before a volatile CpObj operation
+         instGen_MemoryBarrier();
+     }
+ 
+@@ -2955,8 +2955,8 @@ void CodeGen::genCodeForCpObj(GenTreeObj* cpObjNode)
+ 
+     if (cpObjNode->gtFlags & GTF_BLK_VOLATILE)
+     {
+-        // issue a full memory barrier before & after a volatile CpObj operation
+-        instGen_MemoryBarrier();
++        // issue a INS_BARRIER_LD after a volatile CpObj operation
++        instGen_MemoryBarrier(INS_BARRIER_LD);
+     }
+ 
+     // Clear the gcInfo for REG_WRITE_BARRIER_SRC_BYREF and REG_WRITE_BARRIER_DST_BYREF.
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index 103ce47..4539170 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -1346,8 +1346,13 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
+ 
+     if (tree->gtFlags & GTF_IND_VOLATILE)
+     {
++#ifdef _TARGET_ARM64_
++        // issue a INS_BARRIER_LD after a volatile LdInd operation
++        instGen_MemoryBarrier(INS_BARRIER_LD);
++#else
+         // issue a full memory barrier after a volatile LdInd operation
+         instGen_MemoryBarrier();
++#endif // _TARGET_ARM64_
+     }
+ }
+ 
+@@ -1373,7 +1378,7 @@ void CodeGen::genCodeForCpBlk(GenTreeBlk* cpBlkNode)
+ 
+     if (cpBlkNode->gtFlags & GTF_BLK_VOLATILE)
+     {
+-        // issue a full memory barrier before & after a volatile CpBlkUnroll operation
++        // issue a full memory barrier before a volatile CpBlk operation
+         instGen_MemoryBarrier();
+     }
+ 
+@@ -1381,8 +1386,13 @@ void CodeGen::genCodeForCpBlk(GenTreeBlk* cpBlkNode)
+ 
+     if (cpBlkNode->gtFlags & GTF_BLK_VOLATILE)
+     {
+-        // issue a full memory barrier before & after a volatile CpBlkUnroll operation
++#ifdef _TARGET_ARM64_
++        // issue a INS_BARRIER_LD after a volatile CpBlk operation
++        instGen_MemoryBarrier(INS_BARRIER_LD);
++#else
++        // issue a full memory barrier after a volatile CpBlk operation
+         instGen_MemoryBarrier();
++#endif // _TARGET_ARM64_
+     }
+ }
+ 
+diff --git a/src/jit/instr.cpp b/src/jit/instr.cpp
+index 5bbfdde..d83bc76 100644
+--- a/src/jit/instr.cpp
++++ b/src/jit/instr.cpp
+@@ -3854,7 +3854,11 @@ void CodeGen::instGen_Return(unsigned stkArgSize)
+  *     Note: all MemoryBarriers instructions can be removed by
+  *           SET COMPlus_JitNoMemoryBarriers=1
+  */
++#ifdef _TARGET_ARM64_
++void CodeGen::instGen_MemoryBarrier(insBarrier barrierType)
++#else
+ void CodeGen::instGen_MemoryBarrier()
++#endif
+ {
+ #ifdef DEBUG
+     if (JitConfig.JitNoMemoryBarriers() == 1)
+@@ -3869,7 +3873,7 @@ void CodeGen::instGen_MemoryBarrier()
+ #elif defined(_TARGET_ARM_)
+     getEmitter()->emitIns_I(INS_dmb, EA_4BYTE, 0xf);
+ #elif defined(_TARGET_ARM64_)
+-    getEmitter()->emitIns_BARR(INS_dmb, INS_BARRIER_SY);
++    getEmitter()->emitIns_BARR(INS_dmb, barrierType);
+ #else
+ #error "Unknown _TARGET_"
+ #endif
+-- 
+2.7.4
+
