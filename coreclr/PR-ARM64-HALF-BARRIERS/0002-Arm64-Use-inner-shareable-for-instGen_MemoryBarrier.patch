@@ -1,0 +1,78 @@
+From 920d8257fc336e91ae28ca7f74005490f7569ba1 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 16 May 2017 17:37:28 +0000
+Subject: [PATCH] [Arm64] Use inner shareable for instGen_MemoryBarrier
+
+---
+ src/jit/codegen.h          |  2 +-
+ src/jit/codegenarm64.cpp   | 10 +++++-----
+ src/jit/codegenarmarch.cpp |  4 ++--
+ 3 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/src/jit/codegen.h b/src/jit/codegen.h
+index 6a61040..eb358d1 100755
+--- a/src/jit/codegen.h
++++ b/src/jit/codegen.h
+@@ -960,7 +960,7 @@ public:
+     void instGen_Return(unsigned stkArgSize);
+ 
+ #ifdef _TARGET_ARM64_
+-    void instGen_MemoryBarrier(insBarrier barrierType = INS_BARRIER_SY);
++    void instGen_MemoryBarrier(insBarrier barrierType = INS_BARRIER_ISH);
+ #else
+     void instGen_MemoryBarrier();
+ #endif
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 0c1ff9a..72e1e47 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -2565,7 +2565,7 @@ void CodeGen::genCodeForInitBlkUnroll(GenTreeBlk* initBlkNode)
+ 
+     if (initBlkNode->gtFlags & GTF_BLK_VOLATILE)
+     {
+-        // issue a full memory barrier before a volatile an initBlockUnroll operation
++        // issue a full memory barrier before a volatile initBlockUnroll operation
+         instGen_MemoryBarrier();
+     }
+ 
+@@ -2794,8 +2794,8 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* cpBlkNode)
+ 
+     if (cpBlkNode->gtFlags & GTF_BLK_VOLATILE)
+     {
+-        // issue a INS_BARRIER_LD after a volatile CpBlkUnroll operation
+-        instGen_MemoryBarrier(INS_BARRIER_LD);
++        // issue a INS_BARRIER_ISHLD after a volatile CpBlkUnroll operation
++        instGen_MemoryBarrier(INS_BARRIER_ISHLD);
+     }
+ }
+ 
+@@ -2955,8 +2955,8 @@ void CodeGen::genCodeForCpObj(GenTreeObj* cpObjNode)
+ 
+     if (cpObjNode->gtFlags & GTF_BLK_VOLATILE)
+     {
+-        // issue a INS_BARRIER_LD after a volatile CpObj operation
+-        instGen_MemoryBarrier(INS_BARRIER_LD);
++        // issue a INS_BARRIER_ISHLD after a volatile CpObj operation
++        instGen_MemoryBarrier(INS_BARRIER_ISHLD);
+     }
+ 
+     // Clear the gcInfo for REG_WRITE_BARRIER_SRC_BYREF and REG_WRITE_BARRIER_DST_BYREF.
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index 4539170..4268d3c 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -1387,8 +1387,8 @@ void CodeGen::genCodeForCpBlk(GenTreeBlk* cpBlkNode)
+     if (cpBlkNode->gtFlags & GTF_BLK_VOLATILE)
+     {
+ #ifdef _TARGET_ARM64_
+-        // issue a INS_BARRIER_LD after a volatile CpBlk operation
+-        instGen_MemoryBarrier(INS_BARRIER_LD);
++        // issue a INS_BARRIER_ISHLD after a volatile CpBlk operation
++        instGen_MemoryBarrier(INS_BARRIER_ISHLD);
+ #else
+         // issue a full memory barrier after a volatile CpBlk operation
+         instGen_MemoryBarrier();
+-- 
+2.7.4
+
