@@ -1,0 +1,32 @@
+From 27250274f283b216005c04810ce8cd9a1d70c0ad Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 24 May 2017 15:05:42 +0000
+Subject: [PATCH] [Arm64/Win] Use csel<con> for csel
+
+MS Assembler expects csel<cond> for the csel instruction
+---
+ src/vm/arm64/crthelpers.asm | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/vm/arm64/crthelpers.asm b/src/vm/arm64/crthelpers.asm
+index db4cd15..27ebd14 100644
+--- a/src/vm/arm64/crthelpers.asm
++++ b/src/vm/arm64/crthelpers.asm
+@@ -141,11 +141,11 @@
+ 
+     orr         w8, w8, w8, lsl #8
+     and         x5, x3, #0xf                       ; x5 = dczid_el0.bs
+-    csel        x11, x11, xzr, eq                  ; x11 = (val == 0) ? count >> 3 : 0
++    cseleq      x11, x11, xzr                      ; x11 = (val == 0) ? count >> 3 : 0
+     tst         x3, (1 << 4)
+ 
+     orr         w8, w8, w8, lsl #0x10
+-    csel        x11, x11, xzr, eq                  ; x11 = (val == 0) && !DCZID_EL0.p ? count >> 3 : 0
++    cseleq      x11, x11, xzr                      ; x11 = (val == 0) && !DCZID_EL0.p ? count >> 3 : 0
+     ands        x3, x0, #7                         ; x3 = dst & 7
+     lsl         x9, x6, x5                         ; x9 = size
+ 
+-- 
+2.7.4
+
