@@ -1,0 +1,29 @@
+From 69b057f0292628bc0071ed0c8440f496f060813f Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Sat, 27 May 2017 03:16:12 +0000
+Subject: [PATCH] [Arm64] Handle exclusive decode group in
+ insEncodeDatasizeLS()
+
+---
+ src/jit/emitarm64.cpp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index 2a52f92..75c5202 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -7379,7 +7379,9 @@ void emitter::emitIns_Call(EmitCallType          callType,
+ 
+ /*static*/ emitter::code_t emitter::insEncodeDatasizeLS(emitter::code_t code, emitAttr size)
+ {
+-    if (code & 0x00800000) // Is this a sign-extending opcode? (i.e. ldrsw, ldrsh, ldrsb)
++    bool exclusive = ((code & 0x35000000) == 0);
++
++    if ((code & 0x00800000) && !exclusive) // Is this a sign-extending opcode? (i.e. ldrsw, ldrsh, ldrsb)
+     {
+         assert((size == EA_4BYTE) || (size == EA_8BYTE));
+         if ((code & 0x80000000) == 0) // Is it a ldrsh or ldrsb and not ldrsw ?
+-- 
+2.7.4
+
