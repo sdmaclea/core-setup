@@ -1,0 +1,42 @@
+From 66957e36e586875320cbb79a34dcf3615d1d8752 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 26 May 2017 00:08:39 +0000
+Subject: [PATCH] [Arm64] stlr for JIT_WriteBarrier
+
+---
+ src/vm/arm64/asmhelpers.S   | 3 +--
+ src/vm/arm64/asmhelpers.asm | 3 +--
+ 2 files changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
+index a3aec32..2e1d029 100644
+--- a/src/vm/arm64/asmhelpers.S
++++ b/src/vm/arm64/asmhelpers.S
+@@ -267,8 +267,7 @@ WRITE_BARRIER_END JIT_CheckedWriteBarrier
+ //   x17  : trashed (ip1) if FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ //
+ WRITE_BARRIER_ENTRY JIT_WriteBarrier
+-    dmb  ish
+-    str  x15, [x14]
++    stlr  x15, [x14]
+ 
+ #ifdef WRITE_BARRIER_CHECK
+     // Update GC Shadow Heap
+diff --git a/src/vm/arm64/asmhelpers.asm b/src/vm/arm64/asmhelpers.asm
+index f303f82..8da2151 100644
+--- a/src/vm/arm64/asmhelpers.asm
++++ b/src/vm/arm64/asmhelpers.asm
+@@ -326,8 +326,7 @@ NotInHeap
+ ;   x15  : trashed
+ ;
+     WRITE_BARRIER_ENTRY JIT_WriteBarrier
+-        dmb      ish
+-        str      x15, [x14]
++        stlr     x15, [x14]
+ 
+ #ifdef WRITE_BARRIER_CHECK
+         ; Update GC Shadow Heap  
+-- 
+2.7.4
+

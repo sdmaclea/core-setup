@@ -1,0 +1,58 @@
+From ca480ef458255fff1387e0952af7f3f212ec064e Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 26 May 2017 00:08:34 +0000
+Subject: [PATCH] [Arm64] Use ish domain JIT_WriteBarrier
+
+---
+ src/vm/arm64/asmhelpers.S   | 4 ++--
+ src/vm/arm64/asmhelpers.asm | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
+index 79e3989..a3aec32 100644
+--- a/src/vm/arm64/asmhelpers.S
++++ b/src/vm/arm64/asmhelpers.S
+@@ -267,7 +267,7 @@ WRITE_BARRIER_END JIT_CheckedWriteBarrier
+ //   x17  : trashed (ip1) if FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ //
+ WRITE_BARRIER_ENTRY JIT_WriteBarrier
+-    dmb  ST
++    dmb  ish
+     str  x15, [x14]
+ 
+ #ifdef WRITE_BARRIER_CHECK
+@@ -296,7 +296,7 @@ WRITE_BARRIER_ENTRY JIT_WriteBarrier
+ 
+     // Ensure that the write to the shadow heap occurs before the read from the GC heap so that race
+     // conditions are caught by INVALIDGCVALUE.
+-    dmb  sy
++    dmb  ish
+ 
+     // if ([x14] == x15) goto end
+     ldr  x13, [x14]
+diff --git a/src/vm/arm64/asmhelpers.asm b/src/vm/arm64/asmhelpers.asm
+index 24b26eb..f303f82 100644
+--- a/src/vm/arm64/asmhelpers.asm
++++ b/src/vm/arm64/asmhelpers.asm
+@@ -326,7 +326,7 @@ NotInHeap
+ ;   x15  : trashed
+ ;
+     WRITE_BARRIER_ENTRY JIT_WriteBarrier
+-        dmb      ST
++        dmb      ish
+         str      x15, [x14]
+ 
+ #ifdef WRITE_BARRIER_CHECK
+@@ -355,7 +355,7 @@ NotInHeap
+ 
+         ; Ensure that the write to the shadow heap occurs before the read from the GC heap so that race
+         ; conditions are caught by INVALIDGCVALUE.
+-        dmb      sy
++        dmb      ish
+ 
+         ; if ([x14] == x15) goto end
+         ldr      x13, [x14]
+-- 
+2.7.4
+
