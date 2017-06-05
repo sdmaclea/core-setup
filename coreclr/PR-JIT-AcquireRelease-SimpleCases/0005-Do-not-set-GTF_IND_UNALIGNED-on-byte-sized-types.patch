@@ -1,0 +1,53 @@
+From 2011e0b3ee5588de94f29ac5c32bdb638ef83652 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 5 Jun 2017 20:19:45 +0000
+Subject: [PATCH] Do not set GTF_IND_UNALIGNED on byte sized types
+
+---
+ src/jit/importer.cpp | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/jit/importer.cpp b/src/jit/importer.cpp
+index 5cc5e4e..8e0b7db 100644
+--- a/src/jit/importer.cpp
++++ b/src/jit/importer.cpp
+@@ -12224,7 +12224,7 @@ void Compiler::impImportBlockCode(BasicBlock* block)
+                     op1->gtFlags |= GTF_IND_VOLATILE;
+                 }
+ 
+-                if (prefixFlags & PREFIX_UNALIGNED)
++                if ((prefixFlags & PREFIX_UNALIGNED) && !varTypeIsByte(lclTyp))
+                 {
+                     assert(op1->OperGet() == GT_IND);
+                     op1->gtFlags |= GTF_IND_UNALIGNED;
+@@ -12321,7 +12321,7 @@ void Compiler::impImportBlockCode(BasicBlock* block)
+                     op1->gtFlags |= GTF_IND_VOLATILE;
+                 }
+ 
+-                if (prefixFlags & PREFIX_UNALIGNED)
++                if ((prefixFlags & PREFIX_UNALIGNED) && !varTypeIsByte(lclTyp))
+                 {
+                     assert(op1->OperGet() == GT_IND);
+                     op1->gtFlags |= GTF_IND_UNALIGNED;
+@@ -13351,7 +13351,7 @@ void Compiler::impImportBlockCode(BasicBlock* block)
+                         }
+                     }
+ 
+-                    if (prefixFlags & PREFIX_UNALIGNED)
++                    if ((prefixFlags & PREFIX_UNALIGNED) && !varTypeIsByte(lclTyp))
+                     {
+                         if (!usesHelper)
+                         {
+@@ -13594,7 +13594,7 @@ void Compiler::impImportBlockCode(BasicBlock* block)
+                         op1->gtFlags |= GTF_ORDER_SIDEEFF; // Prevent this from being reordered
+                         op1->gtFlags |= GTF_IND_VOLATILE;
+                     }
+-                    if (prefixFlags & PREFIX_UNALIGNED)
++                    if ((prefixFlags & PREFIX_UNALIGNED) && !varTypeIsByte(lclTyp))
+                     {
+                         assert((op1->OperGet() == GT_FIELD) || (op1->OperGet() == GT_IND));
+                         op1->gtFlags |= GTF_IND_UNALIGNED;
+-- 
+2.7.4
+

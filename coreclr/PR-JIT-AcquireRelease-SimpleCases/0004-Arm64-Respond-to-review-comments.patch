@@ -1,0 +1,57 @@
+From b0455ff26ec87a835ea9ca17fc19170cc995d3c6 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies, Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 5 Jun 2017 19:06:40 +0000
+Subject: [PATCH] [Arm64] Respond to review comments
+
+---
+ src/jit/codegenarm64.cpp   | 6 ++++--
+ src/jit/codegenarmarch.cpp | 8 +++++---
+ 2 files changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 77947d4..29fa66e 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3409,10 +3409,12 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
+             dataReg = data->gtRegNum;
+         }
+ 
++        assert((attr != EA_1BYTE) || !(tree->gtFlags & GTF_IND_UNALIGNED));
++
+         if (tree->gtFlags & GTF_IND_VOLATILE)
+         {
+-            bool useStoreRelease = (dataReg >= REG_INT_FIRST) && (dataReg <= REG_ZR) && !addr->isContained() &&
+-                                   ((attr == EA_1BYTE) || !(tree->gtFlags & GTF_IND_UNALIGNED));
++            bool useStoreRelease =
++                genIsValidIntReg(dataReg) && !addr->isContained() && !(tree->gtFlags & GTF_IND_UNALIGNED);
+ 
+             if (useStoreRelease)
+             {
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index 9b83a65..4f032ae 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -1339,14 +1339,16 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
+     emitAttr    attr       = emitTypeSize(tree);
+     instruction ins        = ins_Load(targetType);
+ 
++    assert((attr != EA_1BYTE) || !(tree->gtFlags & GTF_IND_UNALIGNED));
++
+     genConsumeAddress(tree->Addr());
+     if (tree->gtFlags & GTF_IND_VOLATILE)
+     {
+ #ifdef _TARGET_ARM64_
+         GenTree* addr           = tree->Addr();
+-        bool     useLoadAcquire = (targetReg >= REG_INT_FIRST) && (targetReg <= REG_ZR) && !addr->isContained() &&
+-                              varTypeIsUnsigned(targetType) &&
+-                              ((attr == EA_1BYTE) || !(tree->gtFlags & GTF_IND_UNALIGNED));
++        bool     useLoadAcquire = genIsValidIntReg(targetReg) && !addr->isContained() &&
++                              (varTypeIsUnsigned(targetType) || varTypeIsI(targetType)) &&
++                              !(tree->gtFlags & GTF_IND_UNALIGNED);
+ 
+         if (useLoadAcquire)
+         {
+-- 
+2.7.4
+
