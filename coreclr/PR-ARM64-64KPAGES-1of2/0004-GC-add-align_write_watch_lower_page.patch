@@ -1,0 +1,45 @@
+From 9f29d5319b1e23b33b35a953ded94e49d5532e7b Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 8 Jun 2017 15:59:26 +0000
+Subject: [PATCH] GC add align_write_watch_lower_page
+
+---
+ src/gc/gc.cpp | 15 ++++++++++++++-
+ 1 file changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
+index 762c668..5007ed8 100644
+--- a/src/gc/gc.cpp
++++ b/src/gc/gc.cpp
+@@ -2160,6 +2160,19 @@ uint8_t* align_lower_page (uint8_t* add)
+ }
+ 
+ inline
++size_t align_write_watch_lower_page (size_t add)
++{
++    return (add & ~(WRITE_WATCH_UNIT_SIZE - 1));
++}
++
++inline
++uint8_t* align_write_watch_lower_page (uint8_t* add)
++{
++    return (uint8_t*)align_lower_page ((size_t)add);
++}
++
++
++inline
+ BOOL power_of_two_p (size_t integer)
+ {
+     return !(integer & (integer-1));
+@@ -26317,7 +26330,7 @@ end_limit:
+     }
+ 
+     dprintf (3,("Last object: %Ix", (size_t)last_object));
+-    last_page = align_lower_page (o);
++    last_page = align_write_watch_lower_page (o);
+ }
+ 
+ // When reset_only_p is TRUE, we should only reset pages that are in range
+-- 
+2.7.4
+
