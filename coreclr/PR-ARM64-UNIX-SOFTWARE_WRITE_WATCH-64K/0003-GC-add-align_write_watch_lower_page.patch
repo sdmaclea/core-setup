@@ -1,22 +1,20 @@
-From 1ea9f1189f5b702524b729e3e2ca638f14c32ffa Mon Sep 17 00:00:00 2001
+From 43306584c3ae974cd1eeda8d9a042fcee5f31f65 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Thu, 8 Jun 2017 15:59:26 +0000
 Subject: [PATCH] GC add align_write_watch_lower_page
 
 ---
- src/gc/gc.cpp | 16 +++++++++++++++-
- 1 file changed, 15 insertions(+), 1 deletion(-)
+ src/gc/gc.cpp | 15 ++++++++++++++-
+ 1 file changed, 14 insertions(+), 1 deletion(-)
 
 diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
-index 7113be4..56e5c3d 100644
+index 7113be4..9446750 100644
 --- a/src/gc/gc.cpp
 +++ b/src/gc/gc.cpp
-@@ -2161,6 +2161,20 @@ uint8_t* align_lower_page (uint8_t* add)
-     return (uint8_t*)align_lower_page ((size_t)add);
+@@ -2162,6 +2162,19 @@ uint8_t* align_lower_page (uint8_t* add)
  }
  
-+align_write_watch_lower_page
-+inline
+ inline
 +size_t align_write_watch_lower_page (size_t add)
 +{
 +    return (add & ~(WRITE_WATCH_UNIT_SIZE - 1));
@@ -29,10 +27,11 @@ index 7113be4..56e5c3d 100644
 +}
 +
 +
- inline
++inline
  BOOL power_of_two_p (size_t integer)
  {
-@@ -26319,7 +26333,7 @@ end_limit:
+     return !(integer & (integer-1));
+@@ -26319,7 +26332,7 @@ end_limit:
      }
  
      dprintf (3,("Last object: %Ix", (size_t)last_object));
