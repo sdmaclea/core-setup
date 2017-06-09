@@ -1,0 +1,46 @@
+From fe5f27e5c89f10af56bacc8861248da6a47b95c1 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 9 Jun 2017 21:08:25 +0000
+Subject: [PATCH] GC move GCToOSInterface::Initialize() into
+ InitializeGarbageCollector()
+
+---
+ src/gc/gc.cpp       | 6 ------
+ src/gc/gccommon.cpp | 4 ++++
+ 2 files changed, 4 insertions(+), 6 deletions(-)
+
+diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
+index b599dfc..c1e6208 100644
+--- a/src/gc/gc.cpp
++++ b/src/gc/gc.cpp
+@@ -33439,12 +33439,6 @@ HRESULT GCHeap::Initialize ()
+ {
+     HRESULT hr = S_OK;
+ 
+-    if (!GCToOSInterface::Initialize())
+-    {
+-        return E_FAIL;
+-    }
+-
+-
+     g_gc_pFreeObjectMethodTable = GCToEEInterface::GetFreeObjectMethodTable();
+     g_num_processors = GCToOSInterface::GetTotalProcessorCount();
+     assert(g_num_processors != 0);
+diff --git a/src/gc/gccommon.cpp b/src/gc/gccommon.cpp
+index 932f4a2..3e45eb6 100644
+--- a/src/gc/gccommon.cpp
++++ b/src/gc/gccommon.cpp
+@@ -168,6 +168,10 @@ InitializeGarbageCollector(
+     // Initialize GCConfig before anything else - initialization of our
+     // various components may want to query the current configuration.
+     GCConfig::Initialize();
++    if (!GCToOSInterface::Initialize())
++    {
++        return false;
++    }
+ 
+     IGCHandleManager* handleManager = CreateGCHandleManager();
+     if (handleManager == nullptr)
+-- 
+2.7.4
+
