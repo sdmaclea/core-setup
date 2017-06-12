@@ -1,0 +1,29 @@
+From f72e2dd339b876161d83406038bcc9ebb0e13fce Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 12 Jun 2017 21:25:42 +0000
+Subject: [PATCH] Replace MemoryBarrier() in CopyValueClassUnchecked
+
+---
+ src/vm/object.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/vm/object.cpp b/src/vm/object.cpp
+index a8b7bc4..15c3a45 100644
+--- a/src/vm/object.cpp
++++ b/src/vm/object.cpp
+@@ -1521,6 +1521,12 @@ void STDCALL CopyValueClassUnchecked(void* dest, void* src, MethodTable *pMT)
+ 
+     _ASSERTE(!pMT->IsArray());  // bunch of assumptions about arrays wrong. 
+ 
++    // <TODO> @todo Only call MemoryBarrier() if needed.
++    // Reflection is a known use case where this is required.
++    // Unboxing is a use case where this should not be required.
++    // </TODO>
++    MemoryBarrier();
++
+         // Copy the bulk of the data, and any non-GC refs. 
+     switch (pMT->GetNumInstanceFieldBytes())
+     {        
+-- 
+2.7.4
+
