@@ -1,0 +1,39 @@
+From b80ca161c2dfffe5a048c81406e3c3bbf22bfe70 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 12 Jun 2017 16:08:26 +0000
+Subject: [PATCH] Reduce excessive loop count in interlocked tests
+
+---
+ .../threading/interlocked/add/InterlockedAddLongWithSubtract.csproj     | 2 +-
+ .../threading/interlocked/add/interlockedaddintwithsubtract.csproj      | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tests/src/baseservices/threading/interlocked/add/InterlockedAddLongWithSubtract.csproj b/tests/src/baseservices/threading/interlocked/add/InterlockedAddLongWithSubtract.csproj
+index af973de..49fe484 100644
+--- a/tests/src/baseservices/threading/interlocked/add/InterlockedAddLongWithSubtract.csproj
++++ b/tests/src/baseservices/threading/interlocked/add/InterlockedAddLongWithSubtract.csproj
+@@ -12,7 +12,7 @@
+     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+     <CLRTestKind>BuildAndRun</CLRTestKind>
+     <CLRTestPriority>1</CLRTestPriority>
+-    <CLRTestExecutionArguments>/loops:500000 /addVal:1</CLRTestExecutionArguments>
++    <CLRTestExecutionArguments>/loops:10000 /addVal:1</CLRTestExecutionArguments>
+   </PropertyGroup>
+   <!-- Default configurations to help VS understand the configurations -->
+   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+diff --git a/tests/src/baseservices/threading/interlocked/add/interlockedaddintwithsubtract.csproj b/tests/src/baseservices/threading/interlocked/add/interlockedaddintwithsubtract.csproj
+index 4b0dc7e..ea4c813 100644
+--- a/tests/src/baseservices/threading/interlocked/add/interlockedaddintwithsubtract.csproj
++++ b/tests/src/baseservices/threading/interlocked/add/interlockedaddintwithsubtract.csproj
+@@ -10,7 +10,7 @@
+     <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
+     <CLRTestPriority>1</CLRTestPriority>
+-    <CLRTestExecutionArguments>/loops:500000 /addVal:1</CLRTestExecutionArguments>
++    <CLRTestExecutionArguments>/loops:10000 /addVal:1</CLRTestExecutionArguments>
+   </PropertyGroup>
+   <!-- Default configurations to help VS understand the configurations -->
+   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+-- 
+2.7.4
+
