@@ -1,0 +1,25 @@
+From 66869af2007f976f8b6e982ac28747948e8646ab Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 12 Jun 2017 20:26:34 +0000
+Subject: [PATCH] [Arm64] fix typo in asm
+
+---
+ src/vm/arm64/asmhelpers.asm | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/vm/arm64/asmhelpers.asm b/src/vm/arm64/asmhelpers.asm
+index ef7629b..0a7d0a6 100644
+--- a/src/vm/arm64/asmhelpers.asm
++++ b/src/vm/arm64/asmhelpers.asm
+@@ -468,7 +468,7 @@ EphemeralCheckEnabled
+         mov      x7, xzr
+ #endif
+ 
+-        // Update wbs state
++        ; Update wbs state
+ 
+         adr  x12, wbs_begin
+         stp  x0, x1, [x12], 16
+-- 
+2.7.4
+
