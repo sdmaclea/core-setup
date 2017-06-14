@@ -1,0 +1,134 @@
+From 1adc4ed90228c99efa60916c32dddde99639be5b Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 14 Jun 2017 19:10:12 +0000
+Subject: [PATCH] [Arm64] Remove SuspendEE/RestartEE in StompWriteBarrierResize
+
+---
+ src/vm/arm64/asmhelpers.S   | 13 +++++++++----
+ src/vm/arm64/asmhelpers.asm | 13 +++++++++----
+ src/vm/arm64/stubs.cpp      | 24 ------------------------
+ 3 files changed, 18 insertions(+), 32 deletions(-)
+
+diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
+index 98402d9..b4cfaf1 100644
+--- a/src/vm/arm64/asmhelpers.S
++++ b/src/vm/arm64/asmhelpers.S
+@@ -428,6 +428,12 @@ LOCAL_LABEL(EphemeralCheckEnabled):
+ 
+     // The following writes are guaranteed ordered since they are
+     // in the same coherencency granule (no barrier required)
++    //
++    // The corresponding wbs_* reads above will also be ordered
++    // for the same reasons.
++    //
++    // Assumes coherency granule is at least 64 bytes.  True on
++    // known implementations
+     stp  x0, x1, [x12], 16
+     stp  x2, x3, [x12], 16
+     stp  x4, x5, [x12], 16
+@@ -435,10 +441,9 @@ LOCAL_LABEL(EphemeralCheckEnabled):
+ 
+     // Force updated state to be visible to all threads
+     //
+-    // Hypothetically this could be removed if all paths guaranteed to
+-    // call FlushProcessWriteBuffers() or equivalent.  Currently
+-    // FlushProcessWriteBuffers() is not called in some cases when
+-    // runtime is suspended.  It is also not called when runtime resumes.
++    // This allows this function to run even when runtime is not suspended
++    // and is lighter weight than FlushProcessWriteBuffers() which is
++    // skipped for arm64
+     dmb  ishst
+ 
+     EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, 16
+diff --git a/src/vm/arm64/asmhelpers.asm b/src/vm/arm64/asmhelpers.asm
+index 867b382..686c2d1 100644
+--- a/src/vm/arm64/asmhelpers.asm
++++ b/src/vm/arm64/asmhelpers.asm
+@@ -498,6 +498,12 @@ EphemeralCheckEnabled
+ 
+         ; The following writes are guaranteed ordered since they are
+         ; in the same coherencency granule (no barrier required)
++        ;
++        ; The corresponding wbs_* reads above will also be ordered
++        ; for the same reasons.
++        ;
++        ; Assumes coherency granule is at least 64 bytes.  True on
++        ; known implementations
+         stp  x0, x1, [x12], 16
+         stp  x2, x3, [x12], 16
+         stp  x4, x5, [x12], 16
+@@ -505,10 +511,9 @@ EphemeralCheckEnabled
+ 
+         ; Force updated state to be visible to all threads
+         ;
+-        ; Hypothetically this could be removed if all paths guaranteed to
+-        ; call FlushProcessWriteBuffers() or equivalent.  Currently
+-        ; FlushProcessWriteBuffers() is not called in some cases when
+-        ; runtime is suspended.  It is also not called when runtime resumes.
++        ; This allows this function to run even when runtime is not suspended
++        ; and is lighter weight than FlushProcessWriteBuffers() which is
++        ; skipped for arm64
+         dmb      ishst
+ 
+         EPILOG_RESTORE_REG_PAIR fp, lr, 16
+diff --git a/src/vm/arm64/stubs.cpp b/src/vm/arm64/stubs.cpp
+index 637a6f4..d1689ea 100644
+--- a/src/vm/arm64/stubs.cpp
++++ b/src/vm/arm64/stubs.cpp
+@@ -14,7 +14,6 @@
+ #include "asmconstants.h"
+ #include "virtualcallstub.h"
+ #include "jitinterface.h"
+-#include "threadsuspend.h"
+ 
+ EXTERN_C void JIT_GetSharedNonGCStaticBase_SingleAppDomain();
+ EXTERN_C void JIT_GetSharedNonGCStaticBaseNoCtor_SingleAppDomain();
+@@ -1317,45 +1316,22 @@ LONG CLRNoCatchHandler(EXCEPTION_POINTERS* pExceptionInfo, PVOID pv)
+ #ifndef CROSSGEN_COMPILE
+ void StompWriteBarrierEphemeral(bool isRuntimeSuspended)
+ {
+-    _ASSERTE(isRuntimeSuspended);
+-
+     JIT_UpdateWriteBarrierState(GCHeapUtilities::IsServerHeap());
+ }
+ 
+ void StompWriteBarrierResize(bool isRuntimeSuspended, bool bReqUpperBoundsCheck)
+ {
+-    // The runtime is not always suspended when this is called.  If a thread was
+-    // preempted while holding the old card_table ptr in a register, when
+-    // resumes it will write to the old card_table (bad).  Same is true for
+-    // card_bundle_table
+-    //
+-    // Suspend the runtime to avoid this race condition
+-
+-    if (!isRuntimeSuspended)
+-    {
+-        ThreadSuspend::SuspendEE(ThreadSuspend::SUSPEND_OTHER);
+-    }
+-
+     JIT_UpdateWriteBarrierState(GCHeapUtilities::IsServerHeap());
+-
+-    if (!isRuntimeSuspended)
+-    {
+-        ThreadSuspend::RestartEE(FALSE, TRUE);
+-    }
+ }
+ 
+ #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ void SwitchToWriteWatchBarrier(bool isRuntimeSuspended)
+ {
+-    _ASSERTE(isRuntimeSuspended);
+-
+     JIT_UpdateWriteBarrierState(GCHeapUtilities::IsServerHeap());
+ }
+ 
+ void SwitchToNonWriteWatchBarrier(bool isRuntimeSuspended)
+ {
+-    _ASSERTE(isRuntimeSuspended);
+-
+     JIT_UpdateWriteBarrierState(GCHeapUtilities::IsServerHeap());
+ }
+ #endif // FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+-- 
+2.7.4
+
