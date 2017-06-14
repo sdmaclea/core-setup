@@ -1,0 +1,175 @@
+From 5a84aae4665101fa1eae16b51dc10085e2e251f8 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 14 Jun 2017 22:33:20 +0000
+Subject: [PATCH] Revise synchronization per comments
+
+---
+ src/vm/arm64/asmhelpers.S   | 15 ---------------
+ src/vm/arm64/asmhelpers.asm | 15 ---------------
+ src/vm/gcenv.ee.cpp         | 32 ++++++++++++--------------------
+ src/vm/gchelpers.cpp        |  4 ++--
+ src/vm/gchelpers.inl        |  2 +-
+ 5 files changed, 15 insertions(+), 53 deletions(-)
+
+diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
+index b4cfaf1..d793ddb 100644
+--- a/src/vm/arm64/asmhelpers.S
++++ b/src/vm/arm64/asmhelpers.S
+@@ -426,26 +426,11 @@ LOCAL_LABEL(EphemeralCheckEnabled):
+     // Update wbs state
+     adr  x12, LOCAL_LABEL(wbs_begin)
+ 
+-    // The following writes are guaranteed ordered since they are
+-    // in the same coherencency granule (no barrier required)
+-    //
+-    // The corresponding wbs_* reads above will also be ordered
+-    // for the same reasons.
+-    //
+-    // Assumes coherency granule is at least 64 bytes.  True on
+-    // known implementations
+     stp  x0, x1, [x12], 16
+     stp  x2, x3, [x12], 16
+     stp  x4, x5, [x12], 16
+     stp  x6, x7, [x12], 16
+ 
+-    // Force updated state to be visible to all threads
+-    //
+-    // This allows this function to run even when runtime is not suspended
+-    // and is lighter weight than FlushProcessWriteBuffers() which is
+-    // skipped for arm64
+-    dmb  ishst
+-
+     EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, 16
+     EPILOG_RETURN
+ 
+diff --git a/src/vm/arm64/asmhelpers.asm b/src/vm/arm64/asmhelpers.asm
+index 686c2d1..bafc53d 100644
+--- a/src/vm/arm64/asmhelpers.asm
++++ b/src/vm/arm64/asmhelpers.asm
+@@ -496,26 +496,11 @@ EphemeralCheckEnabled
+         ; Update wbs state
+         adr  x12, wbs_begin
+ 
+-        ; The following writes are guaranteed ordered since they are
+-        ; in the same coherencency granule (no barrier required)
+-        ;
+-        ; The corresponding wbs_* reads above will also be ordered
+-        ; for the same reasons.
+-        ;
+-        ; Assumes coherency granule is at least 64 bytes.  True on
+-        ; known implementations
+         stp  x0, x1, [x12], 16
+         stp  x2, x3, [x12], 16
+         stp  x4, x5, [x12], 16
+         stp  x6, x7, [x12], 16
+ 
+-        ; Force updated state to be visible to all threads
+-        ;
+-        ; This allows this function to run even when runtime is not suspended
+-        ; and is lighter weight than FlushProcessWriteBuffers() which is
+-        ; skipped for arm64
+-        dmb      ishst
+-
+         EPILOG_RESTORE_REG_PAIR fp, lr, 16
+         EPILOG_RETURN
+ 
+diff --git a/src/vm/gcenv.ee.cpp b/src/vm/gcenv.ee.cpp
+index e7afc6a..97a3cb3 100644
+--- a/src/vm/gcenv.ee.cpp
++++ b/src/vm/gcenv.ee.cpp
+@@ -868,12 +868,6 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
+         }
+ #endif // FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ 
+-#if defined(_ARM64_)
+-        g_lowest_address = args->lowest_address;
+-        VolatileStore(&g_highest_address, args->highest_address);
+-
+-        ::StompWriteBarrierResize(args->is_runtime_suspended, args->requires_upper_bounds_check);
+-#else
+         ::StompWriteBarrierResize(args->is_runtime_suspended, args->requires_upper_bounds_check);
+ 
+         // We need to make sure that other threads executing checked write barriers
+@@ -894,6 +888,16 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
+ 
+         g_lowest_address = args->lowest_address;
+         VolatileStore(&g_highest_address, args->highest_address);
++
++#if defined(_ARM64_)
++        // Need to reupdate for changes to g_highest_address g_lowest_address
++        ::StompWriteBarrierResize(args->is_runtime_suspended, args->requires_upper_bounds_check);
++
++        if(!args->is_runtime_suspended)
++        {
++            // If runtime is not suspended, force updated state to be visible to all threads
++            MemoryBarrier();
++        }
+ #endif
+         return;
+     case WriteBarrierOp::StompEphemeral:
+@@ -924,25 +928,13 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
+         g_card_bundle_table = args->card_bundle_table;
+ #endif
+ 
+-#if defined(_ARM64_)
+-        g_ephemeral_low = args->ephemeral_low;
+-        g_ephemeral_high = args->ephemeral_high;
+-        g_lowest_address = args->lowest_address;
+-        VolatileStore(&g_highest_address, args->highest_address);
+-
+-        ::StompWriteBarrierResize(true, false);
+-#else
+         FlushProcessWriteBuffers();
+         
++        g_ephemeral_low = args->ephemeral_low;
++        g_ephemeral_high = args->ephemeral_high;
+         g_lowest_address = args->lowest_address;
+         VolatileStore(&g_highest_address, args->highest_address);
+         ::StompWriteBarrierResize(true, false);
+-
+-        // g_ephemeral_low/high aren't needed for the write barrier stomp, but they
+-        // are needed in other places.
+-        g_ephemeral_low = args->ephemeral_low;
+-        g_ephemeral_high = args->ephemeral_high;
+-#endif
+         return;
+     case WriteBarrierOp::SwitchToWriteWatch:
+ #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+diff --git a/src/vm/gchelpers.cpp b/src/vm/gchelpers.cpp
+index c497fc0..9669f98 100644
+--- a/src/vm/gchelpers.cpp
++++ b/src/vm/gchelpers.cpp
+@@ -1339,7 +1339,7 @@ extern "C" HCIMPL2_RAW(VOID, JIT_CheckedWriteBarrier, Object **dst, Object *ref)
+ 
+     // if the dst is outside of the heap (unboxed value classes) then we
+     //      simply exit
+-    if (((BYTE*)dst < g_lowest_address) || ((BYTE*)dst >= VolatileLoad(&g_highest_address)))
++    if (((BYTE*)dst < g_lowest_address) || ((BYTE*)dst >= g_highest_address))
+         return;
+     
+ #ifdef FEATURE_COUNT_GC_WRITE_BARRIERS
+@@ -1477,7 +1477,7 @@ void ErectWriteBarrier(OBJECTREF *dst, OBJECTREF ref)
+ 
+     // if the dst is outside of the heap (unboxed value classes) then we
+     //      simply exit
+-    if (((BYTE*)dst < g_lowest_address) || ((BYTE*)dst >= VolatileLoad(&g_highest_address)))
++    if (((BYTE*)dst < g_lowest_address) || ((BYTE*)dst >= g_highest_address))
+         return;
+     
+ #ifdef WRITE_BARRIER_CHECK
+diff --git a/src/vm/gchelpers.inl b/src/vm/gchelpers.inl
+index 2e1bb9c..1b14077 100644
+--- a/src/vm/gchelpers.inl
++++ b/src/vm/gchelpers.inl
+@@ -35,7 +35,7 @@ FORCEINLINE void InlinedSetCardsAfterBulkCopyHelper(Object **start, size_t len)
+     // Check whether the writes were even into the heap. If not there's no card update required.
+     // Also if the size is smaller than a pointer, no write barrier is required.
+     _ASSERTE(len >= sizeof(uintptr_t));
+-    if ((BYTE*)start < g_lowest_address || (BYTE*)start >= VolatileLoad(&g_highest_address))
++    if ((BYTE*)start < g_lowest_address || (BYTE*)start >= g_highest_address)
+     {
+         return;
+     }
+-- 
+2.7.4
+
