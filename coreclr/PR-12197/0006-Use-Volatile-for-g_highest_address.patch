@@ -1,0 +1,75 @@
+From 7d129efcdda5da0f087311c7b31ae914eae61fb9 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 14 Jun 2017 20:23:16 +0000
+Subject: [PATCH] Use Volatile<> for g_highest_address
+
+---
+ src/vm/gcenv.ee.cpp  | 6 +++---
+ src/vm/gchelpers.cpp | 4 ++--
+ src/vm/gchelpers.inl | 2 +-
+ 3 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/vm/gcenv.ee.cpp b/src/vm/gcenv.ee.cpp
+index 4f62712..e7afc6a 100644
+--- a/src/vm/gcenv.ee.cpp
++++ b/src/vm/gcenv.ee.cpp
+@@ -870,7 +870,7 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
+ 
+ #if defined(_ARM64_)
+         g_lowest_address = args->lowest_address;
+-        g_highest_address = args->highest_address;
++        VolatileStore(&g_highest_address, args->highest_address);
+ 
+         ::StompWriteBarrierResize(args->is_runtime_suspended, args->requires_upper_bounds_check);
+ #else
+@@ -925,10 +925,10 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
+ #endif
+ 
+ #if defined(_ARM64_)
+-        g_lowest_address = args->lowest_address;
+-        g_highest_address = args->highest_address;
+         g_ephemeral_low = args->ephemeral_low;
+         g_ephemeral_high = args->ephemeral_high;
++        g_lowest_address = args->lowest_address;
++        VolatileStore(&g_highest_address, args->highest_address);
+ 
+         ::StompWriteBarrierResize(true, false);
+ #else
+diff --git a/src/vm/gchelpers.cpp b/src/vm/gchelpers.cpp
+index 9669f98..c497fc0 100644
+--- a/src/vm/gchelpers.cpp
++++ b/src/vm/gchelpers.cpp
+@@ -1339,7 +1339,7 @@ extern "C" HCIMPL2_RAW(VOID, JIT_CheckedWriteBarrier, Object **dst, Object *ref)
+ 
+     // if the dst is outside of the heap (unboxed value classes) then we
+     //      simply exit
+-    if (((BYTE*)dst < g_lowest_address) || ((BYTE*)dst >= g_highest_address))
++    if (((BYTE*)dst < g_lowest_address) || ((BYTE*)dst >= VolatileLoad(&g_highest_address)))
+         return;
+     
+ #ifdef FEATURE_COUNT_GC_WRITE_BARRIERS
+@@ -1477,7 +1477,7 @@ void ErectWriteBarrier(OBJECTREF *dst, OBJECTREF ref)
+ 
+     // if the dst is outside of the heap (unboxed value classes) then we
+     //      simply exit
+-    if (((BYTE*)dst < g_lowest_address) || ((BYTE*)dst >= g_highest_address))
++    if (((BYTE*)dst < g_lowest_address) || ((BYTE*)dst >= VolatileLoad(&g_highest_address)))
+         return;
+     
+ #ifdef WRITE_BARRIER_CHECK
+diff --git a/src/vm/gchelpers.inl b/src/vm/gchelpers.inl
+index 1b14077..2e1bb9c 100644
+--- a/src/vm/gchelpers.inl
++++ b/src/vm/gchelpers.inl
+@@ -35,7 +35,7 @@ FORCEINLINE void InlinedSetCardsAfterBulkCopyHelper(Object **start, size_t len)
+     // Check whether the writes were even into the heap. If not there's no card update required.
+     // Also if the size is smaller than a pointer, no write barrier is required.
+     _ASSERTE(len >= sizeof(uintptr_t));
+-    if ((BYTE*)start < g_lowest_address || (BYTE*)start >= g_highest_address)
++    if ((BYTE*)start < g_lowest_address || (BYTE*)start >= VolatileLoad(&g_highest_address))
+     {
+         return;
+     }
+-- 
+2.7.4
+
