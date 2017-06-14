@@ -1,0 +1,121 @@
+From c4586c19c4f94a98b62c3feb2bf61a5ca58a56d4 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 13 Jun 2017 19:43:08 +0000
+Subject: [PATCH] [Arm64/Unix] Use sys membarrier
+
+---
+ cross/arm64/tryrun.cmake       |  4 ++++
+ src/pal/src/config.h.in        |  1 +
+ src/pal/src/configure.cmake    | 16 ++++++++++++++++
+ src/pal/src/thread/process.cpp | 16 ++++++++++++++++
+ 4 files changed, 37 insertions(+)
+
+diff --git a/cross/arm64/tryrun.cmake b/cross/arm64/tryrun.cmake
+index 6626fe1..5dc1e84 100644
+--- a/cross/arm64/tryrun.cmake
++++ b/cross/arm64/tryrun.cmake
+@@ -121,3 +121,7 @@ SET( HAVE_PROCFS_STAT_EXITCODE
+ SET( HAVE_PROCFS_STATUS_EXITCODE
+      0
+      CACHE STRING "Result from TRY_RUN" FORCE)
++
++SET( HAVE_SYS_MEMBARRIER_EXITCODE
++     0
++     CACHE STRING "Result from TRY_RUN" FORCE)
+diff --git a/src/pal/src/config.h.in b/src/pal/src/config.h.in
+index 03513a1..c4ce47b 100644
+--- a/src/pal/src/config.h.in
++++ b/src/pal/src/config.h.in
+@@ -91,6 +91,7 @@
+ #cmakedefine01 HAVE__SC_PHYS_PAGES
+ #cmakedefine01 HAVE__SC_AVPHYS_PAGES
+ 
++#cmakedefine01 HAVE_SYS_MEMBARRIER
+ #cmakedefine01 REALPATH_SUPPORTS_NONEXISTENT_FILES
+ #cmakedefine01 SSCANF_CANNOT_HANDLE_MISSING_EXPONENT
+ #cmakedefine01 SSCANF_SUPPORT_ll
+diff --git a/src/pal/src/configure.cmake b/src/pal/src/configure.cmake
+index d305081..8691c6d 100644
+--- a/src/pal/src/configure.cmake
++++ b/src/pal/src/configure.cmake
+@@ -167,6 +167,22 @@ check_cxx_symbol_exists(_SC_PHYS_PAGES unistd.h HAVE__SC_PHYS_PAGES)
+ check_cxx_symbol_exists(_SC_AVPHYS_PAGES unistd.h HAVE__SC_AVPHYS_PAGES)
+ 
+ check_cxx_source_runs("
++  #include <unistd.h>
++  #include <sys/syscall.h>
++  #include <linux/membarrier.h>
++
++  int main()
++  {
++    int result = syscall(__NR_membarrier, MEMBARRIER_CMD_QUERY, 0);
++
++    if ((result >= 0) && (result & MEMBARRIER_CMD_SHARED))
++      return 0;
++
++    return 1;
++  }" HAVE_SYS_MEMBARRIER)
++  set(CMAKE_REQUIRED_LIBRARIES)
++
++check_cxx_source_runs("
+ #include <uuid.h>
+ 
+ int main(void) {
+diff --git a/src/pal/src/thread/process.cpp b/src/pal/src/thread/process.cpp
+index 6db9bf6..08c6785 100644
+--- a/src/pal/src/thread/process.cpp
++++ b/src/pal/src/thread/process.cpp
+@@ -72,6 +72,10 @@ SET_DEFAULT_DEBUG_CHANNEL(PROCESS); // some headers have code with asserts, so d
+ #include <kvm.h>
+ #endif
+ 
++#ifdef HAVE_SYS_MEMBARRIER
++#include <linux/membarrier.h>
++#endif
++
+ extern char *g_szCoreCLRPath;
+ 
+ using namespace CorUnix;
+@@ -3035,6 +3039,11 @@ Return
+ BOOL 
+ InitializeFlushProcessWriteBuffers()
+ {
++#if HAVE_SYS_MEMBARRIER && defined(_ARM64_)
++    int status = syscall(__NR_membarrier, MEMBARRIER_CMD_QUERY, 0);
++
++    return (status >= 0) && (status & MEMBARRIER_CMD_SHARED);
++#else
+     // Verify that the s_helperPage is really aligned to the VIRTUAL_PAGE_SIZE
+     _ASSERTE((((SIZE_T)s_helperPage) & (VIRTUAL_PAGE_SIZE - 1)) == 0);
+ 
+@@ -3055,6 +3064,7 @@ InitializeFlushProcessWriteBuffers()
+     }
+ 
+     return status == 0;
++#endif
+ }
+ 
+ #define FATAL_ASSERT(e, msg) \
+@@ -3078,6 +3088,11 @@ VOID
+ PALAPI 
+ FlushProcessWriteBuffers()
+ {   
++#if HAVE_SYS_MEMBARRIER && defined(_ARM64_)
++    int status = syscall(__NR_membarrier, MEMBARRIER_CMD_SHARED, 0);
++
++    FATAL_ASSERT(status == 0, "syscall(__NR_membarrier, MEMBARRIER_CMD_SHARED, 0) nonzero result");
++#else
+     int status = pthread_mutex_lock(&flushProcessWriteBuffersMutex);
+     FATAL_ASSERT(status == 0, "Failed to lock the flushProcessWriteBuffersMutex lock");
+ 
+@@ -3096,6 +3111,7 @@ FlushProcessWriteBuffers()
+ 
+     status = pthread_mutex_unlock(&flushProcessWriteBuffersMutex);
+     FATAL_ASSERT(status == 0, "Failed to unlock the flushProcessWriteBuffersMutex lock");
++#endif
+ }
+ 
+ /*++
+-- 
+2.7.4
+

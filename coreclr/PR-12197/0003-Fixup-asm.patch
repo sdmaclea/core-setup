@@ -1,0 +1,27 @@
+From e85d29ec48422a20db0bd16b63b2ed65ebb29ae3 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 13 Jun 2017 19:44:35 +0000
+Subject: [PATCH] Fixup asm
+
+---
+ src/vm/arm64/asmhelpers.asm | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/vm/arm64/asmhelpers.asm b/src/vm/arm64/asmhelpers.asm
+index 0a7d0a6..292943e 100644
+--- a/src/vm/arm64/asmhelpers.asm
++++ b/src/vm/arm64/asmhelpers.asm
+@@ -430,8 +430,8 @@ Exit
+         ldr      x1, [x12, g_highest_address]
+ 
+ #ifdef WRITE_BARRIER_CHECK
+-        adrp     x12, g_GCShadow
+-        ldr      x2, [x12, g_GCShadow]
++        adrp     x12, $g_GCShadow
++        ldr      x2, [x12, $g_GCShadow]
+ #else
+         mov      x2, xzr
+ #endif
+-- 
+2.7.4
+
