@@ -1,0 +1,24 @@
+From b5774692e2ee3c815fc14e4e8da559a58587b98d Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 15 Jun 2017 15:52:15 +0000
+Subject: [PATCH] Add sdmaclea to arm64Users
+
+---
+ netci.groovy | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/netci.groovy b/netci.groovy
+index 5b583c5..9df7e63 100755
+--- a/netci.groovy
++++ b/netci.groovy
+@@ -1110,6 +1110,7 @@ def static addTriggers(def job, def branch, def isPR, def architecture, def os,
+                 'russellhadley',
+                 'RussKeldorph',
+                 'sandreenko',
++                'sdmaclea',
+                 'sivarv',
+                 'swaroop-sridhar',
+                 'gkhanna79',
+-- 
+2.7.4
+
