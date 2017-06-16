@@ -1,0 +1,693 @@
+From 5cb8028dfe6dfdcdcb267679528b8237e248de17 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 16 Jun 2017 15:56:35 +0000
+Subject: [PATCH] [Arm64] Optimize JIT_WriteBarriers
+
+Fixes #5833
+Fixes #11374
+Fixes #12197
+---
+ src/vm/arm64/asmhelpers.S   | 176 +++++++++++++++++++++++++++-----------
+ src/vm/arm64/asmhelpers.asm | 201 +++++++++++++++++++++++++++++++++++---------
+ src/vm/arm64/stubs.cpp      |  17 ++--
+ src/vm/gcenv.ee.cpp         |  21 +++--
+ 4 files changed, 316 insertions(+), 99 deletions(-)
+
+diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
+index 2e1d029..8e5875e 100644
+--- a/src/vm/arm64/asmhelpers.S
++++ b/src/vm/arm64/asmhelpers.S
+@@ -207,6 +207,106 @@ LEAF_END ThePreStubPatch, _TEXT
+     LEAF_END_MARKED \name, _TEXT
+ .endmacro
+ 
++// ------------------------------------------------------------------
++// Start of the writeable code region
++LEAF_ENTRY JIT_PatchedCodeStart, _TEXT
++    ret  lr
++LEAF_END JIT_PatchedCodeStart, _TEXT
++
++// void JIT_UpdateWriteBarrierState(bool skipEphemeralCheck)
++//
++// Update shadow copies of the various state info required for barrier
++//
++// State info is contained in a literal pool at the end of the function
++// Placed in text section so that it is close enough to use ldr literal and still
++// be relocatable. Eliminates need for PREPARE_EXTERNAL_VAR in hot code.
++//
++// Align and group state info together so it fits in a single cache line
++// and each entry can be written atomically
++//
++WRITE_BARRIER_ENTRY JIT_UpdateWriteBarrierState
++    PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, -16
++
++    // x0-x7 will contain intended new state
++    // x8 will preserve skipEphemeralCheck
++    // x12 will be used for pointers
++
++    mov x8, x0
++
++    PREPARE_EXTERNAL_VAR g_card_table, x12
++    ldr  x0, [x12]
++
++#ifdef FEATURE_MANUALLY_MANAGED_CARD_BUNDLES
++    PREPARE_EXTERNAL_VAR g_card_bundle_table, x12
++    ldr  x1, [x12]
++#endif
++
++#ifdef WRITE_BARRIER_CHECK
++    PREPARE_EXTERNAL_VAR g_GCShadow, x12
++    ldr  x2, [x12]
++#endif
++
++#ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
++    PREPARE_EXTERNAL_VAR g_sw_ww_table, x12
++    ldr  x3, [x12]
++#endif
++
++    PREPARE_EXTERNAL_VAR g_ephemeral_low, x12
++    ldr  x4, [x12]
++
++    PREPARE_EXTERNAL_VAR g_ephemeral_high, x12
++    ldr  x5, [x12]
++
++    cbz  x8, LOCAL_LABEL(EphemeralCheckEnabled)
++    movz x4, #0
++    movn x5, #0
++LOCAL_LABEL(EphemeralCheckEnabled):
++
++    PREPARE_EXTERNAL_VAR g_lowest_address, x12
++    ldr  x6, [x12]
++
++    PREPARE_EXTERNAL_VAR g_highest_address, x12
++    ldr  x7, [x12]
++
++    // Update wbs state
++    adr  x12, LOCAL_LABEL(wbs_begin)
++
++    stp  x0, x1, [x12], 16
++    stp  x2, x3, [x12], 16
++    stp  x4, x5, [x12], 16
++    stp  x6, x7, [x12], 16
++
++    EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, 16
++    EPILOG_RETURN
++
++    // Begin patchable literal pool
++    .balign 64  // Align to power of two at least as big as patchable literal pool so that it fits optimally in cache line
++LOCAL_LABEL(wbs_begin):
++LOCAL_LABEL(wbs_card_table):
++    .quad 0
++LOCAL_LABEL(wbs_card_bundle_table):
++    .quad 0
++LOCAL_LABEL(wbs_GCShadow):
++    .quad 0
++LOCAL_LABEL(wbs_sw_ww_table):
++    .quad 0
++LOCAL_LABEL(wbs_ephemeral_low):
++    .quad 0
++LOCAL_LABEL(wbs_ephemeral_high):
++    .quad 0
++LOCAL_LABEL(wbs_lowest_address):
++    .quad 0
++LOCAL_LABEL(wbs_highest_address):
++    .quad 0
++WRITE_BARRIER_END JIT_UpdateWriteBarrierState
++
++
++// ------------------------------------------------------------------
++// End of the writeable code region
++LEAF_ENTRY JIT_PatchedCodeLast, _TEXT
++    ret  lr
++LEAF_END JIT_PatchedCodeLast, _TEXT
++
+ // void JIT_ByRefWriteBarrier
+ // On entry:
+ //   x13  : the source address (points to object reference to write)
+@@ -235,19 +335,16 @@ WRITE_BARRIER_END JIT_ByRefWriteBarrier
+ //
+ // On exit:
+ //   x12  : trashed
+-//   x14  : incremented by 8
++//   x14  : trashed (incremented by 8 to implement JIT_ByRefWriteBarrier contract)
+ //   x15  : trashed
+ //   x17  : trashed (ip1) if FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ //
+ WRITE_BARRIER_ENTRY JIT_CheckedWriteBarrier
+-    PREPARE_EXTERNAL_VAR g_lowest_address, x12
+-    ldr  x12,  [x12]
++    ldr  x12,  LOCAL_LABEL(wbs_lowest_address)
+     cmp  x14,  x12
+-    blt  LOCAL_LABEL(NotInHeap)
+ 
+-    PREPARE_EXTERNAL_VAR g_highest_address, x12
+-    ldr  x12, [x12] 
+-    cmp  x14, x12
++    ldr  x12, LOCAL_LABEL(wbs_highest_address)
++    ccmp x14, x12, #0x0, ge
+     blt  C_FUNC(JIT_WriteBarrier)
+ 
+ LOCAL_LABEL(NotInHeap):
+@@ -262,7 +359,7 @@ WRITE_BARRIER_END JIT_CheckedWriteBarrier
+ //
+ // On exit:
+ //   x12  : trashed
+-//   x14  : incremented by 8
++//   x14  : trashed (incremented by 8 to implement JIT_ByRefWriteBarrier contract)
+ //   x15  : trashed
+ //   x17  : trashed (ip1) if FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ //
+@@ -272,23 +369,24 @@ WRITE_BARRIER_ENTRY JIT_WriteBarrier
+ #ifdef WRITE_BARRIER_CHECK
+     // Update GC Shadow Heap
+ 
+-    // need temporary registers. Save them before using.
+-    stp  x12, x13, [sp, #-16]!
++    // Do not perform the work if g_GCShadow is 0
++    ldr  x12, LOCAL_LABEL(wbs_GCShadow)
++    cbz  x12, LOCAL_LABEL(ShadowUpdateDisabled)
++
++    // need temporary register. Save before using.
++    str  x13, [sp, #-16]!
+ 
+     // Compute address of shadow heap location:
+     //   pShadow = g_GCShadow + (x14 - g_lowest_address)
+-    PREPARE_EXTERNAL_VAR g_lowest_address, x12
+-    ldr  x12, [x12]
+-    sub  x12, x14, x12
+-    PREPARE_EXTERNAL_VAR g_GCShadow, x13
+-    ldr  x13, [x13]
++    ldr  x13, LOCAL_LABEL(wbs_lowest_address)
++    sub  x13, x14, x13
+     add  x12, x13, x12
+ 
+     // if (pShadow >= g_GCShadowEnd) goto end
+     PREPARE_EXTERNAL_VAR g_GCShadowEnd, x13
+     ldr  x13, [x13]
+     cmp  x12, x13
+-    bhs  LOCAL_LABEL(shadowupdateend)
++    bhs  LOCAL_LABEL(ShadowUpdateEnd)
+ 
+     // *pShadow = x15
+     str  x15, [x12]
+@@ -300,25 +398,22 @@ WRITE_BARRIER_ENTRY JIT_WriteBarrier
+     // if ([x14] == x15) goto end
+     ldr  x13, [x14]
+     cmp  x13, x15
+-    beq LOCAL_LABEL(shadowupdateend)
++    beq LOCAL_LABEL(ShadowUpdateEnd)
+ 
+     // *pShadow = INVALIDGCVALUE (0xcccccccd)
+-    mov  x13, #0
+-    movk x13, #0xcccd
++    movz x13, #0xcccd
+     movk x13, #0xcccc, LSL #16
+     str  x13, [x12]
+ 
+-LOCAL_LABEL(shadowupdateend):
+-    ldp  x12, x13, [sp],#16
++LOCAL_LABEL(ShadowUpdateEnd):
++    ldr  x13, [sp], #16
++LOCAL_LABEL(ShadowUpdateDisabled):
+ #endif
+ 
+ #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+     // Update the write watch table if necessary
+-    PREPARE_EXTERNAL_VAR g_sw_ww_enabled_for_gc_heap, x12
+-    ldrb w12, [x12]
++    ldr  x12, LOCAL_LABEL(wbs_sw_ww_table)
+     cbz  x12, LOCAL_LABEL(CheckCardTable)
+-    PREPARE_EXTERNAL_VAR g_sw_ww_table, x12
+-    ldr  x12, [x12]
+     add  x12, x12, x14, lsr #0xc  // SoftwareWriteWatch::AddressToTableByteIndexShift
+     ldrb w17, [x12]
+     cbnz x17, LOCAL_LABEL(CheckCardTable)
+@@ -329,19 +424,17 @@ LOCAL_LABEL(shadowupdateend):
+ LOCAL_LABEL(CheckCardTable):
+     // Branch to Exit if the reference is not in the Gen0 heap
+     //
+-    PREPARE_EXTERNAL_VAR g_ephemeral_low, x12
+-    ldr  x12,  [x12]
++    ldr  x12, LOCAL_LABEL(wbs_ephemeral_low)
++    cbz  x12, LOCAL_LABEL(SkipEphemeralCheck)
+     cmp  x15,  x12
+-    blt  LOCAL_LABEL(Exit)
+ 
+-    PREPARE_EXTERNAL_VAR g_ephemeral_high, x12
+-    ldr  x12, [x12]
+-    cmp  x15,  x12
++    ldr  x12, LOCAL_LABEL(wbs_ephemeral_high)
++    ccmp x15, x12, 0x0, ge
+     bgt  LOCAL_LABEL(Exit)
+ 
++LOCAL_LABEL(SkipEphemeralCheck):
+     // Check if we need to update the card table
+-    PREPARE_EXTERNAL_VAR g_card_table, x12
+-    ldr  x12, [x12]
++    ldr  x12, LOCAL_LABEL(wbs_card_table)
+     add  x15, x12, x14, lsr #11
+     ldrb w12, [x15]
+     cmp  x12, 0xFF
+@@ -352,9 +445,8 @@ LOCAL_LABEL(UpdateCardTable):
+     strb w12, [x15]
+ 
+ #ifdef FEATURE_MANUALLY_MANAGED_CARD_BUNDLES
+-    // Check if we need to update the card table
+-    PREPARE_EXTERNAL_VAR g_card_bundle_table, x12
+-    ldr  x12, [x12]
++    // Check if we need to update the card bundle table
++    ldr  x12, LOCAL_LABEL(wbs_card_bundle_table)
+     add  x15, x12, x14, lsr #21
+     ldrb w12, [x15]
+     cmp  x12, 0xFF
+@@ -370,18 +462,6 @@ LOCAL_LABEL(Exit):
+     ret  lr  
+ WRITE_BARRIER_END JIT_WriteBarrier
+ 
+-// ------------------------------------------------------------------
+-// Start of the writeable code region
+-LEAF_ENTRY JIT_PatchedCodeStart, _TEXT
+-    ret  lr
+-LEAF_END JIT_PatchedCodeStart, _TEXT
+-
+-// ------------------------------------------------------------------
+-// End of the writeable code region
+-LEAF_ENTRY JIT_PatchedCodeLast, _TEXT
+-    ret  lr
+-LEAF_END JIT_PatchedCodeLast, _TEXT
+-
+ //------------------------------------------------
+ // VirtualMethodFixupStub
+ //
+diff --git a/src/vm/arm64/asmhelpers.asm b/src/vm/arm64/asmhelpers.asm
+index 8da2151..7732c07 100644
+--- a/src/vm/arm64/asmhelpers.asm
++++ b/src/vm/arm64/asmhelpers.asm
+@@ -52,6 +52,14 @@
+     IMPORT $g_GCShadowEnd
+ #endif // WRITE_BARRIER_CHECK
+ 
++#ifdef FEATURE_MANUALLY_MANAGED_CARD_BUNDLES
++    IMPORT g_card_bundle_table
++#endif
++
++#ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
++    IMPORT g_sw_ww_table
++#endif
++
+     IMPORT JIT_GetSharedNonGCStaticBase_Helper
+     IMPORT JIT_GetSharedGCStaticBase_Helper
+ 
+@@ -269,6 +277,106 @@ ThePreStubPatchLabel
+ 
+     MEND
+ 
++; ------------------------------------------------------------------
++; Start of the writeable code region
++    LEAF_ENTRY JIT_PatchedCodeStart
++        ret      lr
++    LEAF_END
++
++; void JIT_UpdateWriteBarrierState(bool skipEphemeralCheck)
++;
++; Update shadow copies of the various state info required for barrier
++;
++; State info is contained in a literal pool at the end of the function
++; Placed in text section so that it is close enough to use ldr literal and still
++; be relocatable. Eliminates need for PREPARE_EXTERNAL_VAR in hot code.
++;
++; Align and group state info together so it fits in a single cache line
++; and each entry can be written atomically
++;
++    WRITE_BARRIER_ENTRY JIT_UpdateWriteBarrierState
++        PROLOG_SAVE_REG_PAIR   fp, lr, #-16!
++
++        ; x0-x7 will contain intended new state
++        ; x8 will preserve skipEphemeralCheck
++        ; x12 will be used for pointers
++
++        mov      x8, x0
++
++        adrp     x12, g_card_table
++        ldr      x0, [x12, g_card_table]
++
++#ifdef FEATURE_MANUALLY_MANAGED_CARD_BUNDLES
++        adrp     x12, g_card_bundle_table
++        ldr      x1, [x12, g_card_bundle_table]
++#endif
++
++#ifdef WRITE_BARRIER_CHECK
++        adrp     x12, $g_GCShadow
++        ldr      x2, [x12, $g_GCShadow]
++#endif
++
++#ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
++        adrp     x12, g_sw_ww_table
++        ldr      x3, [x12, g_sw_ww_table]
++#endif
++
++        adrp     x12, g_ephemeral_low
++        ldr      x4, [x12, g_ephemeral_low]
++
++        adrp     x12, g_ephemeral_high
++        ldr      x5, [x12, g_ephemeral_high]
++
++        cbz      x8, EphemeralCheckEnabled
++        movz     x4, #0
++        movn     x5, #0
++EphemeralCheckEnabled
++
++        adrp     x12, g_lowest_address
++        ldr      x6, [x12, g_lowest_address]
++
++        adrp     x12, g_highest_address
++        ldr      x7, [x12, g_highest_address]
++
++        ; Update wbs state
++        adr  x12, wbs_begin
++
++        stp  x0, x1, [x12], 16
++        stp  x2, x3, [x12], 16
++        stp  x4, x5, [x12], 16
++        stp  x6, x7, [x12], 16
++
++        EPILOG_RESTORE_REG_PAIR fp, lr, 16
++        EPILOG_RETURN
++
++        ; Begin patchable literal pool
++        ALIGN 64  ; Align to power of two at least as big as patchable literal pool so that it fits optimally in cache line
++wbs_begin
++wbs_card_table
++        DCQ 0
++wbs_card_bundle_table
++        DCQ 0
++wbs_GCShadow
++        DCQ 0
++wbs_sw_ww_table
++        DCQ 0
++wbs_ephemeral_low
++        DCQ 0
++wbs_ephemeral_high
++        DCQ 0
++wbs_lowest_address
++        DCQ 0
++wbs_highest_address
++        DCQ 0
++    WRITE_BARRIER_END JIT_UpdateWriteBarrierState
++
++
++; ------------------------------------------------------------------
++; End of the writeable code region
++    LEAF_ENTRY JIT_PatchedCodeLast
++        ret      lr
++    LEAF_END
++
+ ; void JIT_ByRefWriteBarrier
+ ; On entry:
+ ;   x13  : the source address (points to object reference to write)
+@@ -279,6 +387,7 @@ ThePreStubPatchLabel
+ ;   x13  : incremented by 8
+ ;   x14  : incremented by 8
+ ;   x15  : trashed
++;   x17  : trashed (ip1) if FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ ;
+     WRITE_BARRIER_ENTRY JIT_ByRefWriteBarrier
+ 
+@@ -298,16 +407,14 @@ ThePreStubPatchLabel
+ ;   x12  : trashed
+ ;   x14  : incremented by 8
+ ;   x15  : trashed
++;   x17  : trashed (ip1) if FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ ;
+     WRITE_BARRIER_ENTRY JIT_CheckedWriteBarrier
+-        adrp     x12,  g_lowest_address
+-        ldr      x12,  [x12, g_lowest_address]
++        ldr      x12,  wbs_lowest_address
+         cmp      x14,  x12
+-        blt      NotInHeap
+ 
+-        adrp      x12, g_highest_address 
+-        ldr      x12, [x12, g_highest_address] 
+-        cmp      x14, x12
++        ldr      x12, wbs_highest_address
++        ccmpge   x14, x12, #0x0
+         blt      JIT_WriteBarrier
+ 
+ NotInHeap
+@@ -324,6 +431,7 @@ NotInHeap
+ ;   x12  : trashed
+ ;   x14  : incremented by 8
+ ;   x15  : trashed
++;   x17  : trashed (ip1) if FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ ;
+     WRITE_BARRIER_ENTRY JIT_WriteBarrier
+         stlr     x15, [x14]
+@@ -331,23 +439,24 @@ NotInHeap
+ #ifdef WRITE_BARRIER_CHECK
+         ; Update GC Shadow Heap  
+ 
+-        ; need temporary registers. Save them before using. 
+-        stp      x12, x13, [sp, #-16]!
++        ; Do not perform the work if g_GCShadow is 0
++        ldr      x12, wbs_GCShadow
++        cbz      x12, ShadowUpdateDisabled
++
++        ; need temporary register. Save before using.
++        str      x13, [sp, #-16]!
+ 
+         ; Compute address of shadow heap location:
+         ;   pShadow = $g_GCShadow + (x14 - g_lowest_address)
+-        adrp     x12, g_lowest_address
+-        ldr      x12, [x12, g_lowest_address]
+-        sub      x12, x14, x12
+-        adrp     x13, $g_GCShadow
+-        ldr      x13, [x13, $g_GCShadow]
++        ldr      x13, wbs_lowest_address
++        sub      x13, x14, x13
+         add      x12, x13, x12
+ 
+         ; if (pShadow >= $g_GCShadowEnd) goto end
+         adrp     x13, $g_GCShadowEnd
+         ldr      x13, [x13, $g_GCShadowEnd]
+         cmp      x12, x13
+-        bhs      shadowupdateend
++        bhs      ShadowUpdateEnd
+ 
+         ; *pShadow = x15
+         str      x15, [x12]
+@@ -359,34 +468,44 @@ NotInHeap
+         ; if ([x14] == x15) goto end
+         ldr      x13, [x14]
+         cmp      x13, x15
+-        beq shadowupdateend
++        beq      ShadowUpdateEnd
+ 
+         ; *pShadow = INVALIDGCVALUE (0xcccccccd)        
+-        mov      x13, #0
+-        movk     x13, #0xcccd
++        movz     x13, #0xcccd
+         movk     x13, #0xcccc, LSL #16
+         str      x13, [x12]
+ 
+-shadowupdateend
+-        ldp      x12, x13, [sp],#16        
++ShadowUpdateEnd
++        ldr      x13, [sp], #16
++ShadowUpdateDisabled
++#endif
++
++#ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
++        ; Update the write watch table if necessary
++        ldr      x12, wbs_sw_ww_table
++        cbz      x12, CheckCardTable
++        add      x12, x12, x14, lsr #0xc  ; SoftwareWriteWatch::AddressToTableByteIndexShift
++        ldrb     w17, [x12]
++        cbnz     x17, CheckCardTable
++        mov      w17, #0xFF
++        strb     w17, [x12]
+ #endif
+ 
++CheckCardTable
+         ; Branch to Exit if the reference is not in the Gen0 heap
+         ;
+-        adrp     x12,  g_ephemeral_low
+-        ldr      x12,  [x12, g_ephemeral_low]
++        ldr      x12,  wbs_ephemeral_low
++        cbz      x12,  SkipEphemeralCheck
+         cmp      x15,  x12
+-        blt      Exit
+ 
+-        adrp     x12, g_ephemeral_high 
+-        ldr      x12, [x12, g_ephemeral_high]
+-        cmp      x15,  x12
++        ldr      x12,  wbs_ephemeral_high
++        ccmpge   x15,  x12, #0x0
+         bgt      Exit
+ 
++SkipEphemeralCheck
+         ; Check if we need to update the card table        
+-        adrp     x12, g_card_table
+-        ldr      x12, [x12, g_card_table]
+-        add      x15,  x12, x14 lsr #11
++        ldr      x12, wbs_card_table
++        add      x15, x12, x14, lsr #11
+         ldrb     w12, [x15]
+         cmp      x12, 0xFF
+         beq      Exit
+@@ -394,23 +513,25 @@ shadowupdateend
+ UpdateCardTable
+         mov      x12, 0xFF 
+         strb     w12, [x15]
++
++#ifdef FEATURE_MANUALLY_MANAGED_CARD_BUNDLES
++        ; Check if we need to update the card bundle table
++        ldr      x12, wbs_card_bundle_table
++        add      x15, x12, x14, lsr #21
++        ldrb     w12, [x15]
++        cmp      x12, 0xFF
++        beq      Exit
++
++UpdateCardBundle
++        mov      x12, 0xFF
++        strb     w12, [x15]
++#endif
++
+ Exit
+         add      x14, x14, 8
+         ret      lr          
+     WRITE_BARRIER_END JIT_WriteBarrier
+ 
+-; ------------------------------------------------------------------
+-; Start of the writeable code region
+-    LEAF_ENTRY JIT_PatchedCodeStart
+-        ret      lr
+-    LEAF_END
+-
+-; ------------------------------------------------------------------
+-; End of the writeable code region
+-    LEAF_ENTRY JIT_PatchedCodeLast
+-        ret      lr
+-    LEAF_END
+-
+ ;------------------------------------------------
+ ; VirtualMethodFixupStub
+ ;
+diff --git a/src/vm/arm64/stubs.cpp b/src/vm/arm64/stubs.cpp
+index 40d2749..d1689ea 100644
+--- a/src/vm/arm64/stubs.cpp
++++ b/src/vm/arm64/stubs.cpp
+@@ -19,6 +19,8 @@ EXTERN_C void JIT_GetSharedNonGCStaticBase_SingleAppDomain();
+ EXTERN_C void JIT_GetSharedNonGCStaticBaseNoCtor_SingleAppDomain();
+ EXTERN_C void JIT_GetSharedGCStaticBase_SingleAppDomain();
+ EXTERN_C void JIT_GetSharedGCStaticBaseNoCtor_SingleAppDomain();
++EXTERN_C void JIT_UpdateWriteBarrierState(bool skipEphemeralCheck);
++
+ 
+ #ifndef DACCESS_COMPILE
+ //-----------------------------------------------------------------------
+@@ -1093,7 +1095,11 @@ void InitJITHelpers1()
+         SetJitHelperFunction(CORINFO_HELP_GETSHARED_GCSTATIC_BASE_NOCTOR,   JIT_GetSharedGCStaticBaseNoCtor_SingleAppDomain);
+         SetJitHelperFunction(CORINFO_HELP_GETSHARED_NONGCSTATIC_BASE_NOCTOR,JIT_GetSharedNonGCStaticBaseNoCtor_SingleAppDomain);
+     }
++
++    JIT_UpdateWriteBarrierState(GCHeapUtilities::IsServerHeap());
+ }
++#else
++EXTERN_C void JIT_UpdateWriteBarrierState(bool) {}
+ #endif // !defined(DACCESS_COMPILE) && !defined(CROSSGEN_COMPILE)
+ 
+ EXTERN_C void __stdcall ProfileEnterNaked(UINT_PTR clientData)
+@@ -1307,28 +1313,29 @@ LONG CLRNoCatchHandler(EXCEPTION_POINTERS* pExceptionInfo, PVOID pv)
+     return EXCEPTION_CONTINUE_SEARCH;
+ }
+ 
++#ifndef CROSSGEN_COMPILE
+ void StompWriteBarrierEphemeral(bool isRuntimeSuspended)
+ {
+-    return;
++    JIT_UpdateWriteBarrierState(GCHeapUtilities::IsServerHeap());
+ }
+ 
+ void StompWriteBarrierResize(bool isRuntimeSuspended, bool bReqUpperBoundsCheck)
+ {
+-    return;
++    JIT_UpdateWriteBarrierState(GCHeapUtilities::IsServerHeap());
+ }
+ 
+ #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ void SwitchToWriteWatchBarrier(bool isRuntimeSuspended)
+ {
+-    return;
++    JIT_UpdateWriteBarrierState(GCHeapUtilities::IsServerHeap());
+ }
+ 
+ void SwitchToNonWriteWatchBarrier(bool isRuntimeSuspended)
+ {
+-    return;
++    JIT_UpdateWriteBarrierState(GCHeapUtilities::IsServerHeap());
+ }
+ #endif // FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+-
++#endif // CROSSGEN_COMPILE
+ 
+ #ifdef DACCESS_COMPILE
+ BOOL GetAnyThunkTarget (T_CONTEXT *pctx, TADDR *pTarget, TADDR *pTargetMethodDesc)
+diff --git a/src/vm/gcenv.ee.cpp b/src/vm/gcenv.ee.cpp
+index 55b1a96..97a3cb3 100644
+--- a/src/vm/gcenv.ee.cpp
++++ b/src/vm/gcenv.ee.cpp
+@@ -861,7 +861,7 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
+ #endif
+ 
+ #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+-        if (args->write_watch_table != nullptr)
++        if (g_sw_ww_enabled_for_gc_heap && (args->write_watch_table != nullptr))
+         {
+             assert(args->is_runtime_suspended);
+             g_sw_ww_table = args->write_watch_table;
+@@ -888,6 +888,17 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
+ 
+         g_lowest_address = args->lowest_address;
+         VolatileStore(&g_highest_address, args->highest_address);
++
++#if defined(_ARM64_)
++        // Need to reupdate for changes to g_highest_address g_lowest_address
++        ::StompWriteBarrierResize(args->is_runtime_suspended, args->requires_upper_bounds_check);
++
++        if(!args->is_runtime_suspended)
++        {
++            // If runtime is not suspended, force updated state to be visible to all threads
++            MemoryBarrier();
++        }
++#endif
+         return;
+     case WriteBarrierOp::StompEphemeral:
+         // StompEphemeral requires a new ephemeral low and a new ephemeral high
+@@ -919,14 +930,11 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
+ 
+         FlushProcessWriteBuffers();
+         
++        g_ephemeral_low = args->ephemeral_low;
++        g_ephemeral_high = args->ephemeral_high;
+         g_lowest_address = args->lowest_address;
+         VolatileStore(&g_highest_address, args->highest_address);
+         ::StompWriteBarrierResize(true, false);
+-
+-        // g_ephemeral_low/high aren't needed for the write barrier stomp, but they
+-        // are needed in other places.
+-        g_ephemeral_low = args->ephemeral_low;
+-        g_ephemeral_high = args->ephemeral_high;
+         return;
+     case WriteBarrierOp::SwitchToWriteWatch:
+ #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+@@ -942,6 +950,7 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
+     case WriteBarrierOp::SwitchToNonWriteWatch:
+ #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+         assert(args->is_runtime_suspended && "the runtime must be suspended here!");
++        g_sw_ww_table = 0;
+         g_sw_ww_enabled_for_gc_heap = false;
+         ::SwitchToNonWriteWatchBarrier(true);
+ #else
+-- 
+2.7.4
+
