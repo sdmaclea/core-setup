@@ -1,0 +1,26 @@
+From 6c9e6727e3148b86399c1ee12a25be94a5857cc6 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 19 Jun 2017 20:37:41 +0000
+Subject: [PATCH] [Arm64/Unix] Add OfficialBuildRID linux-arm64
+
+---
+ pkg/Microsoft.Private.CoreFx.NETCoreApp/netcoreapp.rids.props | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/pkg/Microsoft.Private.CoreFx.NETCoreApp/netcoreapp.rids.props b/pkg/Microsoft.Private.CoreFx.NETCoreApp/netcoreapp.rids.props
+index 6269203..2f20d12 100644
+--- a/pkg/Microsoft.Private.CoreFx.NETCoreApp/netcoreapp.rids.props
++++ b/pkg/Microsoft.Private.CoreFx.NETCoreApp/netcoreapp.rids.props
+@@ -13,6 +13,9 @@
+     <OfficialBuildRID Include="linux-arm">
+       <Platform>arm</Platform>
+     </OfficialBuildRID>
++    <OfficialBuildRID Include="linux-arm64">
++      <Platform>arm64</Platform>
++    </OfficialBuildRID>
+     <OfficialBuildRID Include="linux-x64" />
+     <OfficialBuildRID Include="osx-x64" />
+     <OfficialBuildRID Include="win-arm">
+-- 
+2.7.4
+
