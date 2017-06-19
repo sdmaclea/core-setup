@@ -1,0 +1,26 @@
+From dd6cc1dffe59a31504295e2aa9f0e62db5d0331d Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 19 Jun 2017 20:46:32 +0000
+Subject: [PATCH] [Arm64/Unix] Add OfficialBuildRID linux-arm64
+
+---
+ src/.nuget/dir.props | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/.nuget/dir.props b/src/.nuget/dir.props
+index 52e9436..87bce5b 100644
+--- a/src/.nuget/dir.props
++++ b/src/.nuget/dir.props
+@@ -135,6 +135,9 @@
+     <OfficialBuildRID Include="linux-arm">
+       <Platform>arm</Platform>
+     </OfficialBuildRID>
++    <OfficialBuildRID Include="linux-arm64">
++      <Platform>arm64</Platform>
++    </OfficialBuildRID>
+     <OfficialBuildRID Include="tizen.4.0.0-armel">
+       <Platform>armel</Platform>
+     </OfficialBuildRID>
+-- 
+2.7.4
+
