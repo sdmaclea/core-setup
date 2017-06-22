@@ -1,0 +1,45 @@
+From ae75787c67b75bb140b60ce495269e6b1229bdcd Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 22 Jun 2017 12:00:54 -0400
+Subject: [PATCH] [Arm64/Unix] Fix nuget package build
+
+---
+ netci.groovy                                                            | 2 +-
+ .../runtime.Linux.Microsoft.NETCore.Runtime.CoreCLR.props               | 2 ++
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/netci.groovy b/netci.groovy
+index 79d5368..402f768 100755
+--- a/netci.groovy
++++ b/netci.groovy
+@@ -1702,7 +1702,7 @@ def static calculateBuildCommands(def newJob, def scenario, def branch, def isPR
+                     }
+ 
+                     if (!enableCorefxTesting) {
+-                        buildCommands += "ROOTFS_DIR=/opt/arm64-xenial-rootfs ./build.sh skipmscorlib verbose ${lowerConfiguration} ${architecture} cross clang3.8 skipnuget ${standaloneGc}"
++                        buildCommands += "ROOTFS_DIR=/opt/arm64-xenial-rootfs ./build.sh verbose ${lowerConfiguration} ${architecture} cross clang3.8 ${standaloneGc}"
+                         
+                         // HACK -- Arm64 does not have corefx jobs yet.
+                         buildCommands += "git clone https://github.com/dotnet/corefx fx"
+diff --git a/src/.nuget/Microsoft.NETCore.Runtime.CoreCLR/runtime.Linux.Microsoft.NETCore.Runtime.CoreCLR.props b/src/.nuget/Microsoft.NETCore.Runtime.CoreCLR/runtime.Linux.Microsoft.NETCore.Runtime.CoreCLR.props
+index d62f4d6..dd34d3d 100644
+--- a/src/.nuget/Microsoft.NETCore.Runtime.CoreCLR/runtime.Linux.Microsoft.NETCore.Runtime.CoreCLR.props
++++ b/src/.nuget/Microsoft.NETCore.Runtime.CoreCLR/runtime.Linux.Microsoft.NETCore.Runtime.CoreCLR.props
+@@ -4,11 +4,13 @@
+     <_PlatformDoesNotSupportCreatedump Condition="'$(Platform)' == 'arm'">true</_PlatformDoesNotSupportCreatedump>
+     <_PlatformDoesNotSupportCreatedump Condition="'$(Platform)' == 'armel'">true</_PlatformDoesNotSupportCreatedump>
+     <_PlatformDoesNotSupportCreatedump Condition="'$(Platform)' == 'x86'">true</_PlatformDoesNotSupportCreatedump>
++    <_PlatformDoesNotSupportCreatedump Condition="'$(Platform)' == 'arm64'">true</_PlatformDoesNotSupportCreatedump>
+     <_PlatformDoesNotSupportCreatedump Condition="'$(_runtimeOSFamily)' == 'tizen'">true</_PlatformDoesNotSupportCreatedump>
+     <_PlatformDoesNotSupportEventTrace Condition="'$(_runtimeOSFamily)' == 'tizen'">true</_PlatformDoesNotSupportEventTrace>
+     <_PlatformDoesNotSupportEventTrace Condition="'$(Platform)' == 'arm64'">true</_PlatformDoesNotSupportEventTrace>
+     <_PlatformDoesNotSupportEventTrace Condition="'$(Platform)' == 'x86'">true</_PlatformDoesNotSupportEventTrace>
+     <_PlatformDoesNotSupportSosPlugin Condition="'$(_runtimeOSFamily)' == 'android'">true</_PlatformDoesNotSupportSosPlugin>
++    <_PlatformDoesNotSupportSosPlugin Condition="'$(Platform)' == 'arm64'">true</_PlatformDoesNotSupportSosPlugin>
+   </PropertyGroup>
+   <ItemGroup>
+     <NativeBinary Include="$(BinDir)libcoreclr.so" />
+-- 
+2.7.4
+
