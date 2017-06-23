@@ -1,0 +1,249 @@
+From cf5219024fe3687826e9027c8b16a36dc261d17d Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 22 Jun 2017 19:35:33 +0000
+Subject: [PATCH] PerfMap instrument stubs
+
+---
+ src/vm/codeman.cpp         |  8 ++++++++
+ src/vm/jitinterface.cpp    |  8 ++++++++
+ src/vm/perfmap.cpp         | 36 ++++++++++++++++++++++++++++++++++++
+ src/vm/perfmap.h           |  6 ++++++
+ src/vm/precode.cpp         | 11 +++++++++++
+ src/vm/virtualcallstub.cpp | 20 ++++++++++++++++++++
+ 6 files changed, 89 insertions(+)
+
+diff --git a/src/vm/codeman.cpp b/src/vm/codeman.cpp
+index d934b82..a0a15d3 100644
+--- a/src/vm/codeman.cpp
++++ b/src/vm/codeman.cpp
+@@ -38,6 +38,10 @@
+ #include "../debug/daccess/fntableaccess.h"
+ #endif // _WIN64
+ 
++#ifdef FEATURE_PERFMAP
++#include "perfmap.h"
++#endif
++
+ #define MAX_M_ALLOCATED         (16 * 1024)
+ 
+ // Default number of jump stubs in a jump stub block
+@@ -5048,6 +5052,10 @@ DONE:
+ 
+     emitBackToBackJump(jumpStub, (void*) target);
+ 
++#ifdef FEATURE_PERFMAP
++    PerfMap::LogStubs(__FUNCTION__, "emitBackToBackJump", (PCODE)jumpStub, BACK_TO_BACK_JUMP_ALLOCATE_SIZE);
++#endif
++
+     // We always add the new jumpstub to the jumpStubCache 
+     //
+     _ASSERTE(pJumpStubCache != NULL);
+diff --git a/src/vm/jitinterface.cpp b/src/vm/jitinterface.cpp
+index 8a41c89..553b3a9 100644
+--- a/src/vm/jitinterface.cpp
++++ b/src/vm/jitinterface.cpp
+@@ -68,6 +68,10 @@
+ #include "interpreter.h"
+ #endif // FEATURE_INTERPRETER
+ 
++#ifdef FEATURE_PERFMAP
++#include "perfmap.h"
++#endif
++
+ // The Stack Overflow probe takes place in the COOPERATIVE_TRANSITION_BEGIN() macro
+ //
+ 
+@@ -12807,6 +12811,10 @@ void Module::LoadHelperTable()
+     BYTE * curEntry   = table;
+     BYTE * tableEnd   = table + tableSize;
+ 
++#ifdef FEATURE_PERFMAP
++    PerfMap::LogStubs(__FUNCTION__, GetSimpleName(), (PCODE)table, tableSize);
++#endif
++
+ #ifdef LOGGING
+     int iEntryNumber = 0;
+ #endif // LOGGING
+diff --git a/src/vm/perfmap.cpp b/src/vm/perfmap.cpp
+index b664b72..2b5bcff 100644
+--- a/src/vm/perfmap.cpp
++++ b/src/vm/perfmap.cpp
+@@ -50,6 +50,8 @@ PerfMap::PerfMap(int pid)
+     // Initialize with no failures.
+     m_ErrorEncountered = false;
+ 
++    m_StubsMapped = 0;
++
+     // Build the path to the map file on disk.
+     WCHAR tempPath[MAX_LONGPATH+1];
+     if(!GetTempPathW(MAX_LONGPATH, tempPath))
+@@ -76,6 +78,8 @@ PerfMap::PerfMap()
+ 
+     // Initialize with no failures.
+     m_ErrorEncountered = false;
++
++    m_StubsMapped = 0;
+ }
+ 
+ // Clean-up resources.
+@@ -218,6 +222,38 @@ void PerfMap::LogJITCompiledMethod(MethodDesc * pMethod, PCODE pCode, size_t cod
+     }
+ }
+ 
++// Log a set of stub to the map.
++void PerfMap::LogStubs(const char* stubType, const char* stubOwner, PCODE pCode, size_t codeSize)
++{
++    LIMITED_METHOD_CONTRACT;
++
++    if (s_Current == nullptr)
++    {
++        return;
++    }
++
++    // Logging failures should not cause any exceptions to flow upstream.
++    EX_TRY
++    {
++        if(!stubOwner)
++        {
++            stubOwner = "?";
++        }
++        if(!stubType)
++        {
++            stubOwner = "?";
++        }
++
++        // Build the map file line.
++        SString line;
++        line.Printf("%p %x stub<%d> %s<%s>\n", pCode, codeSize, ++(s_Current->m_StubsMapped), stubType, stubOwner);
++
++        // Write the line.
++        s_Current->WriteLine(line);
++    }
++    EX_CATCH{} EX_END_CATCH(SwallowAllExceptions);
++}
++
+ void PerfMap::GetNativeImageSignature(PEFile * pFile, WCHAR * pwszSig, unsigned int nSigSize)
+ {
+     CONTRACTL{
+diff --git a/src/vm/perfmap.h b/src/vm/perfmap.h
+index fe38ed3..1f06bd4 100644
+--- a/src/vm/perfmap.h
++++ b/src/vm/perfmap.h
+@@ -28,6 +28,9 @@ private:
+     // Set to true if an error is encountered when writing to the file.
+     bool m_ErrorEncountered;
+ 
++    // Set to true if an error is encountered when writing to the file.
++    unsigned m_StubsMapped;
++
+     // Construct a new map for the specified pid.
+     PerfMap(int pid);
+ 
+@@ -64,6 +67,9 @@ public:
+     // Log a JIT compiled method to the map.
+     static void LogJITCompiledMethod(MethodDesc * pMethod, PCODE pCode, size_t codeSize);
+ 
++    // Log a set of stub to the map.
++    static void LogStubs(const char* stubType, const char* stubOwner, PCODE pCode, size_t codeSize);
++
+     // Close the map and flush any remaining data.
+     static void Destroy();
+ };
+diff --git a/src/vm/precode.cpp b/src/vm/precode.cpp
+index 1daf6e3..8891d5a 100644
+--- a/src/vm/precode.cpp
++++ b/src/vm/precode.cpp
+@@ -15,6 +15,10 @@
+ #include "compile.h"
+ #endif
+ 
++#ifdef FEATURE_PERFMAP
++#include "perfmap.h"
++#endif
++
+ //==========================================================================================
+ // class Precode
+ //==========================================================================================
+@@ -556,6 +560,9 @@ TADDR Precode::AllocateTemporaryEntryPoints(MethodDescChunk *  pChunk,
+             pMD = (MethodDesc *)(dac_cast<TADDR>(pMD) + pMD->SizeOf());
+         }
+ 
++#ifdef FEATURE_PERFMAP
++        PerfMap::LogStubs(__FUNCTION__, "PRECODE_FIXUP", (PCODE)temporaryEntryPoints, count * sizeof(FixupPrecode));
++#endif
+         ClrFlushInstructionCache((LPVOID)temporaryEntryPoints, count * sizeof(FixupPrecode));
+ 
+         return temporaryEntryPoints;
+@@ -575,6 +582,10 @@ TADDR Precode::AllocateTemporaryEntryPoints(MethodDescChunk *  pChunk,
+         pMD = (MethodDesc *)(dac_cast<TADDR>(pMD) + pMD->SizeOf());
+     }
+ 
++#ifdef FEATURE_PERFMAP
++    PerfMap::LogStubs(__FUNCTION__, "PRECODE_STUB", (PCODE)temporaryEntryPoints, count * oneSize);
++#endif
++
+     ClrFlushInstructionCache((LPVOID)temporaryEntryPoints, count * oneSize);
+ 
+     return temporaryEntryPoints;
+diff --git a/src/vm/virtualcallstub.cpp b/src/vm/virtualcallstub.cpp
+index c230f25..2e94a16 100644
+--- a/src/vm/virtualcallstub.cpp
++++ b/src/vm/virtualcallstub.cpp
+@@ -20,6 +20,10 @@
+ #include "compile.h"
+ #endif
+ 
++#ifdef FEATURE_PERFMAP
++#include "perfmap.h"
++#endif
++
+ #ifndef DACCESS_COMPILE 
+ 
+ //@TODO: make these conditional on whether logs are being produced
+@@ -2694,6 +2698,10 @@ DispatchHolder *VirtualCallStubManager::GenerateDispatchStub(PCODE            ad
+     LOG((LF_STUBS, LL_INFO10000, "GenerateDispatchStub for token" FMT_ADDR "and pMT" FMT_ADDR "at" FMT_ADDR "\n",
+                                  DBG_ADDR(dispatchToken), DBG_ADDR(pMTExpected), DBG_ADDR(holder->stub())));
+ 
++#ifdef FEATURE_PERFMAP
++    PerfMap::LogStubs(__FUNCTION__, "GenerateDispatchStub", (PCODE)holder->stub(), holder->stub()->size());
++#endif
++
+     RETURN (holder);
+ }
+ 
+@@ -2736,6 +2744,10 @@ DispatchHolder *VirtualCallStubManager::GenerateDispatchStubLong(PCODE
+     LOG((LF_STUBS, LL_INFO10000, "GenerateDispatchStub for token" FMT_ADDR "and pMT" FMT_ADDR "at" FMT_ADDR "\n",
+                                  DBG_ADDR(dispatchToken), DBG_ADDR(pMTExpected), DBG_ADDR(holder->stub())));
+ 
++#ifdef FEATURE_PERFMAP
++    PerfMap::LogStubs(__FUNCTION__, "GenerateDispatchStub", (PCODE)holder->stub(), holder->stub()->size());
++#endif
++
+     RETURN (holder);
+ }
+ #endif
+@@ -2822,6 +2834,10 @@ ResolveHolder *VirtualCallStubManager::GenerateResolveStub(PCODE            addr
+     LOG((LF_STUBS, LL_INFO10000, "GenerateResolveStub  for token" FMT_ADDR "at" FMT_ADDR "\n",
+                                  DBG_ADDR(dispatchToken), DBG_ADDR(holder->stub())));
+ 
++#ifdef FEATURE_PERFMAP
++    PerfMap::LogStubs(__FUNCTION__, "GenerateResolveStub", (PCODE)holder->stub(), holder->stub()->size());
++#endif
++
+     RETURN (holder);
+ }
+ 
+@@ -2852,6 +2868,10 @@ LookupHolder *VirtualCallStubManager::GenerateLookupStub(PCODE addrOfResolver, s
+     LOG((LF_STUBS, LL_INFO10000, "GenerateLookupStub   for token" FMT_ADDR "at" FMT_ADDR "\n",
+                                  DBG_ADDR(dispatchToken), DBG_ADDR(holder->stub())));
+ 
++#ifdef FEATURE_PERFMAP
++    PerfMap::LogStubs(__FUNCTION__, "GenerateLookupStub", (PCODE)holder->stub(), holder->stub()->size());
++#endif
++
+     RETURN (holder);
+ }
+ 
+-- 
+2.7.4
+
