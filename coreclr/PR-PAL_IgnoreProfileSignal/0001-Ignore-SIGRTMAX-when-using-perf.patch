@@ -1,0 +1,93 @@
+From c5db11c764845da045dc6cb01f1a17761e32f1d3 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 23 Jun 2017 20:28:17 +0000
+Subject: [PATCH] Ignore SIGRTMAX when using perf
+
+Add a do nothing signal handler to SIGRTMAX
+for profiling purposes.  Allows synchronization
+point in injection into the profile
+---
+ src/pal/inc/pal.h                |  5 +++++
+ src/pal/src/exception/signal.cpp | 36 ++++++++++++++++++++++++++++++++++++
+ src/vm/perfmap.cpp               |  2 ++
+ 3 files changed, 43 insertions(+)
+
+diff --git a/src/pal/inc/pal.h b/src/pal/inc/pal.h
+index 499b633..d588277 100644
+--- a/src/pal/inc/pal.h
++++ b/src/pal/inc/pal.h
+@@ -501,6 +501,11 @@ PAL_InitializeDebug(
+     void);
+ 
+ PALIMPORT
++void
++PALAPI
++PAL_IgnoreProfileSignal(void);
++
++PALIMPORT
+ HINSTANCE
+ PALAPI
+ PAL_RegisterModule(
+diff --git a/src/pal/src/exception/signal.cpp b/src/pal/src/exception/signal.cpp
+index b580ba4..69675aa 100644
+--- a/src/pal/src/exception/signal.cpp
++++ b/src/pal/src/exception/signal.cpp
+@@ -697,6 +697,42 @@ PAL_ERROR InjectActivationInternal(CorUnix::CPalThread* pThread)
+ 
+ /*++
+ Function :
++    signal_ignore_handler
++
++    Simple signal handler which does nothing
++
++Parameters :
++    POSIX signal handler parameter list ("man sigaction" for details)
++
++(no return value)
++--*/
++static void signal_ignore_handler(int code, siginfo_t *siginfo, void *context)
++{
++}
++
++
++void PAL_IgnoreProfileSignal(void)
++{
++#if !HAVE_MACH_EXCEPTIONS && defined(SIGRTMAX)
++    // Add a signal handler which will ignore signals
++    // This will allow signal to be used as a marker in perf recording.
++    // This will be used as an aid to synchromize recorded profile with
++    // test cases
++    //
++    // signal(SIGRTMAX, SGN_IGN) can not be used here.  It will ignore
++    // the signal in kernel space and therefore generate no recordable
++    // event for profiling. Preventing it being used for profile
++    // synchronization
++    //
++    // Since this is only used in rare circumstances no attempt to
++    // restore the old handler will be made
++    handle_signal(SIGRTMAX, signal_ignore_handler, 0);
++#endif
++}
++
++
++/*++
++Function :
+     SEHSetSafeState
+ 
+     specify whether the current thread is in a state where exception handling 
+diff --git a/src/vm/perfmap.cpp b/src/vm/perfmap.cpp
+index b664b72..3713b57 100644
+--- a/src/vm/perfmap.cpp
++++ b/src/vm/perfmap.cpp
+@@ -27,6 +27,8 @@ void PerfMap::Initialize()
+ 
+         // Create the map.
+         s_Current = new PerfMap(currentPid);
++
++        PAL_IgnoreProfileSignal();
+     }
+ }
+ 
+-- 
+2.7.4
+
