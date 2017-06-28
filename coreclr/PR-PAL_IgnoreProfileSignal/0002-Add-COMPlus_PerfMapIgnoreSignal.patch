@@ -1,0 +1,89 @@
+From b49cba861bec6dc00af030abb826c8cc19aff319 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 28 Jun 2017 17:46:37 +0000
+Subject: [PATCH] Add COMPlus_PerfMapIgnoreSignal
+
+---
+ src/inc/clrconfigvalues.h        | 1 +
+ src/pal/inc/pal.h                | 2 +-
+ src/pal/src/exception/signal.cpp | 8 ++++----
+ src/vm/perfmap.cpp               | 7 ++++++-
+ 4 files changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/src/inc/clrconfigvalues.h b/src/inc/clrconfigvalues.h
+index 8a21a9d..e0a5d71 100644
+--- a/src/inc/clrconfigvalues.h
++++ b/src/inc/clrconfigvalues.h
+@@ -836,6 +836,7 @@ RETAIL_CONFIG_DWORD_INFO(UNSUPPORTED_ProfAPI_ValidateNGENInstrumentation, W("Pro
+ 
+ #ifdef FEATURE_PERFMAP
+ RETAIL_CONFIG_DWORD_INFO_EX(EXTERNAL_PerfMapEnabled, W("PerfMapEnabled"), 0, "This flag is used on Linux to enable writing /tmp/perf-$pid.map. It is disabled by default", CLRConfig::REGUTIL_default)
++RETAIL_CONFIG_DWORD_INFO_EX(EXTERNAL_PerfMapIgnoreSignal, W("PerfMapIgnoreSignal"), 0, "When perf map is enabled, this option will configure the specified signal to be accepeted and ignored as a marker in the perf logs.  It is disabled by default", CLRConfig::REGUTIL_default)
+ #endif
+ 
+ //
+diff --git a/src/pal/inc/pal.h b/src/pal/inc/pal.h
+index d588277..522c670 100644
+--- a/src/pal/inc/pal.h
++++ b/src/pal/inc/pal.h
+@@ -503,7 +503,7 @@ PAL_InitializeDebug(
+ PALIMPORT
+ void
+ PALAPI
+-PAL_IgnoreProfileSignal(void);
++PAL_IgnoreProfileSignal(int signalNum);
+ 
+ PALIMPORT
+ HINSTANCE
+diff --git a/src/pal/src/exception/signal.cpp b/src/pal/src/exception/signal.cpp
+index 69675aa..c37ba1c 100644
+--- a/src/pal/src/exception/signal.cpp
++++ b/src/pal/src/exception/signal.cpp
+@@ -711,22 +711,22 @@ static void signal_ignore_handler(int code, siginfo_t *siginfo, void *context)
+ }
+ 
+ 
+-void PAL_IgnoreProfileSignal(void)
++void PAL_IgnoreProfileSignal(int signalNum)
+ {
+-#if !HAVE_MACH_EXCEPTIONS && defined(SIGRTMAX)
++#if !HAVE_MACH_EXCEPTIONS
+     // Add a signal handler which will ignore signals
+     // This will allow signal to be used as a marker in perf recording.
+     // This will be used as an aid to synchromize recorded profile with
+     // test cases
+     //
+-    // signal(SIGRTMAX, SGN_IGN) can not be used here.  It will ignore
++    // signal(signalNum, SGN_IGN) can not be used here.  It will ignore
+     // the signal in kernel space and therefore generate no recordable
+     // event for profiling. Preventing it being used for profile
+     // synchronization
+     //
+     // Since this is only used in rare circumstances no attempt to
+     // restore the old handler will be made
+-    handle_signal(SIGRTMAX, signal_ignore_handler, 0);
++    handle_signal(signalNum, signal_ignore_handler, 0);
+ #endif
+ }
+ 
+diff --git a/src/vm/perfmap.cpp b/src/vm/perfmap.cpp
+index 3713b57..a145f32 100644
+--- a/src/vm/perfmap.cpp
++++ b/src/vm/perfmap.cpp
+@@ -28,7 +28,12 @@ void PerfMap::Initialize()
+         // Create the map.
+         s_Current = new PerfMap(currentPid);
+ 
+-        PAL_IgnoreProfileSignal();
++        int signalNum = (int) CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_PerfMapIgnoreSignal);
++
++        if(signalNum > 0)
++        {
++            PAL_IgnoreProfileSignal(signalNum);
++        }
+     }
+ }
+ 
+-- 
+2.7.4
+
