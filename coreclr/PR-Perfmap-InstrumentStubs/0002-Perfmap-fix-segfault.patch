@@ -1,0 +1,25 @@
+From 0864a9a504551a3759a386ecf7bf3fd51e8fb16c Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 3 Jul 2017 19:27:38 +0000
+Subject: [PATCH] Perfmap fix segfault
+
+---
+ src/vm/perfmap.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/vm/perfmap.cpp b/src/vm/perfmap.cpp
+index 2b5bcff..7b6c3d6 100644
+--- a/src/vm/perfmap.cpp
++++ b/src/vm/perfmap.cpp
+@@ -227,7 +227,7 @@ void PerfMap::LogStubs(const char* stubType, const char* stubOwner, PCODE pCode,
+ {
+     LIMITED_METHOD_CONTRACT;
+ 
+-    if (s_Current == nullptr)
++    if (s_Current == nullptr || s_Current->m_FileStream == nullptr)
+     {
+         return;
+     }
+-- 
+2.7.4
+
