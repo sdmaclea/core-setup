@@ -1,4 +1,4 @@
-From 5cb8028dfe6dfdcdcb267679528b8237e248de17 Mon Sep 17 00:00:00 2001
+From d15381137851d5573b7ebd8566b604fbadcd80f9 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 16 Jun 2017 15:56:35 +0000
 Subject: [PATCH] [Arm64] Optimize JIT_WriteBarriers
@@ -10,8 +10,8 @@ Fixes #12197
  src/vm/arm64/asmhelpers.S   | 176 +++++++++++++++++++++++++++-----------
  src/vm/arm64/asmhelpers.asm | 201 +++++++++++++++++++++++++++++++++++---------
  src/vm/arm64/stubs.cpp      |  17 ++--
- src/vm/gcenv.ee.cpp         |  21 +++--
- 4 files changed, 316 insertions(+), 99 deletions(-)
+ src/vm/gcenv.ee.cpp         |  14 ++-
+ 4 files changed, 314 insertions(+), 94 deletions(-)
 
 diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
 index 2e1d029..8e5875e 100644
@@ -633,7 +633,7 @@ index 40d2749..d1689ea 100644
  #ifdef DACCESS_COMPILE
  BOOL GetAnyThunkTarget (T_CONTEXT *pctx, TADDR *pTarget, TADDR *pTargetMethodDesc)
 diff --git a/src/vm/gcenv.ee.cpp b/src/vm/gcenv.ee.cpp
-index 55b1a96..97a3cb3 100644
+index 6fe9a71..dd34651 100644
 --- a/src/vm/gcenv.ee.cpp
 +++ b/src/vm/gcenv.ee.cpp
 @@ -861,7 +861,7 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
@@ -663,24 +663,7 @@ index 55b1a96..97a3cb3 100644
          return;
      case WriteBarrierOp::StompEphemeral:
          // StompEphemeral requires a new ephemeral low and a new ephemeral high
-@@ -919,14 +930,11 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
- 
-         FlushProcessWriteBuffers();
-         
-+        g_ephemeral_low = args->ephemeral_low;
-+        g_ephemeral_high = args->ephemeral_high;
-         g_lowest_address = args->lowest_address;
-         VolatileStore(&g_highest_address, args->highest_address);
-         ::StompWriteBarrierResize(true, false);
--
--        // g_ephemeral_low/high aren't needed for the write barrier stomp, but they
--        // are needed in other places.
--        g_ephemeral_low = args->ephemeral_low;
--        g_ephemeral_high = args->ephemeral_high;
-         return;
-     case WriteBarrierOp::SwitchToWriteWatch:
- #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
-@@ -942,6 +950,7 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
+@@ -945,6 +956,7 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
      case WriteBarrierOp::SwitchToNonWriteWatch:
  #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
          assert(args->is_runtime_suspended && "the runtime must be suspended here!");
