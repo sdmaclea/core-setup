@@ -1,0 +1,39 @@
+From c0c2b55ffd95d2fac8e98d4ab433aa1f1a2b192d Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 5 Jul 2017 14:55:07 +0000
+Subject: [PATCH] Fix nits per review
+
+---
+ src/pal/src/exception/signal.cpp | 2 +-
+ src/vm/perfmap.cpp               | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/pal/src/exception/signal.cpp b/src/pal/src/exception/signal.cpp
+index c37ba1c..ac7f04a 100644
+--- a/src/pal/src/exception/signal.cpp
++++ b/src/pal/src/exception/signal.cpp
+@@ -716,7 +716,7 @@ void PAL_IgnoreProfileSignal(int signalNum)
+ #if !HAVE_MACH_EXCEPTIONS
+     // Add a signal handler which will ignore signals
+     // This will allow signal to be used as a marker in perf recording.
+-    // This will be used as an aid to synchromize recorded profile with
++    // This will be used as an aid to synchronize recorded profile with
+     // test cases
+     //
+     // signal(signalNum, SGN_IGN) can not be used here.  It will ignore
+diff --git a/src/vm/perfmap.cpp b/src/vm/perfmap.cpp
+index a145f32..77ab7cb 100644
+--- a/src/vm/perfmap.cpp
++++ b/src/vm/perfmap.cpp
+@@ -30,7 +30,7 @@ void PerfMap::Initialize()
+ 
+         int signalNum = (int) CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_PerfMapIgnoreSignal);
+ 
+-        if(signalNum > 0)
++        if (signalNum > 0)
+         {
+             PAL_IgnoreProfileSignal(signalNum);
+         }
+-- 
+2.7.4
+
