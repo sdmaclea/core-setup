@@ -1,0 +1,25 @@
+From 9f70949e31596c1ef1b3a416e0da11d3c4bb5d51 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 12 Jul 2017 20:37:22 +0000
+Subject: [PATCH] [Arm64] Enable Span clear optimization
+
+---
+ src/mscorlib/shared/System/Span.NonGeneric.cs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/mscorlib/shared/System/Span.NonGeneric.cs b/src/mscorlib/shared/System/Span.NonGeneric.cs
+index 4cdba21..62b6faa 100644
+--- a/src/mscorlib/shared/System/Span.NonGeneric.cs
++++ b/src/mscorlib/shared/System/Span.NonGeneric.cs
+@@ -165,7 +165,7 @@ namespace System
+             if (byteLength == 0)
+                 return;
+             
+-#if AMD64 && CORECLR
++#if CORECLR && (AMD64 || ARM64)
+             if (byteLength > 4096) goto PInvoke;
+             Unsafe.InitBlockUnaligned(ref b, 0, (uint)byteLength);
+             return;
+-- 
+2.7.4
+
