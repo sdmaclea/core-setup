@@ -1,0 +1,52 @@
+From 96b93e8be7c671822a468c0cb8252e4c3e88d1fe Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 12 Jul 2017 17:24:17 +0000
+Subject: [PATCH] [Arm64] Update GCHeap::GetValidGen0MaxSize
+
+Arm64 does not provide GetLargestOnDieCacheSize() info and used a
+fixed 256KB size for gen0size.  This is too small.  For comparison,
+AMD64 is currently using 3*GetLargestOnDieCacheSize() for the
+maximum gen0size for each heap in GCServer mode.  This can easily be
+100x 256KB.
+
+Provide alternate mechanism to calculate GetValidGen0MaxSize().
+Calculate based on fair share of physical memory per processor
+per process per gen0 heap.
+---
+ src/gc/gc.cpp | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
+index 9bc1ada..1408d91 100644
+--- a/src/gc/gc.cpp
++++ b/src/gc/gc.cpp
+@@ -35456,6 +35456,18 @@ size_t GCHeap::GetValidGen0MaxSize(size_t seg_size)
+ 
+     if ((gen0size == 0) || !g_theGCHeap->IsValidGen0MaxSize(gen0size))
+     {
++#if (defined(_TARGET_ARM64_))
++        // Choose per heap gen0size based on GetPhysicalMemoryLimit(), GetTotalProcessorCount(), and some fudge factors
++        size_t physMemPerProcessor = GCToOSInterface::GetPhysicalMemoryLimit() / GCToOSInterface::GetTotalProcessorCount();
++        size_t processesPerProcessor = 4;
++        size_t heapToGen0Size = 8;
++
++        dprintf (2, ("phys: %Id, cpu: %Id",
++            (int)(GCToOSInterface::GetPhysicalMemoryLimit() >> 20),
++            GCToOSInterface::GetTotalProcessorCount()));
++
++        gen0size = physMemPerProcessor / processesPerProcessor / heapToGen0Size;
++#else //_TARGET_ARM64_
+ #ifdef SERVER_GC
+         // performance data seems to indicate halving the size results
+         // in optimal perf.  Ask for adjusted gen0 size.
+@@ -35485,6 +35497,7 @@ size_t GCHeap::GetValidGen0MaxSize(size_t seg_size)
+ #else //SERVER_GC
+         gen0size = max((4*GCToOSInterface::GetLargestOnDieCacheSize(TRUE)/5),(256*1024));
+ #endif //SERVER_GC
++#endif //_TARGET_ARM64_
+     }
+ 
+     // Generation 0 must never be more than 1/2 the segment size.
+-- 
+2.7.4
+
