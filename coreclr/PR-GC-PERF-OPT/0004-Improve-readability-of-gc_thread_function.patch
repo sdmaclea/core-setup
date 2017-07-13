@@ -1,0 +1,107 @@
+From 61b881b8ae6fe302628ca7bf5910d87837c445af Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 13 Jul 2017 15:38:08 +0000
+Subject: [PATCH] Improve readability of gc_thread_function
+
+---
+ src/gc/gc.cpp | 40 ++++++++++++----------------------------
+ 1 file changed, 12 insertions(+), 28 deletions(-)
+
+diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
+index e4e8b73..ba817be 100644
+--- a/src/gc/gc.cpp
++++ b/src/gc/gc.cpp
+@@ -5262,8 +5262,6 @@ void gc_heap::gc_thread_function ()
+     {
+         assert (!gc_t_join.joined());
+ 
+-        bool proceed = TRUE;
+-
+         if (heap_number == 0)
+         {
+             gc_heap::ee_suspend_event.Wait(INFINITE, FALSE);
+@@ -5272,45 +5270,30 @@ void gc_heap::gc_thread_function ()
+             GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
+             END_TIMING(suspend_ee_during_log);
+ 
++            proceed_with_gc_p = TRUE;
++
+             if (!should_proceed_with_gc())
+             {
+                 update_collection_counts_for_no_gc();
+-                proceed = FALSE;
++                proceed_with_gc_p = FALSE;
+             }
+             else
+                 settings.init_mechanisms();
+             dprintf (3, ("%d gc thread waiting...", heap_number));
+ 
+-            proceed_with_gc_p = proceed;
+-
+-            if (proceed)
++            if (proceed_with_gc_p)
+             {
+                 gc_start_event.Set();
+-            }
+-        }
+-        else
+-        {
+-            gc_start_event.Wait(INFINITE, FALSE);
+-            dprintf (3, ("%d gc thread waiting... Done", heap_number));
+-        }
+-
+-        if (proceed)
+-        {
+                 garbage_collect (GCHeap::GcCondemnedGeneration);
+-        }
+-
+-        if (heap_number == 0)
+-        {
+-            if (proceed && (!settings.concurrent))
++                if (!settings.concurrent)
+                 {
+                     do_post_gc();
+                 }
+-
++            }
+ #ifdef BACKGROUND_GC
+             recover_bgc_settings();
+ #endif //BACKGROUND_GC
+ 
+-#ifdef MULTIPLE_HEAPS
+             for (int i = 0; i < gc_heap::n_heaps; i++)
+             {
+                 gc_heap* hp = gc_heap::g_heaps[i];
+@@ -5318,7 +5301,6 @@ void gc_heap::gc_thread_function ()
+                 dprintf (SPINLOCK_LOG, ("[%d]GC Lmsl", i));
+                 leave_spin_lock(&hp->more_space_lock);
+             }
+-#endif //MULTIPLE_HEAPS
+ 
+             gc_heap::gc_started = FALSE;
+ 
+@@ -5332,15 +5314,17 @@ void gc_heap::gc_thread_function ()
+ 
+             gc_heap::internal_gc_done = true;
+ 
+-#ifdef MULTIPLE_HEAPS
+             for (int i = 0; i < gc_heap::n_heaps; i++)
+             {
+                 gc_heap::g_heaps[i]->set_gc_done();
+             }
+             MemoryBarrier();
+-#else
+-            set_gc_done();
+-#endif //MULTIPLE_HEAPS
++        }
++        else
++        {
++            gc_start_event.Wait(INFINITE, FALSE);
++            dprintf (3, ("%d gc thread waiting... Done", heap_number));
++            garbage_collect (GCHeap::GcCondemnedGeneration);
+         }
+     }
+ }
+-- 
+2.7.4
+
