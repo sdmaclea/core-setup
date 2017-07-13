@@ -1,0 +1,788 @@
+From c70517ee872b4ec12d3c8874dd1f8cdf774c5844 Mon Sep 17 00:00:00 2001
+From: Sergey Andreenko <seandree@microsoft.com>
+Date: Tue, 11 Jul 2017 10:36:37 -0700
+Subject: [PATCH] Delete bitset iterators defines (#12642)
+
+Delete BLOCKSET_ITER_INIT
+
+Rename blkNum to bbNum.
+We usually use bbNum (basic block number), rather than blkNum(block
+number).
+This change allows to grep for iterator and etc easier.
+
+Delete BITVEC_ITER_INIT and BITVEC_INIT_NOCOPY.
+
+Delete VARSET_ITER_INIT.
+
+Rename some variables around varSet iterators.
+---
+ src/jit/assertionprop.cpp | 25 +++++++-------
+ src/jit/bitvec.h          | 16 ---------
+ src/jit/blockset.h        |  8 -----
+ src/jit/codegencommon.cpp |  9 +++--
+ src/jit/codegenlegacy.cpp | 12 ++++---
+ src/jit/codegenlinear.cpp |  6 ++--
+ src/jit/compiler.cpp      |  3 +-
+ src/jit/compiler.h        |  2 +-
+ src/jit/flowgraph.cpp     | 17 ++++++----
+ src/jit/liveness.cpp      |  9 +++--
+ src/jit/lsra.cpp          | 86 +++++++++++++++++++++++++++++------------------
+ src/jit/regalloc.cpp      | 12 ++++---
+ src/jit/scopeinfo.cpp     | 18 +++++-----
+ src/jit/ssabuilder.cpp    |  7 ++--
+ src/jit/varset.h          |  8 -----
+ 15 files changed, 125 insertions(+), 113 deletions(-)
+
+diff --git a/src/jit/assertionprop.cpp b/src/jit/assertionprop.cpp
+index d0f43df..bcdae63 100644
+--- a/src/jit/assertionprop.cpp
++++ b/src/jit/assertionprop.cpp
+@@ -168,16 +168,17 @@ void Compiler::optAddCopies()
+ 
+         bool isDominatedByFirstBB = false;
+ 
+-        BLOCKSET_ITER_INIT(this, iter, varDsc->lvRefBlks, blkNum);
+-        while (iter.NextElem(&blkNum))
++        BlockSetOps::Iter iter(this, varDsc->lvRefBlks);
++        unsigned          bbNum = 0;
++        while (iter.NextElem(&bbNum))
+         {
+-            /* Find the block 'blkNum' */
++            /* Find the block 'bbNum' */
+             BasicBlock* block = fgFirstBB;
+-            while (block && (block->bbNum != blkNum))
++            while (block && (block->bbNum != bbNum))
+             {
+                 block = block->bbNext;
+             }
+-            noway_assert(block && (block->bbNum == blkNum));
++            noway_assert(block && (block->bbNum == bbNum));
+ 
+             bool     importantUseInBlock = (varDsc->lvIsParam) && (block->getBBWeight(this) > paramAvgWtdRefDiv2);
+             bool     isPreHeaderBlock    = ((block->bbFlags & BBF_LOOP_PREHEADER) != 0);
+@@ -214,7 +215,7 @@ void Compiler::optAddCopies()
+ #ifdef DEBUG
+             if (verbose)
+             {
+-                printf("        Referenced in BB%02u, bbWeight is %s", blkNum, refCntWtd2str(block->getBBWeight(this)));
++                printf("        Referenced in BB%02u, bbWeight is %s", bbNum, refCntWtd2str(block->getBBWeight(this)));
+ 
+                 if (isDominatedByFirstBB)
+                 {
+@@ -320,17 +321,17 @@ void Compiler::optAddCopies()
+ #endif
+ 
+             /* We have already calculated paramImportantUseDom above. */
+-
+-            BLOCKSET_ITER_INIT(this, iter, paramImportantUseDom, blkNum);
+-            while (iter.NextElem(&blkNum))
++            BlockSetOps::Iter iter(this, paramImportantUseDom);
++            unsigned          bbNum = 0;
++            while (iter.NextElem(&bbNum))
+             {
+-                /* Advance block to point to 'blkNum' */
++                /* Advance block to point to 'bbNum' */
+                 /* This assumes that the iterator returns block number is increasing lexical order. */
+-                while (block && (block->bbNum != blkNum))
++                while (block && (block->bbNum != bbNum))
+                 {
+                     block = block->bbNext;
+                 }
+-                noway_assert(block && (block->bbNum == blkNum));
++                noway_assert(block && (block->bbNum == bbNum));
+ 
+ #ifdef DEBUG
+                 if (verbose)
+diff --git a/src/jit/bitvec.h b/src/jit/bitvec.h
+index 4db211b..e7e2d44 100644
+--- a/src/jit/bitvec.h
++++ b/src/jit/bitvec.h
+@@ -37,20 +37,4 @@ typedef BitSetShortLongRep BitVec;
+ typedef BitVecOps::ValArgType BitVec_ValArg_T;
+ typedef BitVecOps::RetValType BitVec_ValRet_T;
+ 
+-// Initialize "_varName" to "_initVal."  Copies contents, not references; if "_varName" is uninitialized, allocates a
+-// set for it (using "_traits" for any necessary allocation), and copies the contents of "_initVal" into it.
+-#define BITVEC_INIT(_traits, _varName, _initVal) _varName(BitVecOps::MakeCopy(_traits, _initVal))
+-
+-// Initializes "_varName" to "_initVal", without copying: if "_initVal" is an indirect representation, copies its
+-// pointer into "_varName".
+-#define BITVEC_INIT_NOCOPY(_varName, _initVal) _varName(_initVal)
+-
+-// The iterator pattern.
+-
+-// Use this to initialize an iterator "_iterName" to iterate over a BitVec "_bitVec".
+-// "_bitNum" will be an unsigned variable to which we assign the elements of "_bitVec".
+-#define BITVEC_ITER_INIT(_traits, _iterName, _bitVec, _bitNum)                                                         \
+-    unsigned        _bitNum = 0;                                                                                       \
+-    BitVecOps::Iter _iterName(_traits, _bitVec)
+-
+ #endif // _BITVEC_INCLUDED_
+diff --git a/src/jit/blockset.h b/src/jit/blockset.h
+index 9a79a08..015f6a6 100644
+--- a/src/jit/blockset.h
++++ b/src/jit/blockset.h
+@@ -58,12 +58,4 @@ typedef BitSetShortLongRep BlockSet;
+ typedef BlockSetOps::ValArgType BlockSet_ValArg_T;
+ typedef BlockSetOps::RetValType BlockSet_ValRet_T;
+ 
+-// The iterator pattern.
+-
+-// Use this to initialize an iterator "_iterName" to iterate over a BlockSet "_blockSet".
+-// "_blockNum" will be an unsigned variable to which we assign the elements of "_blockSet".
+-#define BLOCKSET_ITER_INIT(_comp, _iterName, _blockSet, _blockNum)                                                     \
+-    unsigned          _blockNum = 0;                                                                                   \
+-    BlockSetOps::Iter _iterName(_comp, _blockSet)
+-
+ #endif // _BLOCKSET_INCLUDED_
+diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
+index 2c41293..1137207 100644
+--- a/src/jit/codegencommon.cpp
++++ b/src/jit/codegencommon.cpp
+@@ -1099,7 +1099,8 @@ void Compiler::compChangeLife(VARSET_VALARG_TP newLife DEBUGARG(GenTreePtr tree)
+     // Handle the dying vars first, then the newly live vars.
+     // This is because, in the RyuJIT backend case, they may occupy registers that
+     // will be occupied by another var that is newly live.
+-    VARSET_ITER_INIT(this, deadIter, deadSet, deadVarIndex);
++    VarSetOps::Iter deadIter(this, deadSet);
++    unsigned        deadVarIndex = 0;
+     while (deadIter.NextElem(&deadVarIndex))
+     {
+         unsigned varNum = lvaTrackedToVarNum[deadVarIndex];
+@@ -1134,7 +1135,8 @@ void Compiler::compChangeLife(VARSET_VALARG_TP newLife DEBUGARG(GenTreePtr tree)
+ #endif // !LEGACY_BACKEND
+     }
+ 
+-    VARSET_ITER_INIT(this, bornIter, bornSet, bornVarIndex);
++    VarSetOps::Iter bornIter(this, bornSet);
++    unsigned        bornVarIndex = 0;
+     while (bornIter.NextElem(&bornVarIndex))
+     {
+         unsigned varNum = lvaTrackedToVarNum[bornVarIndex];
+@@ -1304,7 +1306,8 @@ regMaskTP CodeGenInterface::genLiveMask(VARSET_VALARG_TP liveSet)
+ 
+     regMaskTP liveMask = 0;
+ 
+-    VARSET_ITER_INIT(compiler, iter, liveSet, varIndex);
++    VarSetOps::Iter iter(compiler, liveSet);
++    unsigned        varIndex = 0;
+     while (iter.NextElem(&varIndex))
+     {
+ 
+diff --git a/src/jit/codegenlegacy.cpp b/src/jit/codegenlegacy.cpp
+index b2a5a87..5a8c282 100644
+--- a/src/jit/codegenlegacy.cpp
++++ b/src/jit/codegenlegacy.cpp
+@@ -52,7 +52,8 @@ void CodeGen::genDyingVars(VARSET_VALARG_TP beforeSet, VARSET_VALARG_TP afterSet
+ 
+     /* iterate through the dead variables */
+ 
+-    VARSET_ITER_INIT(compiler, iter, deadSet, varIndex);
++    VarSetOps::Iter iter(compiler, deadSet);
++    unsigned        varIndex = 0;
+     while (iter.NextElem(&varIndex))
+     {
+         varNum = compiler->lvaTrackedToVarNum[varIndex];
+@@ -5631,7 +5632,8 @@ void CodeGen::genCodeForQmark(GenTreePtr tree, regMaskTP destReg, regMaskTP best
+ 
+             VARSET_TP regVarLiveNow(VarSetOps::Intersection(compiler, compiler->raRegVarsMask, rsLiveNow));
+ 
+-            VARSET_ITER_INIT(compiler, iter, regVarLiveNow, varIndex);
++            VarSetOps::Iter iter(compiler, regVarLiveNow);
++            unsigned        varIndex = 0;
+             while (iter.NextElem(&varIndex))
+             {
+                 // Find the variable in compiler->lvaTable
+@@ -12579,7 +12581,8 @@ void CodeGen::genCodeForBBlist()
+         // We should never enregister variables in any of the specialUseMask registers
+         noway_assert((specialUseMask & regSet.rsMaskVars) == 0);
+ 
+-        VARSET_ITER_INIT(compiler, iter, liveSet, varIndex);
++        VarSetOps::Iter iter(compiler, liveSet);
++        unsigned        varIndex = 0;
+         while (iter.NextElem(&varIndex))
+         {
+             varNum = compiler->lvaTrackedToVarNum[varIndex];
+@@ -15237,7 +15240,8 @@ unsigned CodeGen::genRegCountForLiveIntEnregVars(GenTreePtr tree)
+ {
+     unsigned regCount = 0;
+ 
+-    VARSET_ITER_INIT(compiler, iter, compiler->compCurLife, varNum);
++    VarSetOps::Iter iter(compiler, compiler->compCurLife);
++    unsigned        varNum = 0;
+     while (iter.NextElem(&varNum))
+     {
+         unsigned   lclNum = compiler->lvaTrackedToVarNum[varNum];
+diff --git a/src/jit/codegenlinear.cpp b/src/jit/codegenlinear.cpp
+index b98b6e1..59d08de 100644
+--- a/src/jit/codegenlinear.cpp
++++ b/src/jit/codegenlinear.cpp
+@@ -169,7 +169,8 @@ void CodeGen::genCodeForBBlist()
+         VARSET_TP removedGCVars(VarSetOps::MakeEmpty(compiler));
+         VARSET_TP addedGCVars(VarSetOps::MakeEmpty(compiler));
+ #endif
+-        VARSET_ITER_INIT(compiler, iter, block->bbLiveIn, varIndex);
++        VarSetOps::Iter iter(compiler, block->bbLiveIn);
++        unsigned        varIndex = 0;
+         while (iter.NextElem(&varIndex))
+         {
+             unsigned   varNum = compiler->lvaTrackedToVarNum[varIndex];
+@@ -501,7 +502,8 @@ void CodeGen::genCodeForBBlist()
+ 
+         VARSET_TP extraLiveVars(VarSetOps::Diff(compiler, block->bbLiveOut, compiler->compCurLife));
+         VarSetOps::UnionD(compiler, extraLiveVars, VarSetOps::Diff(compiler, compiler->compCurLife, block->bbLiveOut));
+-        VARSET_ITER_INIT(compiler, extraLiveVarIter, extraLiveVars, extraLiveVarIndex);
++        VarSetOps::Iter extraLiveVarIter(compiler, extraLiveVars);
++        unsigned        extraLiveVarIndex = 0;
+         while (extraLiveVarIter.NextElem(&extraLiveVarIndex))
+         {
+             unsigned   varNum = compiler->lvaTrackedToVarNum[extraLiveVarIndex];
+diff --git a/src/jit/compiler.cpp b/src/jit/compiler.cpp
+index c299cfc..d5051fb 100644
+--- a/src/jit/compiler.cpp
++++ b/src/jit/compiler.cpp
+@@ -8301,7 +8301,8 @@ void dumpConvertedVarSet(Compiler* comp, VARSET_VALARG_TP vars)
+     pVarNumSet            = (BYTE*)_alloca(varNumSetBytes);
+     memset(pVarNumSet, 0, varNumSetBytes); // empty the set
+ 
+-    VARSET_ITER_INIT(comp, iter, vars, varIndex);
++    VarSetOps::Iter iter(comp, vars);
++    unsigned        varIndex = 0;
+     while (iter.NextElem(&varIndex))
+     {
+         unsigned varNum = comp->lvaTrackedToVarNum[varIndex];
+diff --git a/src/jit/compiler.h b/src/jit/compiler.h
+index d9245fa..1dfa2a4 100644
+--- a/src/jit/compiler.h
++++ b/src/jit/compiler.h
+@@ -4445,7 +4445,7 @@ public:
+     void fgTableDispBasicBlock(BasicBlock* block, int ibcColWidth = 0);
+     void fgDispBasicBlocks(BasicBlock* firstBlock, BasicBlock* lastBlock, bool dumpTrees);
+     void fgDispBasicBlocks(bool dumpTrees = false);
+-    void fgDumpStmtTree(GenTreePtr stmt, unsigned blkNum);
++    void fgDumpStmtTree(GenTreePtr stmt, unsigned bbNum);
+     void fgDumpBlock(BasicBlock* block);
+     void fgDumpTrees(BasicBlock* firstBlock, BasicBlock* lastBlock);
+ 
+diff --git a/src/jit/flowgraph.cpp b/src/jit/flowgraph.cpp
+index 0f19e96..dfcf703 100644
+--- a/src/jit/flowgraph.cpp
++++ b/src/jit/flowgraph.cpp
+@@ -1939,7 +1939,8 @@ void Compiler::fgComputeEnterBlocksSet()
+     if (verbose)
+     {
+         printf("Enter blocks: ");
+-        BLOCKSET_ITER_INIT(this, iter, fgEnterBlks, bbNum);
++        BlockSetOps::Iter iter(this, fgEnterBlks);
++        unsigned          bbNum = 0;
+         while (iter.NextElem(&bbNum))
+         {
+             printf("BB%02u ", bbNum);
+@@ -2289,7 +2290,8 @@ BlockSet_ValRet_T Compiler::fgDomFindStartNodes()
+     if (verbose)
+     {
+         printf("\nDominator computation start blocks (those blocks with no incoming edges):\n");
+-        BLOCKSET_ITER_INIT(this, iter, startNodes, bbNum);
++        BlockSetOps::Iter iter(this, startNodes);
++        unsigned          bbNum = 0;
+         while (iter.NextElem(&bbNum))
+         {
+             printf("BB%02u ", bbNum);
+@@ -3297,7 +3299,7 @@ Compiler::SwitchUniqueSuccSet Compiler::GetDescriptorForSwitch(BasicBlock* switc
+         // reachability information stored in the blocks. To avoid that, we just use a local BitVec.
+ 
+         BitVecTraits blockVecTraits(fgBBNumMax + 1, this);
+-        BitVec       BITVEC_INIT_NOCOPY(uniqueSuccBlocks, BitVecOps::MakeEmpty(&blockVecTraits));
++        BitVec       uniqueSuccBlocks(BitVecOps::MakeEmpty(&blockVecTraits));
+         BasicBlock** jumpTable = switchBlk->bbJumpSwt->bbsDstTab;
+         unsigned     jumpCount = switchBlk->bbJumpSwt->bbsCount;
+         for (unsigned i = 0; i < jumpCount; i++)
+@@ -19601,7 +19603,8 @@ void Compiler::fgDispReach()
+     for (BasicBlock* block = fgFirstBB; block != nullptr; block = block->bbNext)
+     {
+         printf("BB%02u : ", block->bbNum);
+-        BLOCKSET_ITER_INIT(this, iter, block->bbReach, bbNum);
++        BlockSetOps::Iter iter(this, block->bbReach);
++        unsigned          bbNum = 0;
+         while (iter.NextElem(&bbNum))
+         {
+             printf("BB%02u ", bbNum);
+@@ -20097,11 +20100,11 @@ void Compiler::fgDispBasicBlocks(bool dumpTrees)
+ /*****************************************************************************/
+ //  Increment the stmtNum and dump the tree using gtDispTree
+ //
+-void Compiler::fgDumpStmtTree(GenTreePtr stmt, unsigned blkNum)
++void Compiler::fgDumpStmtTree(GenTreePtr stmt, unsigned bbNum)
+ {
+     compCurStmtNum++; // Increment the current stmtNum
+ 
+-    printf("\n***** BB%02u, stmt %d\n", blkNum, compCurStmtNum);
++    printf("\n***** BB%02u, stmt %d\n", bbNum, compCurStmtNum);
+ 
+     if (fgOrder == FGOrderLinear || opts.compDbgInfo)
+     {
+@@ -21254,7 +21257,7 @@ void Compiler::fgDebugCheckBlockLinks()
+                 // Create a set with all the successors. Don't use BlockSet, so we don't need to worry
+                 // about the BlockSet epoch.
+                 BitVecTraits bitVecTraits(fgBBNumMax + 1, this);
+-                BitVec       BITVEC_INIT_NOCOPY(succBlocks, BitVecOps::MakeEmpty(&bitVecTraits));
++                BitVec       succBlocks(BitVecOps::MakeEmpty(&bitVecTraits));
+                 BasicBlock** jumpTable = block->bbJumpSwt->bbsDstTab;
+                 unsigned     jumpCount = block->bbJumpSwt->bbsCount;
+                 for (unsigned i = 0; i < jumpCount; i++)
+diff --git a/src/jit/liveness.cpp b/src/jit/liveness.cpp
+index 8615703..65cec0d 100644
+--- a/src/jit/liveness.cpp
++++ b/src/jit/liveness.cpp
+@@ -983,7 +983,8 @@ void Compiler::fgExtendDbgLifetimes()
+         /* Add statements initializing the vars, if there are any to initialize */
+         unsigned blockWeight = block->getBBWeight(this);
+ 
+-        VARSET_ITER_INIT(this, iter, initVars, varIndex);
++        VarSetOps::Iter iter(this, initVars);
++        unsigned        varIndex = 0;
+         while (iter.NextElem(&varIndex))
+         {
+             /* Create initialization tree */
+@@ -1364,7 +1365,8 @@ bool Compiler::fgMarkIntf(VARSET_VALARG_TP varSet1, VARSET_VALARG_TP varSet2)
+     VarSetOps::Assign(this, fgMarkIntfUnionVS, varSet1);
+     VarSetOps::UnionD(this, fgMarkIntfUnionVS, varSet2);
+ 
+-    VARSET_ITER_INIT(this, iter, fgMarkIntfUnionVS, refIndex);
++    VarSetOps::Iter iter(this, fgMarkIntfUnionVS);
++    unsigned        refIndex = 0;
+     while (iter.NextElem(&refIndex))
+     {
+         // if varSet1 has this bit set then it interferes with varSet2
+@@ -1417,7 +1419,8 @@ bool Compiler::fgMarkIntf(VARSET_VALARG_TP varSet)
+ 
+     bool addedIntf = false; // This is set to true if we add any new interferences
+ 
+-    VARSET_ITER_INIT(this, iter, varSet, refIndex);
++    VarSetOps::Iter iter(this, varSet);
++    unsigned        refIndex = 0;
+     while (iter.NextElem(&refIndex))
+     {
+         // Calculate the set of new interference to add
+diff --git a/src/jit/lsra.cpp b/src/jit/lsra.cpp
+index ddab7f9..778ee61 100644
+--- a/src/jit/lsra.cpp
++++ b/src/jit/lsra.cpp
+@@ -1831,7 +1831,8 @@ void LinearScan::recordVarLocationsAtStartOfBB(BasicBlock* bb)
+ 
+     VarSetOps::AssignNoCopy(compiler, currentLiveVars,
+                             VarSetOps::Intersection(compiler, registerCandidateVars, bb->bbLiveIn));
+-    VARSET_ITER_INIT(compiler, iter, currentLiveVars, varIndex);
++    VarSetOps::Iter iter(compiler, currentLiveVars);
++    unsigned        varIndex = 0;
+     while (iter.NextElem(&varIndex))
+     {
+         unsigned   varNum = compiler->lvaTrackedToVarNum[varIndex];
+@@ -1928,7 +1929,8 @@ void LinearScan::identifyCandidatesExceptionDataflow()
+         block as either volatile for non-GC ref types or as
+         'explicitly initialized' (volatile and must-init) for GC-ref types */
+ 
+-    VARSET_ITER_INIT(compiler, iter, exceptVars, varIndex);
++    VarSetOps::Iter iter(compiler, exceptVars);
++    unsigned        varIndex = 0;
+     while (iter.NextElem(&varIndex))
+     {
+         unsigned   varNum = compiler->lvaTrackedToVarNum[varIndex];
+@@ -2705,8 +2707,8 @@ void LinearScan::checkLastUses(BasicBlock* block)
+ 
+     VARSET_TP liveInNotComputedLive(VarSetOps::Diff(compiler, block->bbLiveIn, computedLive));
+ 
+-    unsigned        liveInNotComputedLiveIndex = 0;
+     VarSetOps::Iter liveInNotComputedLiveIter(compiler, liveInNotComputedLive);
++    unsigned        liveInNotComputedLiveIndex = 0;
+     while (liveInNotComputedLiveIter.NextElem(&liveInNotComputedLiveIndex))
+     {
+         unsigned varNum = compiler->lvaTrackedToVarNum[liveInNotComputedLiveIndex];
+@@ -2719,8 +2721,8 @@ void LinearScan::checkLastUses(BasicBlock* block)
+ 
+     VarSetOps::DiffD(compiler, computedLive, block->bbLiveIn);
+     const VARSET_TP& computedLiveNotLiveIn(computedLive); // reuse the buffer.
+-    unsigned         computedLiveNotLiveInIndex = 0;
+     VarSetOps::Iter  computedLiveNotLiveInIter(compiler, computedLiveNotLiveIn);
++    unsigned         computedLiveNotLiveInIndex = 0;
+     while (computedLiveNotLiveInIter.NextElem(&computedLiveNotLiveInIndex))
+     {
+         unsigned varNum = compiler->lvaTrackedToVarNum[computedLiveNotLiveInIndex];
+@@ -2978,8 +2980,8 @@ bool LinearScan::buildKillPositionsForNode(GenTree* tree, LsraLocation currentLo
+         // if (!blockSequence[curBBSeqNum]->isRunRarely())
+         if (enregisterLocalVars)
+         {
+-
+-            VARSET_ITER_INIT(compiler, iter, currentLiveVars, varIndex);
++            VarSetOps::Iter iter(compiler, currentLiveVars);
++            unsigned        varIndex = 0;
+             while (iter.NextElem(&varIndex))
+             {
+                 unsigned   varNum = compiler->lvaTrackedToVarNum[varIndex];
+@@ -3423,7 +3425,8 @@ LinearScan::buildUpperVectorSaveRefPositions(GenTree* tree, LsraLocation current
+         {
+             VarSetOps::AssignNoCopy(compiler, liveLargeVectors,
+                                     VarSetOps::Intersection(compiler, currentLiveVars, largeVectorVars));
+-            VARSET_ITER_INIT(compiler, iter, liveLargeVectors, varIndex);
++            VarSetOps::Iter iter(compiler, liveLargeVectors);
++            unsigned        varIndex = 0;
+             while (iter.NextElem(&varIndex))
+             {
+                 Interval* varInterval    = getIntervalForLocalVar(varIndex);
+@@ -3450,7 +3453,8 @@ void LinearScan::buildUpperVectorRestoreRefPositions(GenTree*         tree,
+     assert(enregisterLocalVars);
+     if (!VarSetOps::IsEmpty(compiler, liveLargeVectors))
+     {
+-        VARSET_ITER_INIT(compiler, iter, liveLargeVectors, varIndex);
++        VarSetOps::Iter iter(compiler, liveLargeVectors);
++        unsigned        varIndex = 0;
+         while (iter.NextElem(&varIndex))
+         {
+             Interval* varInterval  = getIntervalForLocalVar(varIndex);
+@@ -4292,7 +4296,8 @@ void LinearScan::insertZeroInitRefPositions()
+ 
+     // insert defs for this, then a block boundary
+ 
+-    VARSET_ITER_INIT(compiler, iter, currentLiveVars, varIndex);
++    VarSetOps::Iter iter(compiler, currentLiveVars);
++    unsigned        varIndex = 0;
+     while (iter.NextElem(&varIndex))
+     {
+         unsigned   varNum = compiler->lvaTrackedToVarNum[varIndex];
+@@ -4759,7 +4764,8 @@ void LinearScan::buildIntervals()
+                 assert(!predBlockIsAllocated);
+ 
+                 JITDUMP("Creating dummy definitions\n");
+-                VARSET_ITER_INIT(compiler, iter, newLiveIn, varIndex);
++                VarSetOps::Iter iter(compiler, newLiveIn);
++                unsigned        varIndex = 0;
+                 while (iter.NextElem(&varIndex))
+                 {
+                     unsigned   varNum = compiler->lvaTrackedToVarNum[varIndex];
+@@ -4854,7 +4860,8 @@ void LinearScan::buildIntervals()
+             if (!VarSetOps::IsEmpty(compiler, expUseSet))
+             {
+                 JITDUMP("Exposed uses:");
+-                VARSET_ITER_INIT(compiler, iter, expUseSet, varIndex);
++                VarSetOps::Iter iter(compiler, expUseSet);
++                unsigned        varIndex = 0;
+                 while (iter.NextElem(&varIndex))
+                 {
+                     unsigned   varNum = compiler->lvaTrackedToVarNum[varIndex];
+@@ -4870,7 +4877,8 @@ void LinearScan::buildIntervals()
+ 
+             // Clear the "last use" flag on any vars that are live-out from this block.
+             {
+-                VARSET_ITER_INIT(compiler, iter, block->bbLiveOut, varIndex);
++                VarSetOps::Iter iter(compiler, block->bbLiveOut);
++                unsigned        varIndex = 0;
+                 while (iter.NextElem(&varIndex))
+                 {
+                     unsigned         varNum = compiler->lvaTrackedToVarNum[varIndex];
+@@ -6867,7 +6875,8 @@ void LinearScan::processBlockStartLocations(BasicBlock* currentBlock, bool alloc
+     regMaskTP inactiveRegs = RBM_NONE;
+ #endif // DEBUG
+     regMaskTP       liveRegs = RBM_NONE;
+-    VARSET_ITER_INIT(compiler, iter, currentLiveVars, varIndex);
++    VarSetOps::Iter iter(compiler, currentLiveVars);
++    unsigned        varIndex = 0;
+     while (iter.NextElem(&varIndex))
+     {
+         unsigned varNum = compiler->lvaTrackedToVarNum[varIndex];
+@@ -7092,7 +7101,8 @@ void LinearScan::processBlockEndLocations(BasicBlock* currentBlock)
+     }
+ #endif // DEBUG
+     regMaskTP       liveRegs = RBM_NONE;
+-    VARSET_ITER_INIT(compiler, iter, currentLiveVars, varIndex);
++    VarSetOps::Iter iter(compiler, currentLiveVars);
++    unsigned        varIndex = 0;
+     while (iter.NextElem(&varIndex))
+     {
+         Interval* interval = getIntervalForLocalVar(varIndex);
+@@ -9509,7 +9519,8 @@ regNumber LinearScan::getTempRegForResolution(BasicBlock* fromBlock, BasicBlock*
+     INDEBUG(freeRegs = stressLimitRegs(nullptr, freeRegs));
+ 
+     // We are only interested in the variables that are live-in to the "to" block.
+-    VARSET_ITER_INIT(compiler, iter, toBlock->bbLiveIn, varIndex);
++    VarSetOps::Iter iter(compiler, toBlock->bbLiveIn);
++    unsigned        varIndex = 0;
+     while (iter.NextElem(&varIndex) && freeRegs != RBM_NONE)
+     {
+         regNumber fromReg = getVarReg(fromVarToRegMap, varIndex);
+@@ -9626,10 +9637,11 @@ void LinearScan::handleOutgoingCriticalEdges(BasicBlock* block)
+     // Note that for this purpose we use the full live-out set, because we must ensure that
+     // even the registers that remain the same across the edge are preserved correctly.
+     regMaskTP       liveOutRegs = RBM_NONE;
+-    VARSET_ITER_INIT(compiler, iter1, block->bbLiveOut, varIndex1);
+-    while (iter1.NextElem(&varIndex1))
++    VarSetOps::Iter liveOutIter(compiler, block->bbLiveOut);
++    unsigned        liveOutVarIndex = 0;
++    while (liveOutIter.NextElem(&liveOutVarIndex))
+     {
+-        regNumber fromReg = getVarReg(outVarToRegMap, varIndex1);
++        regNumber fromReg = getVarReg(outVarToRegMap, liveOutVarIndex);
+         if (fromReg != REG_STK)
+         {
+             liveOutRegs |= genRegMask(fromReg);
+@@ -9668,10 +9680,11 @@ void LinearScan::handleOutgoingCriticalEdges(BasicBlock* block)
+     //   write to any registers that are read by those in the diffResolutionSet:
+     //     sameResolutionSet
+ 
+-    VARSET_ITER_INIT(compiler, iter, outResolutionSet, varIndex);
+-    while (iter.NextElem(&varIndex))
++    VarSetOps::Iter outResolutionSetIter(compiler, outResolutionSet);
++    unsigned        outResolutionSetVarIndex = 0;
++    while (outResolutionSetIter.NextElem(&outResolutionSetVarIndex))
+     {
+-        regNumber fromReg             = getVarReg(outVarToRegMap, varIndex);
++        regNumber fromReg             = getVarReg(outVarToRegMap, outResolutionSetVarIndex);
+         bool      isMatch             = true;
+         bool      isSame              = false;
+         bool      maybeSingleTarget   = false;
+@@ -9681,7 +9694,7 @@ void LinearScan::handleOutgoingCriticalEdges(BasicBlock* block)
+         for (unsigned succIndex = 0; succIndex < succCount; succIndex++)
+         {
+             BasicBlock* succBlock = block->GetSucc(succIndex, compiler);
+-            if (!VarSetOps::IsMember(compiler, succBlock->bbLiveIn, varIndex))
++            if (!VarSetOps::IsMember(compiler, succBlock->bbLiveIn, outResolutionSetVarIndex))
+             {
+                 maybeSameLivePaths = true;
+                 continue;
+@@ -9692,7 +9705,7 @@ void LinearScan::handleOutgoingCriticalEdges(BasicBlock* block)
+                 liveOnlyAtSplitEdge = ((succBlock->bbPreds->flNext == nullptr) && (succBlock != compiler->fgFirstBB));
+             }
+ 
+-            regNumber toReg = getVarReg(getInVarToRegMap(succBlock->bbNum), varIndex);
++            regNumber toReg = getVarReg(getInVarToRegMap(succBlock->bbNum), outResolutionSetVarIndex);
+             if (sameToReg == REG_NA)
+             {
+                 sameToReg = toReg;
+@@ -9742,7 +9755,7 @@ void LinearScan::handleOutgoingCriticalEdges(BasicBlock* block)
+ 
+         if (sameToReg == REG_NA)
+         {
+-            VarSetOps::AddElemD(compiler, diffResolutionSet, varIndex);
++            VarSetOps::AddElemD(compiler, diffResolutionSet, outResolutionSetVarIndex);
+             if (fromReg != REG_STK)
+             {
+                 diffReadRegs |= genRegMask(fromReg);
+@@ -9750,8 +9763,8 @@ void LinearScan::handleOutgoingCriticalEdges(BasicBlock* block)
+         }
+         else if (sameToReg != fromReg)
+         {
+-            VarSetOps::AddElemD(compiler, sameResolutionSet, varIndex);
+-            setVarReg(sameVarToRegMap, varIndex, sameToReg);
++            VarSetOps::AddElemD(compiler, sameResolutionSet, outResolutionSetVarIndex);
++            setVarReg(sameVarToRegMap, outResolutionSetVarIndex, sameToReg);
+             if (sameToReg != REG_STK)
+             {
+                 sameWriteRegs |= genRegMask(sameToReg);
+@@ -9794,7 +9807,8 @@ void LinearScan::handleOutgoingCriticalEdges(BasicBlock* block)
+             bool        needsResolution   = false;
+             VarToRegMap succInVarToRegMap = getInVarToRegMap(succBlock->bbNum);
+             VARSET_TP   edgeResolutionSet(VarSetOps::Intersection(compiler, diffResolutionSet, succBlock->bbLiveIn));
+-            VARSET_ITER_INIT(compiler, iter, edgeResolutionSet, varIndex);
++            VarSetOps::Iter iter(compiler, edgeResolutionSet);
++            unsigned        varIndex = 0;
+             while (iter.NextElem(&varIndex))
+             {
+                 regNumber fromReg = getVarReg(outVarToRegMap, varIndex);
+@@ -9996,7 +10010,8 @@ void LinearScan::resolveEdges()
+         {
+             BasicBlock*     predBlock       = pred->flBlock;
+             VarToRegMap     fromVarToRegMap = getOutVarToRegMap(predBlock->bbNum);
+-            VARSET_ITER_INIT(compiler, iter, block->bbLiveIn, varIndex);
++            VarSetOps::Iter iter(compiler, block->bbLiveIn);
++            unsigned        varIndex = 0;
+             while (iter.NextElem(&varIndex))
+             {
+                 regNumber fromReg = getVarReg(fromVarToRegMap, varIndex);
+@@ -10162,7 +10177,8 @@ void LinearScan::resolveEdge(BasicBlock*      fromBlock,
+     // TODO-Throughput: We should be looping over the liveIn and liveOut registers, since
+     // that will scale better than the live variables
+ 
+-    VARSET_ITER_INIT(compiler, iter, liveSet, varIndex);
++    VarSetOps::Iter iter(compiler, liveSet);
++    unsigned        varIndex = 0;
+     while (iter.NextElem(&varIndex))
+     {
+         regNumber fromReg = getVarReg(fromVarToRegMap, varIndex);
+@@ -12260,7 +12276,8 @@ void LinearScan::verifyFinalAllocation()
+                     if (enregisterLocalVars)
+                     {
+                         VarToRegMap     outVarToRegMap = outVarToRegMaps[currentBlock->bbNum];
+-                        VARSET_ITER_INIT(compiler, iter, currentBlock->bbLiveOut, varIndex);
++                        VarSetOps::Iter iter(compiler, currentBlock->bbLiveOut);
++                        unsigned        varIndex = 0;
+                         while (iter.NextElem(&varIndex))
+                         {
+                             if (localVarIntervals[varIndex] == nullptr)
+@@ -12293,7 +12310,8 @@ void LinearScan::verifyFinalAllocation()
+                     if (enregisterLocalVars)
+                     {
+                         VarToRegMap     inVarToRegMap = inVarToRegMaps[currentBlock->bbNum];
+-                        VARSET_ITER_INIT(compiler, iter, currentBlock->bbLiveIn, varIndex);
++                        VarSetOps::Iter iter(compiler, currentBlock->bbLiveIn);
++                        unsigned        varIndex = 0;
+                         while (iter.NextElem(&varIndex))
+                         {
+                             if (localVarIntervals[varIndex] == nullptr)
+@@ -12544,7 +12562,8 @@ void LinearScan::verifyFinalAllocation()
+ 
+             // Set the incoming register assignments
+             VarToRegMap     inVarToRegMap = getInVarToRegMap(currentBlock->bbNum);
+-            VARSET_ITER_INIT(compiler, iter, currentBlock->bbLiveIn, varIndex);
++            VarSetOps::Iter iter(compiler, currentBlock->bbLiveIn);
++            unsigned        varIndex = 0;
+             while (iter.NextElem(&varIndex))
+             {
+                 if (localVarIntervals[varIndex] == nullptr)
+@@ -12576,7 +12595,8 @@ void LinearScan::verifyFinalAllocation()
+             // Verify the outgoing register assignments
+             {
+                 VarToRegMap     outVarToRegMap = getOutVarToRegMap(currentBlock->bbNum);
+-                VARSET_ITER_INIT(compiler, iter, currentBlock->bbLiveOut, varIndex);
++                VarSetOps::Iter iter(compiler, currentBlock->bbLiveOut);
++                unsigned        varIndex = 0;
+                 while (iter.NextElem(&varIndex))
+                 {
+                     if (localVarIntervals[varIndex] == nullptr)
+diff --git a/src/jit/regalloc.cpp b/src/jit/regalloc.cpp
+index 8403232..8280503 100644
+--- a/src/jit/regalloc.cpp
++++ b/src/jit/regalloc.cpp
+@@ -985,7 +985,8 @@ bool Compiler::rpRecordRegIntf(regMaskTP regMask, VARSET_VALARG_TP life DEBUGARG
+ #ifdef DEBUG
+                     if (verbose)
+                     {
+-                        VARSET_ITER_INIT(this, newIntfIter, newIntf, varNum);
++                        VarSetOps::Iter newIntfIter(this, newIntf);
++                        unsigned        varNum = 0;
+                         while (newIntfIter.NextElem(&varNum))
+                         {
+                             unsigned   lclNum = lvaTrackedToVarNum[varNum];
+@@ -1336,7 +1337,8 @@ RET:
+         VARSET_TP useUnion(VarSetOps::Union(this, lastUse, inPlaceUse));
+ 
+         VARSET_TP       varAsSet(VarSetOps::MakeEmpty(this));
+-        VARSET_ITER_INIT(this, iter, useUnion, varNum);
++        VarSetOps::Iter iter(this, useUnion);
++        unsigned        varNum = 0;
+         while (iter.NextElem(&varNum))
+         {
+             // We'll need this for one of the calls...
+@@ -5654,7 +5656,8 @@ regMaskTP Compiler::rpPredictAssignRegVars(regMaskTP regAvail)
+                 // psc is abbeviation for possibleSameColor
+                 VARSET_TP pscVarSet(VarSetOps::Diff(this, unprocessedVars, lvaVarIntf[varIndex]));
+ 
+-                VARSET_ITER_INIT(this, pscIndexIter, pscVarSet, pscIndex);
++                VarSetOps::Iter pscIndexIter(this, pscVarSet);
++                unsigned        pscIndex = 0;
+                 while (pscIndexIter.NextElem(&pscIndex))
+                 {
+                     LclVarDsc* pscVar = lvaTable + lvaTrackedToVarNum[pscIndex];
+@@ -5737,7 +5740,8 @@ regMaskTP Compiler::rpPredictAssignRegVars(regMaskTP regAvail)
+             if (isDouble)
+             {
+                 regNumber       secondHalf = REG_NEXT(regNum);
+-                VARSET_ITER_INIT(this, iter, lvaVarIntf[varIndex], intfIndex);
++                VarSetOps::Iter iter(this, lvaVarIntf[varIndex]);
++                unsigned        intfIndex = 0;
+                 while (iter.NextElem(&intfIndex))
+                 {
+                     VarSetOps::AddElemD(this, raLclRegIntf[secondHalf], intfIndex);
+diff --git a/src/jit/scopeinfo.cpp b/src/jit/scopeinfo.cpp
+index 2fd08f0..6a1064b 100644
+--- a/src/jit/scopeinfo.cpp
++++ b/src/jit/scopeinfo.cpp
+@@ -458,10 +458,11 @@ void CodeGen::siBeginBlock(BasicBlock* block)
+ 
+         // Check that vars which are live on entry have an open scope
+ 
+-        VARSET_ITER_INIT(compiler, iter, block->bbLiveIn, i);
+-        while (iter.NextElem(&i))
++        VarSetOps::Iter iter(compiler, block->bbLiveIn);
++        unsigned        varIndex = 0;
++        while (iter.NextElem(&varIndex))
+         {
+-            unsigned varNum = compiler->lvaTrackedToVarNum[i];
++            unsigned varNum = compiler->lvaTrackedToVarNum[varIndex];
+             // lvRefCnt may go down to 0 after liveness-analysis.
+             // So we need to check if this tracked variable is actually used.
+             if (!compiler->lvaTable[varNum].lvIsInReg() && !compiler->lvaTable[varNum].lvOnFrame)
+@@ -659,17 +660,18 @@ void CodeGen::siUpdate()
+     VARSET_TP killed(VarSetOps::Diff(compiler, siLastLife, compiler->compCurLife));
+     assert(VarSetOps::IsSubset(compiler, killed, compiler->lvaTrackedVars));
+ 
+-    VARSET_ITER_INIT(compiler, iter, killed, i);
+-    while (iter.NextElem(&i))
++    VarSetOps::Iter iter(compiler, killed);
++    unsigned        varIndex = 0;
++    while (iter.NextElem(&varIndex))
+     {
+ #ifdef DEBUG
+-        unsigned   lclNum = compiler->lvaTrackedToVarNum[i];
++        unsigned   lclNum = compiler->lvaTrackedToVarNum[varIndex];
+         LclVarDsc* lclVar = &compiler->lvaTable[lclNum];
+         assert(lclVar->lvTracked);
+ #endif
+ 
+-        siScope* scope = siLatestTrackedScopes[i];
+-        siEndTrackedScope(i);
++        siScope* scope = siLatestTrackedScopes[varIndex];
++        siEndTrackedScope(varIndex);
+     }
+ 
+     VarSetOps::Assign(compiler, siLastLife, compiler->compCurLife);
+diff --git a/src/jit/ssabuilder.cpp b/src/jit/ssabuilder.cpp
+index 2e3237c..4b9fb9f 100644
+--- a/src/jit/ssabuilder.cpp
++++ b/src/jit/ssabuilder.cpp
+@@ -191,7 +191,7 @@ int SsaBuilder::TopologicalSort(BasicBlock** postOrder, int count)
+     Compiler* comp = m_pCompiler;
+ 
+     BitVecTraits traits(comp->fgBBNumMax + 1, comp);
+-    BitVec       BITVEC_INIT_NOCOPY(visited, BitVecOps::MakeEmpty(&traits));
++    BitVec       visited(BitVecOps::MakeEmpty(&traits));
+ 
+     // Display basic blocks.
+     DBEXEC(VERBOSE, comp->fgDispBasicBlocks());
+@@ -295,7 +295,7 @@ void SsaBuilder::ComputeImmediateDom(BasicBlock** postOrder, int count)
+ 
+     // Add entry point to processed as its IDom is NULL.
+     BitVecTraits traits(m_pCompiler->fgBBNumMax + 1, m_pCompiler);
+-    BitVec       BITVEC_INIT_NOCOPY(processed, BitVecOps::MakeEmpty(&traits));
++    BitVec       processed(BitVecOps::MakeEmpty(&traits));
+ 
+     BitVecOps::AddElemD(&traits, processed, m_pCompiler->fgFirstBB->bbNum);
+     assert(postOrder[count - 1] == m_pCompiler->fgFirstBB);
+@@ -760,7 +760,8 @@ void SsaBuilder::InsertPhiFunctions(BasicBlock** postOrder, int count)
+         }
+ 
+         // For each local var number "lclNum" that "block" assigns to...
+-        VARSET_ITER_INIT(m_pCompiler, defVars, block->bbVarDef, varIndex);
++        VarSetOps::Iter defVars(m_pCompiler, block->bbVarDef);
++        unsigned        varIndex = 0;
+         while (defVars.NextElem(&varIndex))
+         {
+             unsigned lclNum = m_pCompiler->lvaTrackedToVarNum[varIndex];
+diff --git a/src/jit/varset.h b/src/jit/varset.h
+index d8a9a41..2fd3723 100644
+--- a/src/jit/varset.h
++++ b/src/jit/varset.h
+@@ -182,12 +182,4 @@ const unsigned lclMAX_ALLSET_TRACKED = UInt64Bits;
+ typedef AllVarSetOps::ValArgType ALLVARSET_VALARG_TP;
+ typedef AllVarSetOps::RetValType ALLVARSET_VALRET_TP;
+ 
+-// The iterator pattern.
+-
+-// Use this to initialize an iterator "iterName" to iterate over a VARSET_TP "vs".
+-// "varIndex" will be an unsigned variable to which we assign the elements of "vs".
+-#define VARSET_ITER_INIT(comp, iterName, vs, varIndex)                                                                 \
+-    unsigned        varIndex = 0;                                                                                      \
+-    VarSetOps::Iter iterName(comp, vs)
+-
+ #endif // _VARSET_INCLUDED_
+-- 
+2.7.4
+

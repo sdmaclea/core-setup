@@ -1,0 +1,75 @@
+From f4a167726b28d6e1169411b8a299fc52fd2763b9 Mon Sep 17 00:00:00 2001
+From: Mike McLaughlin <mikem@microsoft.com>
+Date: Tue, 11 Jul 2017 09:58:49 -0700
+Subject: [PATCH] Fix crossgen debug directory generation problems. (#12715)
+
+* Fix crossgen debug directory generation problems.
+
+The first problem was that when the existing/incoming PDB debug
+directory entry was a portable PDB (MinorVersion == 0x504d), the
+ngen/native PDB added had the same MinorVersion indicating that
+it was a portable PDB (but it never can be).
+
+This was fixed by setting MinorVersion to 0 when creating the
+ngen PDB debug directory entry.
+
+The second problem was that the ngen PDB entry was being created
+even when crossgen was run on linux/mac, etc.
+
+The fix was to ifdef NO_NGENPDB the save ngen PDB entry code.
+---
+ src/zap/zapheaders.cpp | 6 ++++++
+ src/zap/zapheaders.h   | 5 +++++
+ 2 files changed, 11 insertions(+)
+
+diff --git a/src/zap/zapheaders.cpp b/src/zap/zapheaders.cpp
+index 8960798..f3dab63 100644
+--- a/src/zap/zapheaders.cpp
++++ b/src/zap/zapheaders.cpp
+@@ -282,6 +282,7 @@ void ZapDebugDirectory::SaveOriginalDebugDirectoryEntry(ZapWriter *pZapWriter)
+ 
+ void ZapDebugDirectory::SaveNGenDebugDirectoryEntry(ZapWriter *pZapWriter)
+ {
++#if !defined(NO_NGENPDB)
+     _ASSERTE(pZapWriter);
+ 
+     IMAGE_DEBUG_DIRECTORY debugDirectory = {0};
+@@ -292,6 +293,10 @@ void ZapDebugDirectory::SaveNGenDebugDirectoryEntry(ZapWriter *pZapWriter)
+     debugDirectory.Type = IMAGE_DEBUG_TYPE_CODEVIEW;
+     debugDirectory.SizeOfData = m_pNGenPdbDebugData->GetSize();
+     debugDirectory.AddressOfRawData = m_pNGenPdbDebugData->GetRVA();
++    // Make sure the "is portable pdb" indicator (MinorVersion == 0x504d) is clear
++    // for the NGen debug directory entry since this debug directory is copied
++    // from an existing entry which could be a portable pdb.
++    debugDirectory.MinorVersion = 0;
+     {
+         ZapPhysicalSection *pPhysicalSection = ZapImage::GetImage(pZapWriter)->m_pTextSection;
+         DWORD dwOffset = m_pNGenPdbDebugData->GetRVA() - pPhysicalSection->GetRVA();
+@@ -299,6 +304,7 @@ void ZapDebugDirectory::SaveNGenDebugDirectoryEntry(ZapWriter *pZapWriter)
+         debugDirectory.PointerToRawData = pPhysicalSection->GetFilePos() + dwOffset;
+     }
+     pZapWriter->Write(&debugDirectory, sizeof(debugDirectory));
++#endif // NO_NGENPDB
+ }
+ 
+ void ZapDebugDirectory::Save(ZapWriter * pZapWriter)
+diff --git a/src/zap/zapheaders.h b/src/zap/zapheaders.h
+index 0755c0e..f966ced 100644
+--- a/src/zap/zapheaders.h
++++ b/src/zap/zapheaders.h
+@@ -249,7 +249,12 @@ public:
+ 
+     virtual DWORD GetSize()
+     {
++#if defined(NO_NGENPDB)
++        return sizeof(IMAGE_DEBUG_DIRECTORY) * m_nDebugDirectory;
++#else
++        // Add one for NGen PDB debug directory entry
+         return sizeof(IMAGE_DEBUG_DIRECTORY) * (m_nDebugDirectory + 1);
++#endif // NO_NGENPDB
+     }
+ 
+     virtual UINT GetAlignment()
+-- 
+2.7.4
+
