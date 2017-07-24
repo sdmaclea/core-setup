@@ -1,0 +1,69 @@
+From 99ef88c89b8b49125dd3a9d4c667946aaf36309f Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 20 Jul 2017 19:06:14 -0400
+Subject: [PATCH] Optimize for idle WorkStealingQueueList
+
+When WorkStealingQueue is empty there is an O(N^2)
+penalty for searching the empty queues.  Avoid by
+stashing global emptiness
+---
+ src/mscorlib/src/System/Threading/ThreadPool.cs | 21 ++++++++++++++++++++-
+ 1 file changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/src/mscorlib/src/System/Threading/ThreadPool.cs b/src/mscorlib/src/System/Threading/ThreadPool.cs
+index 0084050..3f9d558 100644
+--- a/src/mscorlib/src/System/Threading/ThreadPool.cs
++++ b/src/mscorlib/src/System/Threading/ThreadPool.cs
+@@ -36,6 +36,9 @@ namespace System.Threading
+         public static volatile bool vmTpInitialized;
+         public static bool enableWorkerTracking;
+ 
++        public const int wsqNowActive = 2; // Require at least 2 full observations of empty wsq to transition to inactive
++        public static int wsqActive;
++
+         public static readonly ThreadPoolWorkQueue workQueue = new ThreadPoolWorkQueue();
+     }
+ 
+@@ -441,6 +444,9 @@ namespace System.Threading
+             if (null != tl)
+             {
+                 tl.workStealingQueue.LocalPush(callback);
++
++                if(ThreadPoolGlobals.wsqActive != ThreadPoolGlobals.wsqNowActive)
++                   Interlocked.Exchange(ref ThreadPoolGlobals.wsqActive, ThreadPoolGlobals.wsqNowActive);
+             }
+             else
+             {
+@@ -458,8 +464,11 @@ namespace System.Threading
+ 
+         public IThreadPoolWorkItem Dequeue(ThreadPoolWorkQueueThreadLocals tl, ref bool missedSteal)
+         {
+-            WorkStealingQueue localWsq = tl.workStealingQueue;
+             IThreadPoolWorkItem callback;
++            int wsqActiveObserved = ThreadPoolGlobals.wsqActive;
++            if(wsqActiveObserved > 0)
++            {
++                WorkStealingQueue localWsq = tl.workStealingQueue;
+ 
+                 if ((callback = localWsq.LocalPop()) == null && // first try the local queue
+                     !workItems.TryDequeue(out callback)) // then try the global queue
+@@ -484,6 +493,16 @@ namespace System.Threading
+                         }
+                         c--;
+                     }
++                    if((callback == null) && !missedSteal)
++                    {
++                        Interlocked.CompareExchange(ref ThreadPoolGlobals.wsqActive, wsqActiveObserved - 1, wsqActiveObserved);
++                    }
++                }
++            }
++            else
++            {
++                // We only need to look at the global queue since WorkStealingQueueList is inactive
++                workItems.TryDequeue(out callback);
+             }
+ 
+             return callback;
+-- 
+2.7.4
+
