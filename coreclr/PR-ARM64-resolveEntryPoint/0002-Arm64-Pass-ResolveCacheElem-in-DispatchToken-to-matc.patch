@@ -1,25 +1,38 @@
-From ed7084dc8cb6915a0838f75dd6b2e0646055ad9b Mon Sep 17 00:00:00 2001
+From 615916cc6e883d0fe9590821dbab01718c39cd9d Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Mon, 24 Jul 2017 13:30:01 -0400
 Subject: [PATCH] [Arm64] Pass ResolveCacheElem in DispatchToken to match AMD64
 
 ---
- src/vm/arm64/asmhelpers.S | 1 +
- 1 file changed, 1 insertion(+)
+ src/vm/arm64/asmhelpers.S   | 1 +
+ src/vm/arm64/asmhelpers.asm | 1 +
+ 2 files changed, 2 insertions(+)
 
 diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
-index 2e1d029..49c2b3d 100644
+index 2e1d029..7a64665 100644
 --- a/src/vm/arm64/asmhelpers.S
 +++ b/src/vm/arm64/asmhelpers.S
 @@ -1112,6 +1112,7 @@ LOCAL_LABEL(Promote):
      mov     x16, #256
      str     x16, [x13]         // be quick to reset the counter so we don't get a bunch of contending threads
      orr     x11, x11, #PROMOTE_CHAIN_FLAG   // set PROMOTE_CHAIN_FLAG
-+    mov     X12, x9           // We pass the ResolveCacheElem to ResolveWorkerAsmStub instead of the DispatchToken
++    mov     x12, x9           // We pass the ResolveCacheElem to ResolveWorkerAsmStub instead of the DispatchToken
  
  LOCAL_LABEL(Fail):
      b       ResolveWorkerAsmStub // call the ResolveWorkerAsmStub method to transition into the VM
+diff --git a/src/vm/arm64/asmhelpers.asm b/src/vm/arm64/asmhelpers.asm
+index 8da2151..edd40f7 100644
+--- a/src/vm/arm64/asmhelpers.asm
++++ b/src/vm/arm64/asmhelpers.asm
+@@ -1200,6 +1200,7 @@ Promote
+         mov     x16, #256
+         str     x16, [x13]        ; be quick to reset the counter so we don't get a bunch of contending threads
+         orr     x11, x11, #PROMOTE_CHAIN_FLAG   ; set PROMOTE_CHAIN_FLAG 
++        mov     x12, x9           ; We pass the ResolveCacheElem to ResolveWorkerAsmStub instead of the DispatchToken
+ 
+ Fail           
+         b       ResolveWorkerAsmStub ; call the ResolveWorkerAsmStub method to transition into the VM
 -- 
 2.7.4
 
