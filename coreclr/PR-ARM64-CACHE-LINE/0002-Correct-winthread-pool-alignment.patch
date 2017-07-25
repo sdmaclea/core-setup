@@ -1,0 +1,65 @@
+From cb3e438defad22e2e557cc41366d10f0d2f758c1 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 13 Jul 2017 20:49:46 +0000
+Subject: [PATCH] Correct winthread pool alignment
+
+---
+ src/vm/win32threadpool.h | 15 ++++-----------
+ 1 file changed, 4 insertions(+), 11 deletions(-)
+
+diff --git a/src/vm/win32threadpool.h b/src/vm/win32threadpool.h
+index 5e46337..e6c374f 100644
+--- a/src/vm/win32threadpool.h
++++ b/src/vm/win32threadpool.h
+@@ -123,15 +123,11 @@ class ThreadpoolMgr
+     class UnfairSemaphore
+     {
+     private:
+-
+-        // padding to ensure we get our own cache line
+-        BYTE padding1[64];
+-
+         //
+         // We track everything we care about in a single 64-bit struct to allow us to 
+         // do CompareExchanges on this for atomic updates.
+         // 
+-        union Counts
++        union DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) Counts
+         {
+             struct
+             {
+@@ -146,12 +142,9 @@ class ThreadpoolMgr
+         } m_counts;
+ 
+     private:
+-        const int m_spinLimitPerProcessor; //used when calculating max spin duration
++        DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) const int m_spinLimitPerProcessor; //used when calculating max spin duration
+         CLRSemaphore m_sem;                //waiters wait on this
+ 
+-        // padding to ensure we get our own cache line
+-        BYTE padding2[64];
+-
+         INDEBUG(int m_maxCount;)
+ 
+         bool UpdateCounts(Counts newCounts, Counts currentCounts)
+@@ -350,7 +343,7 @@ public:
+     {
+         static const int MaxPossibleCount = 0x7fff;
+ 
+-        union Counts
++        union DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) Counts
+         {
+             struct
+             {
+@@ -374,7 +367,7 @@ public:
+         } counts;
+ 
+         // padding to ensure we get our own cache line
+-        BYTE padding[64];
++        BYTE padding[MAX_CACHE_LINE_SIZE - sizeof(Counts)];
+ 
+         Counts GetCleanCounts()
+         {
+-- 
+2.7.4
+

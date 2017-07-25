@@ -1,0 +1,209 @@
+From e0281773dd1625d1d780d48a69e3591146b8de18 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 13 Jul 2017 18:38:58 +0000
+Subject: [PATCH] [Arm64] Adjust alignment for 128 byte cache line
+
+---
+ src/vm/threadpoolrequest.cpp |  4 ++--
+ src/vm/threadpoolrequest.h   | 10 ++++++----
+ src/vm/util.hpp              |  7 +++++++
+ src/vm/win32threadpool.cpp   | 14 +++++++-------
+ src/vm/win32threadpool.h     | 14 +++++++-------
+ 5 files changed, 29 insertions(+), 20 deletions(-)
+
+diff --git a/src/vm/threadpoolrequest.cpp b/src/vm/threadpoolrequest.cpp
+index a1ec4b0..0bef664 100644
+--- a/src/vm/threadpoolrequest.cpp
++++ b/src/vm/threadpoolrequest.cpp
+@@ -30,10 +30,10 @@
+ BYTE PerAppDomainTPCountList::s_padding[64 - sizeof(LONG)];
+ // Make this point to unmanaged TP in case, no appdomains have initialized yet.
+ // Cacheline aligned, hot variable
+-DECLSPEC_ALIGN(64) LONG PerAppDomainTPCountList::s_ADHint = -1;
++DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) LONG PerAppDomainTPCountList::s_ADHint = -1;
+ 
+ // Move out of from preceeding variables' cache line
+-DECLSPEC_ALIGN(64) UnManagedPerAppDomainTPCount PerAppDomainTPCountList::s_unmanagedTPCount;
++DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) UnManagedPerAppDomainTPCount PerAppDomainTPCountList::s_unmanagedTPCount;
+ //The list of all per-appdomain work-request counts.
+ ArrayListStatic PerAppDomainTPCountList::s_appDomainIndexList;
+ 
+diff --git a/src/vm/threadpoolrequest.h b/src/vm/threadpoolrequest.h
+index 8d2c7e4..b8ba6b1 100644
+--- a/src/vm/threadpoolrequest.h
++++ b/src/vm/threadpoolrequest.h
+@@ -20,6 +20,8 @@
+ #ifndef _THREADPOOL_REQUEST_H
+ #define _THREADPOOL_REQUEST_H
+ 
++#include "util.hpp"
++
+ #define TP_QUANTUM 2
+ #define UNUSED_THREADPOOL_INDEX (DWORD)-1
+ 
+@@ -181,7 +183,7 @@ public:
+ private:
+     ADID m_id;
+     TPIndex m_index;
+-    DECLSPEC_ALIGN(64) struct {
++    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) struct {
+         BYTE m_padding1[64 - sizeof(LONG)];
+         // Only use with VolatileLoad+VolatileStore+FastInterlockCompareExchange
+         LONG m_numRequestsPending;
+@@ -286,7 +288,7 @@ public:
+ private:
+     SpinLock m_lock;
+     ULONG m_NumRequests;
+-    DECLSPEC_ALIGN(64) struct {
++    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) struct {
+         BYTE m_padding1[64 - sizeof(LONG)];
+         // Only use with VolatileLoad+VolatileStore+FastInterlockCompareExchange
+         LONG m_outstandingThreadRequestCount;
+@@ -352,8 +354,8 @@ private:
+     static DWORD FindFirstFreeTpEntry();
+ 
+     static BYTE s_padding[64 - sizeof(LONG)];
+-    DECLSPEC_ALIGN(64) static LONG s_ADHint;
+-    DECLSPEC_ALIGN(64) static UnManagedPerAppDomainTPCount s_unmanagedTPCount;
++    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static LONG s_ADHint;
++    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static UnManagedPerAppDomainTPCount s_unmanagedTPCount;
+ 
+     //The list of all per-appdomain work-request counts.
+     static ArrayListStatic s_appDomainIndexList;
+diff --git a/src/vm/util.hpp b/src/vm/util.hpp
+index 80cf970..edfd916 100644
+--- a/src/vm/util.hpp
++++ b/src/vm/util.hpp
+@@ -44,6 +44,13 @@
+ #define UtilMessageBoxNonLocalizedVA __error("Use one of the EEMessageBox APIs (defined in eemessagebox.h) from inside the EE")
+ #define WszMessageBox __error("Use one of the EEMessageBox APIs (defined in eemessagebox.h) from inside the EE")
+ 
++// Hot cache lines need to be aligned to cache line size to improve performance
++#if defined(ARM64)
++#define MAX_CACHE_LINE_SIZE 128
++#else
++#define MAX_CACHE_LINE_SIZE 64
++#endif
++
+ //========================================================================
+ // More convenient names for integer types of a guaranteed size.
+ //========================================================================
+diff --git a/src/vm/win32threadpool.cpp b/src/vm/win32threadpool.cpp
+index 18df0dc..e2887c5 100644
+--- a/src/vm/win32threadpool.cpp
++++ b/src/vm/win32threadpool.cpp
+@@ -86,7 +86,7 @@ SVAL_IMPL(LONG,ThreadpoolMgr,MaxFreeCPThreads);                   // = MaxFreeCP
+ Volatile<LONG> ThreadpoolMgr::NumCPInfrastructureThreads = 0;      // number of threads currently busy handling draining cycle
+ 
+ // Cacheline aligned, hot variable
+-DECLSPEC_ALIGN(64) SVAL_IMPL(ThreadpoolMgr::ThreadCounter, ThreadpoolMgr, WorkerCounter);
++DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) SVAL_IMPL(ThreadpoolMgr::ThreadCounter, ThreadpoolMgr, WorkerCounter);
+ 
+ SVAL_IMPL(LONG,ThreadpoolMgr,MinLimitTotalWorkerThreads);          // = MaxLimitCPThreadsPerCPU * number of CPUS
+ SVAL_IMPL(LONG,ThreadpoolMgr,MaxLimitTotalWorkerThreads);        // = MaxLimitCPThreadsPerCPU * number of CPUS
+@@ -97,7 +97,7 @@ LONG    ThreadpoolMgr::cpuUtilizationAverage = 0;
+ HillClimbing ThreadpoolMgr::HillClimbingInstance;
+ 
+ // Cacheline aligned, 3 hot variables updated in a group
+-DECLSPEC_ALIGN(64) LONG ThreadpoolMgr::PriorCompletedWorkRequests = 0;
++DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) LONG ThreadpoolMgr::PriorCompletedWorkRequests = 0;
+ DWORD ThreadpoolMgr::PriorCompletedWorkRequestsTime;
+ DWORD ThreadpoolMgr::NextCompletedWorkRequestsTime;
+ 
+@@ -116,10 +116,10 @@ int ThreadpoolMgr::ThreadAdjustmentInterval;
+ LONG ThreadpoolMgr::Initialization=0;           // indicator of whether the threadpool is initialized.
+ 
+ // Cacheline aligned, hot variable
+-DECLSPEC_ALIGN(64) unsigned int ThreadpoolMgr::LastDequeueTime; // used to determine if work items are getting thread starved
++DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) unsigned int ThreadpoolMgr::LastDequeueTime; // used to determine if work items are getting thread starved
+ 
+ // Move out of from preceeding variables' cache line
+-DECLSPEC_ALIGN(64) int ThreadpoolMgr::offset_counter = 0;
++DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) int ThreadpoolMgr::offset_counter = 0;
+ 
+ SPTR_IMPL(WorkRequest,ThreadpoolMgr,WorkRequestHead);        // Head of work request queue
+ SPTR_IMPL(WorkRequest,ThreadpoolMgr,WorkRequestTail);        // Head of work request queue
+@@ -144,17 +144,17 @@ HANDLE ThreadpoolMgr::TimerThread=NULL;
+ Thread *ThreadpoolMgr::pTimerThread=NULL;
+ 
+ // Cacheline aligned, hot variable
+-DECLSPEC_ALIGN(64) DWORD ThreadpoolMgr::LastTickCount;
++DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) DWORD ThreadpoolMgr::LastTickCount;
+ 
+ #ifdef _DEBUG
+ DWORD ThreadpoolMgr::TickCountAdjustment=0;
+ #endif
+ 
+ // Cacheline aligned, hot variable
+-DECLSPEC_ALIGN(64) LONG  ThreadpoolMgr::GateThreadStatus=GATE_THREAD_STATUS_NOT_RUNNING;
++DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) LONG  ThreadpoolMgr::GateThreadStatus=GATE_THREAD_STATUS_NOT_RUNNING;
+ 
+ // Move out of from preceeding variables' cache line
+-DECLSPEC_ALIGN(64) ThreadpoolMgr::RecycledListsWrapper ThreadpoolMgr::RecycledLists;
++DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) ThreadpoolMgr::RecycledListsWrapper ThreadpoolMgr::RecycledLists;
+ 
+ ThreadpoolMgr::TimerInfo *ThreadpoolMgr::TimerInfosToBeRecycled = NULL;
+ 
+diff --git a/src/vm/win32threadpool.h b/src/vm/win32threadpool.h
+index 65be889..5e46337 100644
+--- a/src/vm/win32threadpool.h
++++ b/src/vm/win32threadpool.h
+@@ -1247,11 +1247,11 @@ private:
+     SVAL_DECL(LONG,MinLimitTotalWorkerThreads);         // same as MinLimitTotalCPThreads
+     SVAL_DECL(LONG,MaxLimitTotalWorkerThreads);         // same as MaxLimitTotalCPThreads
+         
+-    DECLSPEC_ALIGN(64) static unsigned int LastDequeueTime;      // used to determine if work items are getting thread starved 
++    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static unsigned int LastDequeueTime;      // used to determine if work items are getting thread starved 
+     
+     static HillClimbing HillClimbingInstance;
+ 
+-    DECLSPEC_ALIGN(64) static LONG PriorCompletedWorkRequests;
++    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static LONG PriorCompletedWorkRequests;
+     static DWORD PriorCompletedWorkRequestsTime;
+     static DWORD NextCompletedWorkRequestsTime;
+ 
+@@ -1277,7 +1277,7 @@ private:
+     static const DWORD WorkerTimeout = 20 * 1000;
+     static const DWORD WorkerTimeoutAppX = 5 * 1000;    // shorter timeout to allow threads to exit prior to app suspension
+ 
+-    DECLSPEC_ALIGN(64) SVAL_DECL(ThreadCounter,WorkerCounter);
++    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) SVAL_DECL(ThreadCounter,WorkerCounter);
+ 
+     // 
+     // WorkerSemaphore is an UnfairSemaphore because:
+@@ -1306,7 +1306,7 @@ private:
+     SVAL_DECL(LIST_ENTRY,TimerQueue);                   // queue of timers
+     static HANDLE TimerThread;                          // Currently we only have one timer thread
+     static Thread*  pTimerThread;
+-    DECLSPEC_ALIGN(64) static DWORD LastTickCount;      // the count just before timer thread goes to sleep
++    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static DWORD LastTickCount;      // the count just before timer thread goes to sleep
+ 
+     static BOOL InitCompletionPortThreadpool;           // flag indicating whether completion port threadpool has been initialized
+     static HANDLE GlobalCompletionPort;                 // used for binding io completions on file handles
+@@ -1319,20 +1319,20 @@ private:
+     SVAL_DECL(LONG,MinLimitTotalCPThreads);             
+     SVAL_DECL(LONG,MaxFreeCPThreads);                   // = MaxFreeCPThreadsPerCPU * Number of CPUS
+ 
+-    DECLSPEC_ALIGN(64) static LONG GateThreadStatus;    // See GateThreadStatus enumeration
++    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static LONG GateThreadStatus;    // See GateThreadStatus enumeration
+ 
+     static Volatile<LONG> NumCPInfrastructureThreads;   // number of threads currently busy handling draining cycle
+ 
+     SVAL_DECL(LONG,cpuUtilization);
+     static LONG cpuUtilizationAverage;
+ 
+-    DECLSPEC_ALIGN(64) static RecycledListsWrapper RecycledLists;
++    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static RecycledListsWrapper RecycledLists;
+ 
+ #ifdef _DEBUG
+     static DWORD   TickCountAdjustment;                 // add this value to value returned by GetTickCount
+ #endif
+ 
+-    DECLSPEC_ALIGN(64) static int offset_counter;
++    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static int offset_counter;
+     static const int offset_multiplier = 128;
+ };
+ 
+-- 
+2.7.4
+

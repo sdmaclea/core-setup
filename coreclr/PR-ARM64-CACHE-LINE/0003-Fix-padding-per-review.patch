@@ -1,0 +1,62 @@
+From 96e0dd1cffdbc430fcfd099d618487456be8b234 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 25 Jul 2017 12:10:16 -0400
+Subject: [PATCH] Fix padding per review
+
+---
+ src/vm/threadpoolrequest.cpp | 1 -
+ src/vm/threadpoolrequest.h   | 7 ++-----
+ 2 files changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/src/vm/threadpoolrequest.cpp b/src/vm/threadpoolrequest.cpp
+index 0bef664..bdfe566 100644
+--- a/src/vm/threadpoolrequest.cpp
++++ b/src/vm/threadpoolrequest.cpp
+@@ -27,7 +27,6 @@
+ #include "nativeoverlapped.h"
+ #include "appdomain.inl"
+ 
+-BYTE PerAppDomainTPCountList::s_padding[64 - sizeof(LONG)];
+ // Make this point to unmanaged TP in case, no appdomains have initialized yet.
+ // Cacheline aligned, hot variable
+ DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) LONG PerAppDomainTPCountList::s_ADHint = -1;
+diff --git a/src/vm/threadpoolrequest.h b/src/vm/threadpoolrequest.h
+index b8ba6b1..fff368d 100644
+--- a/src/vm/threadpoolrequest.h
++++ b/src/vm/threadpoolrequest.h
+@@ -184,10 +184,9 @@ private:
+     ADID m_id;
+     TPIndex m_index;
+     DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) struct {
+-        BYTE m_padding1[64 - sizeof(LONG)];
++        BYTE m_padding1[MAX_CACHE_LINE_SIZE - sizeof(LONG)];
+         // Only use with VolatileLoad+VolatileStore+FastInterlockCompareExchange
+         LONG m_numRequestsPending;
+-        BYTE m_padding2[64];
+     };
+ };
+ 
+@@ -289,10 +288,9 @@ private:
+     SpinLock m_lock;
+     ULONG m_NumRequests;
+     DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) struct {
+-        BYTE m_padding1[64 - sizeof(LONG)];
++        BYTE m_padding1[MAX_CACHE_LINE_SIZE - sizeof(LONG)];
+         // Only use with VolatileLoad+VolatileStore+FastInterlockCompareExchange
+         LONG m_outstandingThreadRequestCount;
+-        BYTE m_padding2[64];
+     };
+ };
+ 
+@@ -353,7 +351,6 @@ public:
+ private:
+     static DWORD FindFirstFreeTpEntry();
+ 
+-    static BYTE s_padding[64 - sizeof(LONG)];
+     DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static LONG s_ADHint;
+     DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static UnManagedPerAppDomainTPCount s_unmanagedTPCount;
+ 
+-- 
+2.7.4
+
