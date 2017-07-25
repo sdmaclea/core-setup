@@ -1,0 +1,100 @@
+From a0d55f4e8fe32b1b754ed97666158fb480ff2c7e Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 25 Jul 2017 15:00:43 -0400
+Subject: [PATCH] More padding fixes per review
+
+---
+ src/vm/threadpoolrequest.cpp |  1 +
+ src/vm/threadpoolrequest.h   |  3 +++
+ src/vm/win32threadpool.h     | 13 +++++++++++--
+ 3 files changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/src/vm/threadpoolrequest.cpp b/src/vm/threadpoolrequest.cpp
+index bdfe566..f52de8c 100644
+--- a/src/vm/threadpoolrequest.cpp
++++ b/src/vm/threadpoolrequest.cpp
+@@ -27,6 +27,7 @@
+ #include "nativeoverlapped.h"
+ #include "appdomain.inl"
+ 
++BYTE PerAppDomainTPCountList::s_padding[MAX_CACHE_LINE_SIZE - sizeof(LONG)];
+ // Make this point to unmanaged TP in case, no appdomains have initialized yet.
+ // Cacheline aligned, hot variable
+ DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) LONG PerAppDomainTPCountList::s_ADHint = -1;
+diff --git a/src/vm/threadpoolrequest.h b/src/vm/threadpoolrequest.h
+index fff368d..3d2dc3d 100644
+--- a/src/vm/threadpoolrequest.h
++++ b/src/vm/threadpoolrequest.h
+@@ -187,6 +187,7 @@ private:
+         BYTE m_padding1[MAX_CACHE_LINE_SIZE - sizeof(LONG)];
+         // Only use with VolatileLoad+VolatileStore+FastInterlockCompareExchange
+         LONG m_numRequestsPending;
++        BYTE m_padding2[MAX_CACHE_LINE_SIZE];
+     };
+ };
+ 
+@@ -291,6 +292,7 @@ private:
+         BYTE m_padding1[MAX_CACHE_LINE_SIZE - sizeof(LONG)];
+         // Only use with VolatileLoad+VolatileStore+FastInterlockCompareExchange
+         LONG m_outstandingThreadRequestCount;
++        BYTE m_padding2[MAX_CACHE_LINE_SIZE];
+     };
+ };
+ 
+@@ -351,6 +353,7 @@ public:
+ private:
+     static DWORD FindFirstFreeTpEntry();
+ 
++    static BYTE s_padding[MAX_CACHE_LINE_SIZE - sizeof(LONG)];
+     DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static LONG s_ADHint;
+     DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static UnManagedPerAppDomainTPCount s_unmanagedTPCount;
+ 
+diff --git a/src/vm/win32threadpool.h b/src/vm/win32threadpool.h
+index e6c374f..b57f8b6 100644
+--- a/src/vm/win32threadpool.h
++++ b/src/vm/win32threadpool.h
+@@ -123,6 +123,9 @@ class ThreadpoolMgr
+     class UnfairSemaphore
+     {
+     private:
++        // padding to ensure we get our own cache line
++        BYTE padding1[MAX_CACHE_LINE_SIZE];
++
+         //
+         // We track everything we care about in a single 64-bit struct to allow us to 
+         // do CompareExchanges on this for atomic updates.
+@@ -142,7 +145,10 @@ class ThreadpoolMgr
+         } m_counts;
+ 
+     private:
+-        DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) const int m_spinLimitPerProcessor; //used when calculating max spin duration
++        // padding to ensure we get our own cache line
++        BYTE padding2[MAX_CACHE_LINE_SIZE - sizeof(Counts)];
++
++        const int m_spinLimitPerProcessor; //used when calculating max spin duration
+         CLRSemaphore m_sem;                //waiters wait on this
+ 
+         INDEBUG(int m_maxCount;)
+@@ -343,6 +349,9 @@ public:
+     {
+         static const int MaxPossibleCount = 0x7fff;
+ 
++        // padding to ensure we get our own cache line
++        BYTE padding1[MAX_CACHE_LINE_SIZE];
++
+         union DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) Counts
+         {
+             struct
+@@ -367,7 +376,7 @@ public:
+         } counts;
+ 
+         // padding to ensure we get our own cache line
+-        BYTE padding[MAX_CACHE_LINE_SIZE - sizeof(Counts)];
++        BYTE padding2[MAX_CACHE_LINE_SIZE - sizeof(Counts)];
+ 
+         Counts GetCleanCounts()
+         {
+-- 
+2.7.4
+
