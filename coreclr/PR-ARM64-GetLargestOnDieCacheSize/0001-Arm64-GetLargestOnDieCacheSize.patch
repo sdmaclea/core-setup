@@ -1,4 +1,4 @@
-From 8f35ee218ce3742f791657e192327ada501c3767 Mon Sep 17 00:00:00 2001
+From 797a83c75b3e21df40a025265de598f5f3abefbc Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Wed, 26 Jul 2017 17:11:47 -0400
@@ -36,7 +36,7 @@ index c00f79d..417c5d6 100644
          gen0size = max((4*GCToOSInterface::GetLargestOnDieCacheSize(TRUE)/5),(256*1024));
  #endif //SERVER_GC
 diff --git a/src/pal/src/misc/sysinfo.cpp b/src/pal/src/misc/sysinfo.cpp
-index e1785688..5f7b036 100644
+index e1785688..24962ac 100644
 --- a/src/pal/src/misc/sysinfo.cpp
 +++ b/src/pal/src/misc/sysinfo.cpp
 @@ -384,6 +384,53 @@ PAL_HasGetCurrentProcessorNumber()
@@ -97,6 +97,7 @@ index e1785688..5f7b036 100644
      cacheSize = max(cacheSize, sysconf(_SC_LEVEL4_CACHE_SIZE));
  #endif
  
++#if defined(_ARM64_)
 +    if(cacheSize == 0)
 +    {
 +        size_t size;
@@ -113,7 +114,6 @@ index e1785688..5f7b036 100644
 +            cacheSize = max(cacheSize, size);
 +    }
 +
-+#if defined(_TARGET_ARM64_)
 +    if(cacheSize == 0)
 +    {
 +        // It is to be expected to be missing cache size info
