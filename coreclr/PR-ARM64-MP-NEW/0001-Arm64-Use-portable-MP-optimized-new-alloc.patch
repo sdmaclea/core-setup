@@ -1,4 +1,4 @@
-From f1fc7948266984bcf1776b320dc9f15b8e5d0a42 Mon Sep 17 00:00:00 2001
+From 511cb59e89cd4bb202b6d0ae6215c7f1a0f3e7ed Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 16 Jun 2017 17:04:17 +0000
 Subject: [PATCH] [Arm64] Use portable MP optimized new/alloc

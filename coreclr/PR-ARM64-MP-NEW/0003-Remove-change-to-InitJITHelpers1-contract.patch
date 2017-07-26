@@ -1,0 +1,26 @@
+From 76e8ac29987f79a5a4be143081eedc77ede09bf3 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 26 Jul 2017 10:42:48 -0400
+Subject: [PATCH] Remove change to InitJITHelpers1() contract
+
+---
+ src/vm/arm64/stubs.cpp | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/vm/arm64/stubs.cpp b/src/vm/arm64/stubs.cpp
+index 8763584..231d0ec 100644
+--- a/src/vm/arm64/stubs.cpp
++++ b/src/vm/arm64/stubs.cpp
+@@ -1087,8 +1087,6 @@ void JIT_TailCall()
+ #if !defined(DACCESS_COMPILE) && !defined(CROSSGEN_COMPILE)
+ void InitJITHelpers1()
+ {
+-    STANDARD_VM_CONTRACT;
+-
+     _ASSERTE(g_SystemInfo.dwNumberOfProcessors != 0);
+ 
+     // Allocation helpers, faster but non-logging
+-- 
+2.7.4
+

@@ -1,0 +1,25 @@
+From ee301107da30670df90cca6abaf95e6affe94e98 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 16 Jun 2017 14:53:28 -0400
+Subject: [PATCH] [Arm64] Remove comment per feedback
+
+---
+ src/vm/arm64/stubs.cpp | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/vm/arm64/stubs.cpp b/src/vm/arm64/stubs.cpp
+index aa5eb17..8763584 100644
+--- a/src/vm/arm64/stubs.cpp
++++ b/src/vm/arm64/stubs.cpp
+@@ -1091,8 +1091,6 @@ void InitJITHelpers1()
+ 
+     _ASSERTE(g_SystemInfo.dwNumberOfProcessors != 0);
+ 
+-    // TODO-ARM64-NYI !defined(FEATURE_IMPLICIT_TLS) Use helpers optimized w/ inline TLS access...
+-
+     // Allocation helpers, faster but non-logging
+     if (!((TrackAllocationsEnabled()) ||
+         (LoggingOn(LF_GCALLOC, LL_INFO10))
+-- 
+2.7.4
+
