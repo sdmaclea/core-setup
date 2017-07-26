@@ -1,0 +1,35 @@
+From a9ebe7c12876e9bba1bf461e0ab1382436056068 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 26 Jul 2017 11:10:30 -0400
+Subject: [PATCH] Fix zero sized array error
+
+---
+ src/vm/win32threadpool.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/vm/win32threadpool.h b/src/vm/win32threadpool.h
+index b57f8b6..b7af34f 100644
+--- a/src/vm/win32threadpool.h
++++ b/src/vm/win32threadpool.h
+@@ -146,7 +146,7 @@ class ThreadpoolMgr
+ 
+     private:
+         // padding to ensure we get our own cache line
+-        BYTE padding2[MAX_CACHE_LINE_SIZE - sizeof(Counts)];
++        BYTE padding2[MAX_CACHE_LINE_SIZE];
+ 
+         const int m_spinLimitPerProcessor; //used when calculating max spin duration
+         CLRSemaphore m_sem;                //waiters wait on this
+@@ -376,7 +376,7 @@ public:
+         } counts;
+ 
+         // padding to ensure we get our own cache line
+-        BYTE padding2[MAX_CACHE_LINE_SIZE - sizeof(Counts)];
++        BYTE padding2[MAX_CACHE_LINE_SIZE];
+ 
+         Counts GetCleanCounts()
+         {
+-- 
+2.7.4
+
