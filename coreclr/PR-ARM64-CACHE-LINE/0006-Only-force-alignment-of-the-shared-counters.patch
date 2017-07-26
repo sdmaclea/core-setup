@@ -1,0 +1,57 @@
+From b09baf896bac143d00a1e39a35608754efd31caf Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 26 Jul 2017 11:32:55 -0400
+Subject: [PATCH] Only force alignment of the shared counters
+
+---
+ src/vm/win32threadpool.h | 11 +++++++----
+ 1 file changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/src/vm/win32threadpool.h b/src/vm/win32threadpool.h
+index b7af34f..768d2e9 100644
+--- a/src/vm/win32threadpool.h
++++ b/src/vm/win32threadpool.h
+@@ -130,7 +130,7 @@ class ThreadpoolMgr
+         // We track everything we care about in a single 64-bit struct to allow us to 
+         // do CompareExchanges on this for atomic updates.
+         // 
+-        union DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) Counts
++        union Counts
+         {
+             struct
+             {
+@@ -142,7 +142,9 @@ class ThreadpoolMgr
+ 
+             LONGLONG asLongLong;
+ 
+-        } m_counts;
++        };
++
++        DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) Counts m_counts;
+ 
+     private:
+         // padding to ensure we get our own cache line
+@@ -352,7 +354,7 @@ public:
+         // padding to ensure we get our own cache line
+         BYTE padding1[MAX_CACHE_LINE_SIZE];
+ 
+-        union DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) Counts
++        union Counts
+         {
+             struct
+             {
+@@ -372,8 +374,9 @@ public:
+             LONGLONG AsLongLong;
+ 
+             bool operator==(Counts other) {LIMITED_METHOD_CONTRACT; return AsLongLong == other.AsLongLong;}
++        };
+ 
+-        } counts;
++        DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) Counts counts;
+ 
+         // padding to ensure we get our own cache line
+         BYTE padding2[MAX_CACHE_LINE_SIZE];
+-- 
+2.7.4
+
