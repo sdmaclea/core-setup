@@ -1,0 +1,48 @@
+From f8502f5da554511f9ff88ae285062618fd7a440e Mon Sep 17 00:00:00 2001
+From: Cyd Haselton <chaselton@gmail.com>
+Date: Tue, 25 Jul 2017 08:01:07 -0500
+Subject: [PATCH] Fixes for issue 12982 Android cross-build fails when
+ compiling cee_wks (#12986)
+
+* Fixes for issue 12982 Android cross-build fails when compiling cee_wks
+
+Added conditional (__ANDROID__) to volatile.h
+Added compile option to android/arm64/toolchain.cmake
+
+* Changed ANDROID conditional to compiler and __atomic_load
+
+Changed conditional to exclude volatile to __CLANG__ and __has_builtin(__atomic_load)
+
+* Fixed Clang conditional
+
+* Recommended changes to volatile.h and toolchain.cmake
+
+* Added separate conditional for detecting builtin __atomic_load
+---
+ src/inc/volatile.h | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/inc/volatile.h b/src/inc/volatile.h
+index 5aa0e50..0f98c3d 100644
+--- a/src/inc/volatile.h
++++ b/src/inc/volatile.h
+@@ -120,13 +120,15 @@ T VolatileLoad(T const * pt)
+     STATIC_CONTRACT_SUPPORTS_DAC_HOST_ONLY;
+ 
+ #ifndef DACCESS_COMPILE
+-#if defined(_ARM64_) && defined(__GNUC__)
++#if defined(_ARM64_) && defined(__clang__)
+     T val;
+     static const unsigned lockFreeAtomicSizeMask = (1 << 1) | (1 << 2) | (1 << 4) | (1 << 8);
++#if __has_builtin(__atomic_load)
+     if((1 << sizeof(T)) & lockFreeAtomicSizeMask)
+     {
+         __atomic_load((T volatile const *)pt, &val, __ATOMIC_ACQUIRE);
+     }
++#endif
+     else
+     {
+         val = *(T volatile const *)pt;
+-- 
+2.7.4
+

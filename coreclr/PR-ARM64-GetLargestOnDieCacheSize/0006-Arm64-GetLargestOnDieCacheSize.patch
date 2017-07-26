@@ -1,0 +1,194 @@
+From 97cc072aae5e516174a7c1edb08060a81e79f505 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 26 Jul 2017 17:11:47 -0400
+Subject: [PATCH] [Arm64] GetLargestOnDieCacheSize
+
+Look for cache info in /sys/.../cache/index*/size
+
+If that fails estimate cache size based on processor count
+---
+ src/gc/gc.cpp                |  4 +-
+ src/pal/src/misc/sysinfo.cpp | 89 ++++++++++++++++++++++++++++++++++++++++++++
+ src/vm/util.cpp              | 17 +++++----
+ 3 files changed, 99 insertions(+), 11 deletions(-)
+
+diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
+index 9bc1ada..ef96051 100644
+--- a/src/gc/gc.cpp
++++ b/src/gc/gc.cpp
+@@ -35460,7 +35460,7 @@ size_t GCHeap::GetValidGen0MaxSize(size_t seg_size)
+         // performance data seems to indicate halving the size results
+         // in optimal perf.  Ask for adjusted gen0 size.
+         gen0size = max(GCToOSInterface::GetLargestOnDieCacheSize(FALSE)/GCToOSInterface::GetLogicalCpuCount(),(256*1024));
+-#if (defined(_TARGET_AMD64_))
++
+         // if gen0 size is too large given the available memory, reduce it.
+         // Get true cache size, as we don't want to reduce below this.
+         size_t trueSize = max(GCToOSInterface::GetLargestOnDieCacheSize(TRUE)/GCToOSInterface::GetLogicalCpuCount(),(256*1024));
+@@ -35480,8 +35480,6 @@ size_t GCHeap::GetValidGen0MaxSize(size_t seg_size)
+                 break;
+             }
+         }
+-#endif //_TARGET_AMD64_
+-
+ #else //SERVER_GC
+         gen0size = max((4*GCToOSInterface::GetLargestOnDieCacheSize(TRUE)/5),(256*1024));
+ #endif //SERVER_GC
+diff --git a/src/pal/src/misc/sysinfo.cpp b/src/pal/src/misc/sysinfo.cpp
+index e1785688..5f7b036 100644
+--- a/src/pal/src/misc/sysinfo.cpp
++++ b/src/pal/src/misc/sysinfo.cpp
+@@ -384,6 +384,53 @@ PAL_HasGetCurrentProcessorNumber()
+     return HAVE_SCHED_GETCPU;
+ }
+ 
++bool
++PALAPI
++PAL_ReadMemoryValueFromFile(const char* filename, size_t* val)
++{
++    bool result = false;
++    char *line = nullptr;
++    size_t lineLen = 0;
++    char* endptr = nullptr;
++    size_t num = 0, l, multiplier;
++
++    if (val == nullptr)
++        return false;
++
++    FILE* file = fopen(filename, "r");
++    if (file == nullptr)
++        goto done;
++
++    if (getline(&line, &lineLen, file) == -1)
++        goto done;
++
++    errno = 0;
++    num = strtoull(line, &endptr, 0);
++    if (errno != 0)
++        goto done;
++
++    multiplier = 1;
++    switch(*endptr)
++    {
++        case 'g':
++        case 'G': multiplier = 1024;
++        case 'm':
++        case 'M': multiplier = multiplier*1024;
++        case 'k':
++        case 'K': multiplier = multiplier*1024;
++    }
++
++    *val = num * multiplier;
++    result = true;
++    if (*val/multiplier != num)
++        result = false;
++done:
++    if (file)
++        fclose(file);
++    free(line);
++    return result;
++}
++
+ size_t
+ PALAPI
+ PAL_GetLogicalProcessorCacheSizeFromOS()
+@@ -403,5 +450,47 @@ PAL_GetLogicalProcessorCacheSizeFromOS()
+     cacheSize = max(cacheSize, sysconf(_SC_LEVEL4_CACHE_SIZE));
+ #endif
+ 
++    if(cacheSize == 0)
++    {
++        size_t size;
++
++        if(PAL_ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index0/size", &size))
++            cacheSize = max(cacheSize, size);
++        if(PAL_ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index1/size", &size))
++            cacheSize = max(cacheSize, size);
++        if(PAL_ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index2/size", &size))
++            cacheSize = max(cacheSize, size);
++        if(PAL_ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index3/size", &size))
++            cacheSize = max(cacheSize, size);
++        if(PAL_ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index4/size", &size))
++            cacheSize = max(cacheSize, size);
++    }
++
++#if defined(_TARGET_ARM64_)
++    if(cacheSize == 0)
++    {
++        // It is to be expected to be missing cache size info
++        //
++        // _SC_LEVEL*_*CACHE_SIZE is not yet present
++        //
++        // /sys/devices/system/cpu/cpu*/cache/index*/ is also not yet present
++        //
++        // midr_el1 is available in "/sys/devices/system/cpu/cpu0/regs/identification/midr_el1",
++        // but without an exhaustive list of ARM64 processors any decode of midr_el1
++        // Would likely be incomplete
++
++        // Published information on ARM64 architectures is limited.
++        // If we use recent chips from recent generations of popular curent state of the art
++        // is for total is L3$ to be 1-2MB/core.  As always, there are exceptions
++
++        // Estimate cache size based on CPU count
++        // Assume lower core count are lighter weight parts which are likely to have smaller caches
++        // Assume L3$/CPU grows linearly from 256K to 1.5M/CPU as logicalCPUs grows from 2 to 12 CPUs
++        DWORD logicalCPUs = PAL_GetLogicalCpuCountFromOS();
++
++        cacheSize = logicalCPUs*min(1536, max(256, logicalCPUs*128))*1024;
++    }
++#endif
++
+     return cacheSize;
+ }
+diff --git a/src/vm/util.cpp b/src/vm/util.cpp
+index 724536a..12c3cea 100644
+--- a/src/vm/util.cpp
++++ b/src/vm/util.cpp
+@@ -1861,8 +1861,6 @@ size_t GetLargestOnDieCacheSize(BOOL bTrueSize)
+     STATIC_CONTRACT_NOTHROW;
+     STATIC_CONTRACT_GC_NOTRIGGER;
+ 
+-#if defined(_TARGET_AMD64_) || defined (_TARGET_X86_)
+-
+     static size_t maxSize;
+     static size_t maxTrueSize;
+ 
+@@ -1879,6 +1877,7 @@ size_t GetLargestOnDieCacheSize(BOOL bTrueSize)
+         }
+     }
+ 
++#if defined(_TARGET_AMD64_) || defined (_TARGET_X86_)
+     DefaultCatchFilterParam param;
+     param.pv = COMPLUS_EXCEPTION_EXECUTE_HANDLER;
+ 
+@@ -2001,18 +2000,20 @@ size_t GetLargestOnDieCacheSize(BOOL bTrueSize)
+     {
+     }
+     PAL_ENDTRY
++#else
++    maxSize = maxTrueSize = GetLogicalProcessorCacheSizeFromOS() ; // Returns the size of the highest level processor cache
++#endif
++
++#if defined(_TARGET_ARM64_)
++    // Bigger gen0 size helps arm64 targets
++    maxSize = maxTrueSize * 3;
++#endif
+ 
+     //    printf("GetLargestOnDieCacheSize returns %d, adjusted size %d\n", maxSize, maxTrueSize);
+     if (bTrueSize)
+         return maxTrueSize;
+     else
+         return maxSize;
+-
+-#else
+-    size_t cache_size = GetLogicalProcessorCacheSizeFromOS() ; // Returns the size of the highest level processor cache
+-    return cache_size;
+-
+-#endif
+ }
+ 
+ //---------------------------------------------------------------------
+-- 
+2.7.4
+

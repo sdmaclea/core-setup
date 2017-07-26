@@ -1,0 +1,107 @@
+From 68fdcfdad344587d07111da338719d70ce115527 Mon Sep 17 00:00:00 2001
+From: Hyeongseok Oh <hseok82.oh@samsung.com>
+Date: Mon, 24 Jul 2017 13:51:13 +0900
+Subject: [PATCH] [RyuJIT/ARM32] Morphing 1-field HFA struct argument and fix
+ assertion
+
+- Morphing 1-field HFA struct argument as local field
+- Fix assertion on legacy JIT
+---
+ src/jit/morph.cpp | 44 ++++++++++++++++++++++++++++++++++----------
+ 1 file changed, 34 insertions(+), 10 deletions(-)
+
+diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
+index 6d25f02..f428ea4 100644
+--- a/src/jit/morph.cpp
++++ b/src/jit/morph.cpp
+@@ -3450,13 +3450,6 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+ #error Unsupported or unset target architecture
+ #endif // _TARGET_XXX_
+             }
+-#ifdef _TARGET_ARM_
+-            else if (isHfaArg)
+-            {
+-                size                  = GetHfaCount(argx);
+-                hasMultiregStructArgs = true;
+-            }
+-#endif           // _TARGET_ARM_
+             else // struct type
+             {
+                 // We handle two opcodes: GT_MKREFANY and GT_OBJ
+@@ -3556,10 +3549,17 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+                     // As we can optimize these by turning them into a GT_IND of the correct type
+                     //
+                     // Check for cases that we cannot optimize:
+-                    //
++                    CLANG_FORMAT_COMMENT_ANCHOR;
++#ifdef _TARGET_ARM_
++                    if (((originalSize > TARGET_POINTER_SIZE) &&  // it is struct that is larger than a pointer
++                         howToPassStruct != SPK_PrimitiveType) || // it is struct that is not one double HFA
++                        !isPow2(originalSize) ||                  // it is not a power of two (1, 2, 4 or 8)
++                        (isHfaArg && (howToPassStruct != SPK_PrimitiveType))) // it is a one element HFA struct
++#else                                                                         // !_TARGET_ARM_
+                     if ((originalSize > TARGET_POINTER_SIZE) || // it is struct that is larger than a pointer
+                         !isPow2(originalSize) ||                // it is not a power of two (1, 2, 4 or 8)
+                         (isHfaArg && (hfaSlots != 1)))          // it is a one element HFA struct
++#endif                                                                        // !_TARGET_ARM_
+ #endif                                                                        // FEATURE_UNIX_AMD64_STRUCT_PASSING
+                     {
+                         // Normalize 'size' to the number of pointer sized items
+@@ -3684,8 +3684,14 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+                         // primitives
+                         if (isHfaArg)
+                         {
++#ifdef _TARGET_ARM_
++                            // If we reach here with an HFA arg it has to be a one element HFA
++                            // If HFA type is double and it has one element, hfaSlot is 2
++                            assert(hfaSlots == 1 || (hfaSlots == 2 && hfaType == TYP_DOUBLE));
++#else
+                             // If we reach here with an HFA arg it has to be a one element HFA
+                             assert(hfaSlots == 1);
++#endif
+                             structBaseType = hfaType; // change the indirection type to a floating point type
+                         }
+ 
+@@ -3782,6 +3788,12 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+                                ((copyBlkClass != NO_CLASS_HANDLE) && varTypeIsIntegral(structBaseType)));
+ 
+                         size = 1;
++#ifdef _TARGET_ARM_
++                        if (isHfaArg)
++                        {
++                            size = hfaSlots;
++                        }
++#endif
+                     }
+ #endif // FEATURE_UNIX_AMD64_STRUCT_PASSING
+ 
+@@ -3824,12 +3836,24 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+                     }
+                 }
+ 
+-#if defined(_TARGET_64BIT_) || defined(_TARGET_ARM_)
++#if defined(_TARGET_64BIT_)
+                 if (size > 1)
+                 {
+                     hasMultiregStructArgs = true;
+                 }
+-#endif // _TARGET_64BIT || _TARGET_ARM_
++#elif defined(_TARGET_ARM_)
++                if (isHfaArg)
++                {
++                    if (size > genTypeStSz(hfaType))
++                    {
++                        hasMultiregStructArgs = true;
++                    }
++                }
++                else if (size > 1)
++                {
++                    hasMultiregStructArgs = true;
++                }
++#endif // _TARGET_ARM_
+             }
+ 
+             // The 'size' value has now must have been set. (the original value of zero is an invalid value)
+-- 
+2.7.4
+
