@@ -1,0 +1,26 @@
+From b2f63bf084addc6564e3b43be002b2378c4a567f Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 26 Jul 2017 11:24:54 -0400
+Subject: [PATCH] Fix signed/unsigned mismatch
+
+---
+ src/vm/win32threadpool.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/vm/win32threadpool.cpp b/src/vm/win32threadpool.cpp
+index 9f9b3ef..7b8f2a8 100644
+--- a/src/vm/win32threadpool.cpp
++++ b/src/vm/win32threadpool.cpp
+@@ -444,7 +444,7 @@ BOOL ThreadpoolMgr::Initialize()
+     counts.NumActive = 0;
+     counts.NumWorking = 0;
+     counts.NumRetired = 0;
+-    counts.MaxWorking = max(min(NumberOfProcessors, MaxLimitTotalWorkerThreads), MinLimitTotalWorkerThreads);
++    counts.MaxWorking = max(min((LONG)NumberOfProcessors, MaxLimitTotalWorkerThreads), MinLimitTotalWorkerThreads);
+     WorkerCounter.counts.AsLongLong = counts.AsLongLong;
+ 
+ #ifdef _DEBUG
+-- 
+2.7.4
+
