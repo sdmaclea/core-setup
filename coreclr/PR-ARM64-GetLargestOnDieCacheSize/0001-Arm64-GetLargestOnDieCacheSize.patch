@@ -1,4 +1,4 @@
-From 97cc072aae5e516174a7c1edb08060a81e79f505 Mon Sep 17 00:00:00 2001
+From 8f35ee218ce3742f791657e192327ada501c3767 Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Wed, 26 Jul 2017 17:11:47 -0400
@@ -14,10 +14,10 @@ If that fails estimate cache size based on processor count
  3 files changed, 99 insertions(+), 11 deletions(-)
 
 diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
-index 9bc1ada..ef96051 100644
+index c00f79d..417c5d6 100644
 --- a/src/gc/gc.cpp
 +++ b/src/gc/gc.cpp
-@@ -35460,7 +35460,7 @@ size_t GCHeap::GetValidGen0MaxSize(size_t seg_size)
+@@ -35488,7 +35488,7 @@ size_t GCHeap::GetValidGen0MaxSize(size_t seg_size)
          // performance data seems to indicate halving the size results
          // in optimal perf.  Ask for adjusted gen0 size.
          gen0size = max(GCToOSInterface::GetLargestOnDieCacheSize(FALSE)/GCToOSInterface::GetLogicalCpuCount(),(256*1024));
@@ -26,7 +26,7 @@ index 9bc1ada..ef96051 100644
          // if gen0 size is too large given the available memory, reduce it.
          // Get true cache size, as we don't want to reduce below this.
          size_t trueSize = max(GCToOSInterface::GetLargestOnDieCacheSize(TRUE)/GCToOSInterface::GetLogicalCpuCount(),(256*1024));
-@@ -35480,8 +35480,6 @@ size_t GCHeap::GetValidGen0MaxSize(size_t seg_size)
+@@ -35508,8 +35508,6 @@ size_t GCHeap::GetValidGen0MaxSize(size_t seg_size)
                  break;
              }
          }
