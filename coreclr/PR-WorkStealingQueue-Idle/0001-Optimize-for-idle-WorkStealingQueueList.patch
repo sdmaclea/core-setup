@@ -1,4 +1,4 @@
-From 3000879113b2cc9a4e56a33a40504a0b38d02f87 Mon Sep 17 00:00:00 2001
+From cb6a9dff5f779c85cf9ca9274caa3401f40c01eb Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Thu, 20 Jul 2017 19:06:14 -0400
 Subject: [PATCH] Optimize for idle WorkStealingQueueList
@@ -11,7 +11,7 @@ stashing global emptiness
  1 file changed, 26 insertions(+), 1 deletion(-)
 
 diff --git a/src/mscorlib/src/System/Threading/ThreadPool.cs b/src/mscorlib/src/System/Threading/ThreadPool.cs
-index 0084050..b0b8c79 100644
+index 0084050..e63d6f0 100644
 --- a/src/mscorlib/src/System/Threading/ThreadPool.cs
 +++ b/src/mscorlib/src/System/Threading/ThreadPool.cs
 @@ -47,6 +47,12 @@ namespace System.Threading
@@ -46,7 +46,7 @@ index 0084050..b0b8c79 100644
 -            WorkStealingQueue localWsq = tl.workStealingQueue;
              IThreadPoolWorkItem callback;
 +            int wsqActiveObserved = WorkStealingQueueList.wsqActive;
-+            if(wsqActiveObserved > 0)
++            if (wsqActiveObserved > 0)
 +            {
 +                WorkStealingQueue localWsq = tl.workStealingQueue;
  
@@ -56,7 +56,7 @@ index 0084050..b0b8c79 100644
                          }
                          c--;
                      }
-+                    if((callback == null) && !missedSteal)
++                    if ((callback == null) && !missedSteal)
 +                    {
 +                        // Only decrement if the value is unchanged since we started looking for work
 +                        Interlocked.CompareExchange(ref WorkStealingQueueList.wsqActive, wsqActiveObserved - 1, wsqActiveObserved);
