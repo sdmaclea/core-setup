@@ -1,4 +1,4 @@
-From 797a83c75b3e21df40a025265de598f5f3abefbc Mon Sep 17 00:00:00 2001
+From 409876e3fd76c6a15695a01a60e1033db0157341 Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Wed, 26 Jul 2017 17:11:47 -0400
@@ -8,10 +8,12 @@ Look for cache info in /sys/.../cache/index*/size
 
 If that fails estimate cache size based on processor count
 ---
- src/gc/gc.cpp                |  4 +-
- src/pal/src/misc/sysinfo.cpp | 89 ++++++++++++++++++++++++++++++++++++++++++++
- src/vm/util.cpp              | 17 +++++----
- 3 files changed, 99 insertions(+), 11 deletions(-)
+ src/gc/gc.cpp                         |  4 +-
+ src/pal/src/include/pal/palinternal.h |  4 ++
+ src/pal/src/misc/cgroup.cpp           | 42 +---------------
+ src/pal/src/misc/sysinfo.cpp          | 90 +++++++++++++++++++++++++++++++++++
+ src/vm/util.cpp                       | 17 +++----
+ 5 files changed, 105 insertions(+), 52 deletions(-)
 
 diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
 index c00f79d..417c5d6 100644
@@ -35,8 +37,76 @@ index c00f79d..417c5d6 100644
  #else //SERVER_GC
          gen0size = max((4*GCToOSInterface::GetLargestOnDieCacheSize(TRUE)/5),(256*1024));
  #endif //SERVER_GC
+diff --git a/src/pal/src/include/pal/palinternal.h b/src/pal/src/include/pal/palinternal.h
+index 48e2f3c..103fd01 100644
+--- a/src/pal/src/include/pal/palinternal.h
++++ b/src/pal/src/include/pal/palinternal.h
+@@ -637,6 +637,10 @@ typedef enum _TimeConversionConstants
+ #ifdef __cplusplus
+ }
+ 
++bool
++PALAPI
++ReadMemoryValueFromFile(const char* filename, size_t* val);
++
+ /* This is duplicated in utilcode.h for CLR, with cooler type-traits */
+ template <typename T>
+ inline
+diff --git a/src/pal/src/misc/cgroup.cpp b/src/pal/src/misc/cgroup.cpp
+index b50ac86..46d8384 100644
+--- a/src/pal/src/misc/cgroup.cpp
++++ b/src/pal/src/misc/cgroup.cpp
+@@ -304,47 +304,7 @@ private:
+ 
+     bool ReadMemoryValueFromFile(const char* filename, size_t* val)
+     {
+-        bool result = false;
+-        char *line = nullptr;
+-        size_t lineLen = 0;
+-        char* endptr = nullptr;
+-        size_t num = 0, l, multiplier;
+-
+-        if (val == nullptr)
+-            return false;
+-
+-        FILE* file = fopen(filename, "r");
+-        if (file == nullptr)
+-            goto done;
+-        
+-        if (getline(&line, &lineLen, file) == -1)
+-            goto done;
+-
+-        errno = 0;
+-        num = strtoull(line, &endptr, 0); 
+-        if (errno != 0)
+-            goto done;
+-
+-        multiplier = 1;
+-        switch(*endptr)
+-        {
+-            case 'g':
+-            case 'G': multiplier = 1024;
+-            case 'm': 
+-            case 'M': multiplier = multiplier*1024;
+-            case 'k':
+-            case 'K': multiplier = multiplier*1024;
+-        }
+-
+-        *val = num * multiplier;
+-        result = true;
+-        if (*val/multiplier != num)
+-            result = false;
+-    done:
+-        if (file)
+-            fclose(file);
+-        free(line);    
+-        return result;
++        return ::ReadMemoryValueFromFile(filename, val);
+     }
+ 
+     long long ReadCpuCGroupValue(const char* subsystemFilename){
 diff --git a/src/pal/src/misc/sysinfo.cpp b/src/pal/src/misc/sysinfo.cpp
-index e1785688..24962ac 100644
+index e1785688..3fcd629 100644
 --- a/src/pal/src/misc/sysinfo.cpp
 +++ b/src/pal/src/misc/sysinfo.cpp
 @@ -384,6 +384,53 @@ PAL_HasGetCurrentProcessorNumber()
@@ -45,7 +115,7 @@ index e1785688..24962ac 100644
  
 +bool
 +PALAPI
-+PAL_ReadMemoryValueFromFile(const char* filename, size_t* val)
++ReadMemoryValueFromFile(const char* filename, size_t* val)
 +{
 +    bool result = false;
 +    char *line = nullptr;
@@ -93,7 +163,7 @@ index e1785688..24962ac 100644
  size_t
  PALAPI
  PAL_GetLogicalProcessorCacheSizeFromOS()
-@@ -403,5 +450,47 @@ PAL_GetLogicalProcessorCacheSizeFromOS()
+@@ -403,5 +450,48 @@ PAL_GetLogicalProcessorCacheSizeFromOS()
      cacheSize = max(cacheSize, sysconf(_SC_LEVEL4_CACHE_SIZE));
  #endif
  
@@ -102,33 +172,34 @@ index e1785688..24962ac 100644
 +    {
 +        size_t size;
 +
-+        if(PAL_ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index0/size", &size))
++        if(ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index0/size", &size))
 +            cacheSize = max(cacheSize, size);
-+        if(PAL_ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index1/size", &size))
++        if(ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index1/size", &size))
 +            cacheSize = max(cacheSize, size);
-+        if(PAL_ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index2/size", &size))
++        if(ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index2/size", &size))
 +            cacheSize = max(cacheSize, size);
-+        if(PAL_ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index3/size", &size))
++        if(ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index3/size", &size))
 +            cacheSize = max(cacheSize, size);
-+        if(PAL_ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index4/size", &size))
++        if(ReadMemoryValueFromFile("/sys/devices/system/cpu/cpu0/cache/index4/size", &size))
 +            cacheSize = max(cacheSize, size);
 +    }
 +
 +    if(cacheSize == 0)
 +    {
-+        // It is to be expected to be missing cache size info
++        // It is currently expected to be missing cache size info
 +        //
-+        // _SC_LEVEL*_*CACHE_SIZE is not yet present
++        // _SC_LEVEL*_*CACHE_SIZE is not yet present.  Work is in progress to enable this for arm64
 +        //
-+        // /sys/devices/system/cpu/cpu*/cache/index*/ is also not yet present
++        // /sys/devices/system/cpu/cpu*/cache/index*/ is also not yet present in most systems.
++        // Arm64 patch is in Linux kernel tip.
 +        //
 +        // midr_el1 is available in "/sys/devices/system/cpu/cpu0/regs/identification/midr_el1",
 +        // but without an exhaustive list of ARM64 processors any decode of midr_el1
 +        // Would likely be incomplete
 +
 +        // Published information on ARM64 architectures is limited.
-+        // If we use recent chips from recent generations of popular curent state of the art
-+        // is for total is L3$ to be 1-2MB/core.  As always, there are exceptions
++        // If we use recent high core count chips as a guide for state of the art, we find
++        // total L3 cache to be 1-2MB/core.  As always, there are exceptions.
 +
 +        // Estimate cache size based on CPU count
 +        // Assume lower core count are lighter weight parts which are likely to have smaller caches
