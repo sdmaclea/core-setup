@@ -1,22 +1,26 @@
-From e0281773dd1625d1d780d48a69e3591146b8de18 Mon Sep 17 00:00:00 2001
+From 27906f811b8cf5e44f5a33a31334f43674d6669f Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Thu, 13 Jul 2017 18:38:58 +0000
 Subject: [PATCH] [Arm64] Adjust alignment for 128 byte cache line
 
 ---
- src/vm/threadpoolrequest.cpp |  4 ++--
- src/vm/threadpoolrequest.h   | 10 ++++++----
+ src/vm/threadpoolrequest.cpp |  6 +++---
+ src/vm/threadpoolrequest.h   | 20 +++++++++++---------
  src/vm/util.hpp              |  7 +++++++
  src/vm/win32threadpool.cpp   | 14 +++++++-------
- src/vm/win32threadpool.h     | 14 +++++++-------
- 5 files changed, 29 insertions(+), 20 deletions(-)
+ src/vm/win32threadpool.h     | 29 +++++++++++++++--------------
+ 5 files changed, 43 insertions(+), 33 deletions(-)
 
 diff --git a/src/vm/threadpoolrequest.cpp b/src/vm/threadpoolrequest.cpp
-index a1ec4b0..0bef664 100644
+index a1ec4b0..f52de8c 100644
 --- a/src/vm/threadpoolrequest.cpp
 +++ b/src/vm/threadpoolrequest.cpp
-@@ -30,10 +30,10 @@
- BYTE PerAppDomainTPCountList::s_padding[64 - sizeof(LONG)];
+@@ -27,13 +27,13 @@
+ #include "nativeoverlapped.h"
+ #include "appdomain.inl"
+ 
+-BYTE PerAppDomainTPCountList::s_padding[64 - sizeof(LONG)];
++BYTE PerAppDomainTPCountList::s_padding[MAX_CACHE_LINE_SIZE - sizeof(LONG)];
  // Make this point to unmanaged TP in case, no appdomains have initialized yet.
  // Cacheline aligned, hot variable
 -DECLSPEC_ALIGN(64) LONG PerAppDomainTPCountList::s_ADHint = -1;
@@ -29,7 +33,7 @@ index a1ec4b0..0bef664 100644
  ArrayListStatic PerAppDomainTPCountList::s_appDomainIndexList;
  
 diff --git a/src/vm/threadpoolrequest.h b/src/vm/threadpoolrequest.h
-index 8d2c7e4..b8ba6b1 100644
+index 8d2c7e4..3d2dc3d 100644
 --- a/src/vm/threadpoolrequest.h
 +++ b/src/vm/threadpoolrequest.h
 @@ -20,6 +20,8 @@
@@ -41,30 +45,44 @@ index 8d2c7e4..b8ba6b1 100644
  #define TP_QUANTUM 2
  #define UNUSED_THREADPOOL_INDEX (DWORD)-1
  
-@@ -181,7 +183,7 @@ public:
+@@ -181,11 +183,11 @@ public:
  private:
      ADID m_id;
      TPIndex m_index;
 -    DECLSPEC_ALIGN(64) struct {
+-        BYTE m_padding1[64 - sizeof(LONG)];
 +    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) struct {
-         BYTE m_padding1[64 - sizeof(LONG)];
++        BYTE m_padding1[MAX_CACHE_LINE_SIZE - sizeof(LONG)];
          // Only use with VolatileLoad+VolatileStore+FastInterlockCompareExchange
          LONG m_numRequestsPending;
-@@ -286,7 +288,7 @@ public:
+-        BYTE m_padding2[64];
++        BYTE m_padding2[MAX_CACHE_LINE_SIZE];
+     };
+ };
+ 
+@@ -286,11 +288,11 @@ public:
  private:
      SpinLock m_lock;
      ULONG m_NumRequests;
 -    DECLSPEC_ALIGN(64) struct {
+-        BYTE m_padding1[64 - sizeof(LONG)];
 +    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) struct {
-         BYTE m_padding1[64 - sizeof(LONG)];
++        BYTE m_padding1[MAX_CACHE_LINE_SIZE - sizeof(LONG)];
          // Only use with VolatileLoad+VolatileStore+FastInterlockCompareExchange
          LONG m_outstandingThreadRequestCount;
-@@ -352,8 +354,8 @@ private:
+-        BYTE m_padding2[64];
++        BYTE m_padding2[MAX_CACHE_LINE_SIZE];
+     };
+ };
+ 
+@@ -351,9 +353,9 @@ public:
+ private:
      static DWORD FindFirstFreeTpEntry();
  
-     static BYTE s_padding[64 - sizeof(LONG)];
+-    static BYTE s_padding[64 - sizeof(LONG)];
 -    DECLSPEC_ALIGN(64) static LONG s_ADHint;
 -    DECLSPEC_ALIGN(64) static UnManagedPerAppDomainTPCount s_unmanagedTPCount;
++    static BYTE s_padding[MAX_CACHE_LINE_SIZE - sizeof(LONG)];
 +    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static LONG s_ADHint;
 +    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static UnManagedPerAppDomainTPCount s_unmanagedTPCount;
  
@@ -145,15 +163,65 @@ index 18df0dc..e2887c5 100644
  ThreadpoolMgr::TimerInfo *ThreadpoolMgr::TimerInfosToBeRecycled = NULL;
  
 diff --git a/src/vm/win32threadpool.h b/src/vm/win32threadpool.h
-index 65be889..5e46337 100644
+index 65be889..dec336b 100644
 --- a/src/vm/win32threadpool.h
 +++ b/src/vm/win32threadpool.h
-@@ -1247,11 +1247,11 @@ private:
+@@ -123,9 +123,8 @@ class ThreadpoolMgr
+     class UnfairSemaphore
+     {
+     private:
+-
+         // padding to ensure we get our own cache line
+-        BYTE padding1[64];
++        BYTE padding1[MAX_CACHE_LINE_SIZE];
+ 
+         //
+         // We track everything we care about in a single 64-bit struct to allow us to 
+@@ -146,12 +145,12 @@ class ThreadpoolMgr
+         } m_counts;
+ 
+     private:
++        // padding to ensure we get our own cache line
++        BYTE padding2[MAX_CACHE_LINE_SIZE];
++
+         const int m_spinLimitPerProcessor; //used when calculating max spin duration
+         CLRSemaphore m_sem;                //waiters wait on this
+ 
+-        // padding to ensure we get our own cache line
+-        BYTE padding2[64];
+-
+         INDEBUG(int m_maxCount;)
+ 
+         bool UpdateCounts(Counts newCounts, Counts currentCounts)
+@@ -350,6 +349,9 @@ public:
+     {
+         static const int MaxPossibleCount = 0x7fff;
+ 
++        // padding to ensure we get our own cache line
++        BYTE padding1[MAX_CACHE_LINE_SIZE];
++
+         union Counts
+         {
+             struct
+@@ -370,11 +372,10 @@ public:
+             LONGLONG AsLongLong;
+ 
+             bool operator==(Counts other) {LIMITED_METHOD_CONTRACT; return AsLongLong == other.AsLongLong;}
+-
+         } counts;
+ 
+         // padding to ensure we get our own cache line
+-        BYTE padding[64];
++        BYTE padding2[MAX_CACHE_LINE_SIZE];
+ 
+         Counts GetCleanCounts()
+         {
+@@ -1247,11 +1248,11 @@ private:
      SVAL_DECL(LONG,MinLimitTotalWorkerThreads);         // same as MinLimitTotalCPThreads
      SVAL_DECL(LONG,MaxLimitTotalWorkerThreads);         // same as MaxLimitTotalCPThreads
          
 -    DECLSPEC_ALIGN(64) static unsigned int LastDequeueTime;      // used to determine if work items are getting thread starved 
-+    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static unsigned int LastDequeueTime;      // used to determine if work items are getting thread starved 
++    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) static unsigned int LastDequeueTime;      // used to determine if work items are getting thread starved
      
      static HillClimbing HillClimbingInstance;
  
@@ -162,7 +230,7 @@ index 65be889..5e46337 100644
      static DWORD PriorCompletedWorkRequestsTime;
      static DWORD NextCompletedWorkRequestsTime;
  
-@@ -1277,7 +1277,7 @@ private:
+@@ -1277,7 +1278,7 @@ private:
      static const DWORD WorkerTimeout = 20 * 1000;
      static const DWORD WorkerTimeoutAppX = 5 * 1000;    // shorter timeout to allow threads to exit prior to app suspension
  
@@ -171,7 +239,7 @@ index 65be889..5e46337 100644
  
      // 
      // WorkerSemaphore is an UnfairSemaphore because:
-@@ -1306,7 +1306,7 @@ private:
+@@ -1306,7 +1307,7 @@ private:
      SVAL_DECL(LIST_ENTRY,TimerQueue);                   // queue of timers
      static HANDLE TimerThread;                          // Currently we only have one timer thread
      static Thread*  pTimerThread;
@@ -180,7 +248,7 @@ index 65be889..5e46337 100644
  
      static BOOL InitCompletionPortThreadpool;           // flag indicating whether completion port threadpool has been initialized
      static HANDLE GlobalCompletionPort;                 // used for binding io completions on file handles
-@@ -1319,20 +1319,20 @@ private:
+@@ -1319,20 +1320,20 @@ private:
      SVAL_DECL(LONG,MinLimitTotalCPThreads);             
      SVAL_DECL(LONG,MaxFreeCPThreads);                   // = MaxFreeCPThreadsPerCPU * Number of CPUS
  
