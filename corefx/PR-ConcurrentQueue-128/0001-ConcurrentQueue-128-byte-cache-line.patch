@@ -1,0 +1,45 @@
+From 930c4c2d81f8e20a14c9826b57ac9fd40028b876 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 28 Jul 2017 12:50:53 -0400
+Subject: [PATCH] ConcurrentQueue 128-byte cache line
+
+---
+ .../src/System/Collections/Concurrent/ConcurrentQueue.cs            | 6 +++---
+ .../src/Internal/ProducerConsumerQueues.cs                          | 2 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/System.Collections.Concurrent/src/System/Collections/Concurrent/ConcurrentQueue.cs b/src/System.Collections.Concurrent/src/System/Collections/Concurrent/ConcurrentQueue.cs
+index 7458942..3f3786b 100644
+--- a/src/System.Collections.Concurrent/src/System/Collections/Concurrent/ConcurrentQueue.cs
++++ b/src/System.Collections.Concurrent/src/System/Collections/Concurrent/ConcurrentQueue.cs
+@@ -1141,10 +1141,10 @@ namespace System.Collections.Concurrent
+ 
+     /// <summary>Padded head and tail indices, to avoid false sharing between producers and consumers.</summary>
+     [DebuggerDisplay("Head = {Head}, Tail = {Tail}")]
+-    [StructLayout(LayoutKind.Explicit, Size = 192)] // padding before/between/after fields based on typical cache line size of 64
++    [StructLayout(LayoutKind.Explicit, Size = 384)] // padding before/between/after fields based on worst case cache line size of 128
+     internal struct PaddedHeadAndTail
+     {
+-        [FieldOffset(64)] public int Head;
+-        [FieldOffset(128)] public int Tail;
++        [FieldOffset(128)] public int Head;
++        [FieldOffset(256)] public int Tail;
+     }
+ }
+diff --git a/src/System.Threading.Tasks.Dataflow/src/Internal/ProducerConsumerQueues.cs b/src/System.Threading.Tasks.Dataflow/src/Internal/ProducerConsumerQueues.cs
+index d14fd60..44b10b3 100644
+--- a/src/System.Threading.Tasks.Dataflow/src/Internal/ProducerConsumerQueues.cs
++++ b/src/System.Threading.Tasks.Dataflow/src/Internal/ProducerConsumerQueues.cs
+@@ -551,7 +551,7 @@ namespace System.Threading.Tasks
+     }
+ 
+     /// <summary>Padding structure used to minimize false sharing in SingleProducerSingleConsumerQueue{T}.</summary>
+-    [StructLayout(LayoutKind.Explicit, Size = PaddingHelpers.CACHE_LINE_SIZE - sizeof(Int32))] // Based on common case of 64-byte cache lines
++    [StructLayout(LayoutKind.Explicit, Size = PaddingHelpers.CACHE_LINE_SIZE - sizeof(Int32))]
+     struct PaddingFor32
+     {
+     }
+-- 
+2.7.4
+
