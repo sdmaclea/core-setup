@@ -1,4 +1,4 @@
-From 347d7f9fedf0d021dfa6cc9fa6a20d25b0395746 Mon Sep 17 00:00:00 2001
+From e7109aac22f04710ca88713ac99854d478761b9b Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Thu, 20 Jul 2017 19:06:14 -0400
 Subject: [PATCH] Optimize for idle WorkStealingQueueList
@@ -7,11 +7,11 @@ When WorkStealingQueue is empty there is an O(N^2)
 penalty for searching the empty queues.  Avoid by
 stashing global emptiness
 ---
- src/mscorlib/src/System/Threading/ThreadPool.cs | 29 ++++++++++++++++++++++++-
- 1 file changed, 28 insertions(+), 1 deletion(-)
+ src/mscorlib/src/System/Threading/ThreadPool.cs | 43 ++++++++++++++++++++++++-
+ 1 file changed, 42 insertions(+), 1 deletion(-)
 
 diff --git a/src/mscorlib/src/System/Threading/ThreadPool.cs b/src/mscorlib/src/System/Threading/ThreadPool.cs
-index 0084050..4f10e4e 100644
+index 0084050..b64a5d3 100644
 --- a/src/mscorlib/src/System/Threading/ThreadPool.cs
 +++ b/src/mscorlib/src/System/Threading/ThreadPool.cs
 @@ -47,6 +47,12 @@ namespace System.Threading
@@ -27,13 +27,18 @@ index 0084050..4f10e4e 100644
              public static void Add(WorkStealingQueue queue)
              {
                  Debug.Assert(queue != null);
-@@ -441,6 +447,13 @@ namespace System.Threading
+@@ -441,6 +447,18 @@ namespace System.Threading
              if (null != tl)
              {
                  tl.workStealingQueue.LocalPush(callback);
 +
++                // We must guarantee wsqActive is set to WsqNowActive after we push
++                // The ordering must be global because we rely on other threads
++                // observing in this order
 +                Interlocked.MemoryBarrier();
 +
++                // We do not want to simply write.  We want to prevent unnecessary writes
++                // which would invalidate reader's caches
 +                if (WorkStealingQueueList.wsqActive != WorkStealingQueueList.WsqNowActive)
 +                {
 +                    Volatile.Write(ref WorkStealingQueueList.wsqActive, WorkStealingQueueList.WsqNowActive);
@@ -41,7 +46,7 @@ index 0084050..4f10e4e 100644
              }
              else
              {
-@@ -458,8 +471,11 @@ namespace System.Threading
+@@ -458,8 +476,11 @@ namespace System.Threading
  
          public IThreadPoolWorkItem Dequeue(ThreadPoolWorkQueueThreadLocals tl, ref bool missedSteal)
          {
@@ -54,13 +59,22 @@ index 0084050..4f10e4e 100644
  
                  if ((callback = localWsq.LocalPop()) == null && // first try the local queue
                      !workItems.TryDequeue(out callback)) // then try the global queue
-@@ -484,6 +500,17 @@ namespace System.Threading
+@@ -484,6 +505,26 @@ namespace System.Threading
                          }
                          c--;
                      }
 +                    if ((callback == null) && !missedSteal)
 +                    {
 +                        // Only decrement if the value is unchanged since we started looking for work
++                        // This prevents multiple threads decrementing based on overlapping scans.
++                        //
++                        // When we decrement from active, the producer may have inserted a queue item during our scan
++                        // therefore we cannot transition to empty
++                        //
++                        // When we decrement from Maybe Inactive, if the producer inserted a queue item during our scan,
++                        // the producer must write Active.  We may transition to empty briefly if we beat the
++                        // producer's write, but the producer will then overwrite us before waking threads.
++                        // So effectively we cannot mark the queue empty when an item is in the queue.
 +                        Interlocked.CompareExchange(ref WorkStealingQueueList.wsqActive, wsqActiveObserved - 1, wsqActiveObserved);
 +                    }
 +                }
