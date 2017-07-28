@@ -1,0 +1,45 @@
+From 31b21b2d1765cc904d1deb9bda5d4d42b99dccd6 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 28 Jul 2017 12:44:43 -0400
+Subject: [PATCH] mscorlib cache padding for 128 byte lines
+
+---
+ src/mscorlib/src/System/Collections/Concurrent/ConcurrentQueue.cs | 6 +++---
+ src/mscorlib/src/System/Threading/Tasks/ProducerConsumerQueues.cs | 2 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/mscorlib/src/System/Collections/Concurrent/ConcurrentQueue.cs b/src/mscorlib/src/System/Collections/Concurrent/ConcurrentQueue.cs
+index 632f0ee..ad08019 100644
+--- a/src/mscorlib/src/System/Collections/Concurrent/ConcurrentQueue.cs
++++ b/src/mscorlib/src/System/Collections/Concurrent/ConcurrentQueue.cs
+@@ -1111,10 +1111,10 @@ namespace System.Collections.Concurrent
+ 
+     /// <summary>Padded head and tail indices, to avoid false sharing between producers and consumers.</summary>
+     [DebuggerDisplay("Head = {Head}, Tail = {Tail}")]
+-    [StructLayout(LayoutKind.Explicit, Size = 192)] // padding before/between/after fields based on typical cache line size of 64
++    [StructLayout(LayoutKind.Explicit, Size = 384)] // padding before/between/after fields based on worst case cache line size of 128
+     internal struct PaddedHeadAndTail
+     {
+-        [FieldOffset(64)] public int Head;
+-        [FieldOffset(128)] public int Tail;
++        [FieldOffset(128)] public int Head;
++        [FieldOffset(256)] public int Tail;
+     }
+ }
+diff --git a/src/mscorlib/src/System/Threading/Tasks/ProducerConsumerQueues.cs b/src/mscorlib/src/System/Threading/Tasks/ProducerConsumerQueues.cs
+index f9d5f89..beed1b4 100644
+--- a/src/mscorlib/src/System/Threading/Tasks/ProducerConsumerQueues.cs
++++ b/src/mscorlib/src/System/Threading/Tasks/ProducerConsumerQueues.cs
+@@ -375,7 +375,7 @@ namespace System.Threading.Tasks
+     }
+ 
+     /// <summary>Padding structure used to minimize false sharing in SingleProducerSingleConsumerQueue{T}.</summary>
+-    [StructLayout(LayoutKind.Explicit, Size = PaddingHelpers.CACHE_LINE_SIZE - sizeof(Int32))] // Based on common case of 64-byte cache lines
++    [StructLayout(LayoutKind.Explicit, Size = PaddingHelpers.CACHE_LINE_SIZE - sizeof(Int32))]
+     internal struct PaddingFor32
+     {
+     }
+-- 
+2.7.4
+
