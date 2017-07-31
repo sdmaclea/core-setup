@@ -1,0 +1,28 @@
+From 96e5c9b81875bf38ae54faee488043aa796242e8 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Mon, 31 Jul 2017 12:24:27 -0400
+Subject: [PATCH] [Arm64] Implement Poison()
+
+Fixes #13117
+---
+ src/vm/arm64/stubs.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/vm/arm64/stubs.cpp b/src/vm/arm64/stubs.cpp
+index df2124d..da53568 100644
+--- a/src/vm/arm64/stubs.cpp
++++ b/src/vm/arm64/stubs.cpp
+@@ -1246,7 +1246,8 @@ void UMEntryThunkCode::Encode(BYTE* pTargetCode, void* pvSecretParam)
+ 
+ void UMEntryThunkCode::Poison()
+ {
+-
++    // Insert 'brk 0xbe' at the entry point
++    m_code[0] = 0xd42017c0;
+ }
+ 
+ #ifdef PROFILING_SUPPORTED
+-- 
+2.7.4
+
