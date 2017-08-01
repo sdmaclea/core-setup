@@ -1,0 +1,58 @@
+From a946aab95baa111dd0ec7ebfbd22a193d4f93542 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Fri, 28 Jul 2017 12:44:43 -0400
+Subject: [PATCH] mscorlib ConcurrentQueue pad for 128B cache lines
+
+---
+ .../System/Collections/Concurrent/ConcurrentQueue.cs    | 17 ++++++++++++++---
+ .../System/Threading/Tasks/ProducerConsumerQueues.cs    |  2 +-
+ 2 files changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/src/mscorlib/src/System/Collections/Concurrent/ConcurrentQueue.cs b/src/mscorlib/src/System/Collections/Concurrent/ConcurrentQueue.cs
+index 632f0ee..6896b03 100644
+--- a/src/mscorlib/src/System/Collections/Concurrent/ConcurrentQueue.cs
++++ b/src/mscorlib/src/System/Collections/Concurrent/ConcurrentQueue.cs
+@@ -1109,12 +1109,23 @@ namespace System.Collections.Concurrent
+         }
+     }
+ 
++    /// <summary>A placeholder class for common padding constants and eventually routines.</summary>
++    internal static class PaddedHelper
++    {
++        /// <summary>A size greater than or equal to the size of the most common CPU cache lines.</summary>
++#if ARM64
++        internal const int CACHE_LINE_SIZE = 128;
++#else
++        internal const int CACHE_LINE_SIZE = 64;
++#endif
++    }
++
+     /// <summary>Padded head and tail indices, to avoid false sharing between producers and consumers.</summary>
+     [DebuggerDisplay("Head = {Head}, Tail = {Tail}")]
+-    [StructLayout(LayoutKind.Explicit, Size = 192)] // padding before/between/after fields based on typical cache line size of 64
++    [StructLayout(LayoutKind.Explicit, Size = 3*PaddedHelper.CACHE_LINE_SIZE)] // padding before/between/after fields based on worst case cache line size of 128
+     internal struct PaddedHeadAndTail
+     {
+-        [FieldOffset(64)] public int Head;
+-        [FieldOffset(128)] public int Tail;
++        [FieldOffset(1*PaddedHelper.CACHE_LINE_SIZE)] public int Head;
++        [FieldOffset(2*PaddedHelper.CACHE_LINE_SIZE)] public int Tail;
+     }
+ }
+diff --git a/src/mscorlib/src/System/Threading/Tasks/ProducerConsumerQueues.cs b/src/mscorlib/src/System/Threading/Tasks/ProducerConsumerQueues.cs
+index f9d5f89..beed1b4 100644
+--- a/src/mscorlib/src/System/Threading/Tasks/ProducerConsumerQueues.cs
++++ b/src/mscorlib/src/System/Threading/Tasks/ProducerConsumerQueues.cs
+@@ -375,7 +375,7 @@ namespace System.Threading.Tasks
+     }
+ 
+     /// <summary>Padding structure used to minimize false sharing in SingleProducerSingleConsumerQueue{T}.</summary>
+-    [StructLayout(LayoutKind.Explicit, Size = PaddingHelpers.CACHE_LINE_SIZE - sizeof(Int32))] // Based on common case of 64-byte cache lines
++    [StructLayout(LayoutKind.Explicit, Size = PaddingHelpers.CACHE_LINE_SIZE - sizeof(Int32))]
+     internal struct PaddingFor32
+     {
+     }
+-- 
+2.7.4
+
