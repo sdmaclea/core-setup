@@ -1,4 +1,4 @@
-From 11e1840d42a1f8517488dd482112aa607ea2889f Mon Sep 17 00:00:00 2001
+From 64fd81fdbfcf00dc83e8c8bc132810f82ecd7bf2 Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Wed, 26 Jul 2017 17:11:47 -0400
@@ -9,11 +9,11 @@ Look for cache info in /sys/.../cache/index*/size
 If that fails estimate cache size based on processor count
 ---
  src/gc/gc.cpp                         |  4 +-
- src/pal/src/include/pal/palinternal.h |  4 ++
- src/pal/src/misc/cgroup.cpp           | 42 +---------------
- src/pal/src/misc/sysinfo.cpp          | 90 +++++++++++++++++++++++++++++++++++
+ src/pal/src/include/pal/palinternal.h |  3 ++
+ src/pal/src/misc/cgroup.cpp           | 42 +----------------
+ src/pal/src/misc/sysinfo.cpp          | 89 +++++++++++++++++++++++++++++++++++
  src/vm/util.cpp                       | 17 +++----
- 5 files changed, 105 insertions(+), 52 deletions(-)
+ 5 files changed, 103 insertions(+), 52 deletions(-)
 
 diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
 index c00f79d..417c5d6 100644
@@ -38,15 +38,14 @@ index c00f79d..417c5d6 100644
          gen0size = max((4*GCToOSInterface::GetLargestOnDieCacheSize(TRUE)/5),(256*1024));
  #endif //SERVER_GC
 diff --git a/src/pal/src/include/pal/palinternal.h b/src/pal/src/include/pal/palinternal.h
-index 48e2f3c..103fd01 100644
+index 48e2f3c..12312a3 100644
 --- a/src/pal/src/include/pal/palinternal.h
 +++ b/src/pal/src/include/pal/palinternal.h
-@@ -637,6 +637,10 @@ typedef enum _TimeConversionConstants
+@@ -637,6 +637,9 @@ typedef enum _TimeConversionConstants
  #ifdef __cplusplus
  }
  
 +bool
-+PALAPI
 +ReadMemoryValueFromFile(const char* filename, size_t* val);
 +
  /* This is duplicated in utilcode.h for CLR, with cooler type-traits */
@@ -106,15 +105,14 @@ index b50ac86..46d8384 100644
  
      long long ReadCpuCGroupValue(const char* subsystemFilename){
 diff --git a/src/pal/src/misc/sysinfo.cpp b/src/pal/src/misc/sysinfo.cpp
-index e1785688..3fcd629 100644
+index e1785688..a06f4b7 100644
 --- a/src/pal/src/misc/sysinfo.cpp
 +++ b/src/pal/src/misc/sysinfo.cpp
-@@ -384,6 +384,53 @@ PAL_HasGetCurrentProcessorNumber()
+@@ -384,6 +384,52 @@ PAL_HasGetCurrentProcessorNumber()
      return HAVE_SCHED_GETCPU;
  }
  
 +bool
-+PALAPI
 +ReadMemoryValueFromFile(const char* filename, size_t* val)
 +{
 +    bool result = false;
@@ -163,7 +161,7 @@ index e1785688..3fcd629 100644
  size_t
  PALAPI
  PAL_GetLogicalProcessorCacheSizeFromOS()
-@@ -403,5 +450,48 @@ PAL_GetLogicalProcessorCacheSizeFromOS()
+@@ -403,5 +449,48 @@ PAL_GetLogicalProcessorCacheSizeFromOS()
      cacheSize = max(cacheSize, sysconf(_SC_LEVEL4_CACHE_SIZE));
  #endif
  
