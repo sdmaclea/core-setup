@@ -1,0 +1,35 @@
+From 5f5dd428ef1c1c1ee4b1132c5d9767d70be5ec16 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 8 Aug 2017 15:59:20 -0400
+Subject: [PATCH] ThreadPool limit outstanding thread requests
+
+---
+ src/mscorlib/src/System/Threading/ThreadPool.cs | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/mscorlib/src/System/Threading/ThreadPool.cs b/src/mscorlib/src/System/Threading/ThreadPool.cs
+index b64a5d3..1f0e1f4 100644
+--- a/src/mscorlib/src/System/Threading/ThreadPool.cs
++++ b/src/mscorlib/src/System/Threading/ThreadPool.cs
+@@ -31,7 +31,7 @@ namespace System.Threading
+         //requests in the current domain.
+         public const uint TP_QUANTUM = 30U;
+ 
+-        public static readonly int processorCount = Environment.ProcessorCount;
++        public static readonly int MaxOutstandingThreadRequests = Math.Min(Environment.ProcessorCount, 4);
+ 
+         public static volatile bool vmTpInitialized;
+         public static bool enableWorkerTracking;
+@@ -403,7 +403,7 @@ namespace System.Threading
+             // which is handled by RequestWorkerThread.
+             //
+             int count = numOutstandingThreadRequests;
+-            while (count < ThreadPoolGlobals.processorCount)
++            while (count < ThreadPoolGlobals.MaxOutstandingThreadRequests)
+             {
+                 int prev = Interlocked.CompareExchange(ref numOutstandingThreadRequests, count + 1, count);
+                 if (prev == count)
+-- 
+2.7.4
+
