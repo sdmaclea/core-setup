@@ -1,0 +1,231 @@
+From edc2528d4d149e9ee53c9c2924cdbccec6b9ab3c Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 15 Aug 2017 13:57:28 -0400
+Subject: [PATCH] ThreadPool max one thread request per queued item
+
+---
+ src/mscorlib/src/System/Threading/ThreadPool.cs | 117 ++++++++++++++----------
+ 1 file changed, 67 insertions(+), 50 deletions(-)
+
+diff --git a/src/mscorlib/src/System/Threading/ThreadPool.cs b/src/mscorlib/src/System/Threading/ThreadPool.cs
+index b64a5d3..9e1d13b 100644
+--- a/src/mscorlib/src/System/Threading/ThreadPool.cs
++++ b/src/mscorlib/src/System/Threading/ThreadPool.cs
+@@ -39,6 +39,7 @@ namespace System.Threading
+         public static readonly ThreadPoolWorkQueue workQueue = new ThreadPoolWorkQueue();
+     }
+ 
++    [StructLayout(LayoutKind.Sequential)] // enforce layout so that padding reduces false sharing
+     internal sealed class ThreadPoolWorkQueue
+     {
+         internal static class WorkStealingQueueList
+@@ -384,7 +385,28 @@ namespace System.Threading
+         internal bool loggingEnabled;
+         internal readonly ConcurrentQueue<IThreadPoolWorkItem> workItems = new ConcurrentQueue<IThreadPoolWorkItem>();
+ 
+-        private volatile int numOutstandingThreadRequests = 0;
++        System.Threading.Tasks.PaddingFor32 pad1;
++
++        // Packed thread pool status
++        // Packed to allow coherent write
++        internal long threadRequestInfo = 0;
++
++        System.Threading.Tasks.PaddingFor32 pad2;
++
++        // Packing unpacking helpers
++        internal int QueuedItems(long current) => (int)(current >> 32);
++        internal int RequestedThreads(long current) => (int)((current >> 16) & 0xffff);
++        internal int RunningThreads(long current) => (int)((current) & 0xffff);
++        internal int MaxRequests(long current) => RunningThreads(current) < ThreadPoolGlobals.processorCount ?
++            ThreadPoolGlobals.processorCount - RunningThreads(current) : 1;
++
++        internal bool NeedsThreadRequest(long current) =>
++            (RequestedThreads(current) < QueuedItems(current)) &&
++            (RequestedThreads(current) < MaxRequests(current));
++
++        internal const long WorkItemPacked = (1L << 32);
++        internal const long ThreadReqPacked = (1L << 16);
++        internal const long ThreadRunningPacked = 1;
+ 
+         public ThreadPoolWorkQueue()
+         {
+@@ -395,23 +417,25 @@ namespace System.Threading
+             ThreadPoolWorkQueueThreadLocals.threadLocals ??
+             (ThreadPoolWorkQueueThreadLocals.threadLocals = new ThreadPoolWorkQueueThreadLocals(this));
+ 
++
+         internal void EnsureThreadRequested()
+         {
+             //
+-            // If we have not yet requested #procs threads from the VM, then request a new thread.
++            // If NeedsThreadRequests() there are less requested threads than queued itemsq
++            // and less outstanding requests than MaxRequests
++            //
+             // Note that there is a separate count in the VM which will also be incremented in this case, 
+             // which is handled by RequestWorkerThread.
+-            //
+-            int count = numOutstandingThreadRequests;
+-            while (count < ThreadPoolGlobals.processorCount)
++            long current = threadRequestInfo;
++            while(NeedsThreadRequest(current))
+             {
+-                int prev = Interlocked.CompareExchange(ref numOutstandingThreadRequests, count + 1, count);
+-                if (prev == count)
++                long prev = Interlocked.CompareExchange(ref threadRequestInfo, current + ThreadReqPacked, current);
++                if (prev == current)
+                 {
+                     ThreadPool.RequestWorkerThread();
+                     break;
+                 }
+-                count = prev;
++                current = prev;
+             }
+         }
+ 
+@@ -419,20 +443,33 @@ namespace System.Threading
+         {
+             //
+             // The VM has called us, so one of our outstanding thread requests has been satisfied.
+-            // Decrement the count so that future calls to EnsureThreadRequested will succeed.
++            // Decrement the request count and increment running count for EnsureThreadRequested
++            //
+             // Note that there is a separate count in the VM which has already been decremented by the VM
+             // by the time we reach this point.
+             //
+-            int count = numOutstandingThreadRequests;
+-            while (count > 0)
+-            {
+-                int prev = Interlocked.CompareExchange(ref numOutstandingThreadRequests, count - 1, count);
+-                if (prev == count)
++            Interlocked.Add(ref threadRequestInfo, - ThreadReqPacked + ThreadRunningPacked);
++        }
++
++        internal void ItemEnqueued()
+         {
+-                    break;
++            Interlocked.Add(ref threadRequestInfo, + WorkItemPacked);
++
++            EnsureThreadRequested();
+         }
+-                count = prev;
++
++        internal void ItemDequeued()
++        {
++            Interlocked.Add(ref threadRequestInfo, - WorkItemPacked);
++
++            EnsureThreadRequested();
+         }
++
++        internal void ThreadExit()
++        {
++            Interlocked.Add(ref threadRequestInfo, - ThreadRunningPacked);
++
++            EnsureThreadRequested();
+         }
+ 
+         public void Enqueue(IThreadPoolWorkItem callback, bool forceGlobal)
+@@ -465,7 +502,7 @@ namespace System.Threading
+                 workItems.Enqueue(callback);
+             }
+ 
+-            EnsureThreadRequested();
++            ItemEnqueued();
+         }
+ 
+         internal bool LocalFindAndPop(IThreadPoolWorkItem callback)
+@@ -476,7 +513,9 @@ namespace System.Threading
+ 
+         public IThreadPoolWorkItem Dequeue(ThreadPoolWorkQueueThreadLocals tl, ref bool missedSteal)
+         {
+-            IThreadPoolWorkItem callback;
++            IThreadPoolWorkItem callback = null;
++            try
++            {
+                 int wsqActiveObserved = WorkStealingQueueList.wsqActive;
+                 if (wsqActiveObserved > 0)
+                 {
+@@ -526,7 +565,14 @@ namespace System.Threading
+                     // We only need to look at the global queue since WorkStealingQueueList is inactive
+                     workItems.TryDequeue(out callback);
+                 }
+-
++            }
++            finally
++            {
++                // Update count of unclaimed work items
++                // Placed in finally block here for rare case of a thread abort exception during Dequeue
++                if (callback != null)
++                    ItemDequeued();
++            }
+             return callback;
+         }
+ 
+@@ -552,11 +598,6 @@ namespace System.Threading
+             // Has the desire for logging changed since the last time we entered?
+             workQueue.loggingEnabled = FrameworkEventSource.Log.IsEnabled(EventLevel.Verbose, FrameworkEventSource.Keywords.ThreadPool | FrameworkEventSource.Keywords.ThreadTransfer);
+ 
+-            //
+-            // Assume that we're going to need another thread if this one returns to the VM.  We'll set this to 
+-            // false later, but only if we're absolutely certain that the queue is empty.
+-            //
+-            bool needAnotherThread = true;
+             IThreadPoolWorkItem workItem = null;
+             try
+             {
+@@ -575,16 +616,6 @@ namespace System.Threading
+ 
+                     if (workItem == null)
+                     {
+-                        //
+-                        // No work.  We're going to return to the VM once we leave this protected region.
+-                        // If we missed a steal, though, there may be more work in the queue.
+-                        // Instead of looping around and trying again, we'll just request another thread.  This way
+-                        // we won't starve other AppDomains while we spin trying to get locks, and hopefully the thread
+-                        // that owns the contended work-stealing queue will pick up its own workitems in the meantime, 
+-                        // which will be more efficient than this thread doing it anyway.
+-                        //
+-                        needAnotherThread = missedSteal;
+-
+                         // Tell the VM we're returning normally, not because Hill Climbing asked us to return.
+                         return true;
+                     }
+@@ -593,12 +624,6 @@ namespace System.Threading
+                         System.Diagnostics.Tracing.FrameworkEventSource.Log.ThreadPoolDequeueWorkObject(workItem);
+ 
+                     //
+-                    // If we found work, there may be more work.  Ask for another thread so that the other work can be processed
+-                    // in parallel.  Note that this will only ask for a max of #procs threads, so it's safe to call it for every dequeue.
+-                    //
+-                    workQueue.EnsureThreadRequested();
+-
+-                    //
+                     // Execute the workitem outside of any finally blocks, so that it can be aborted if needed.
+                     //
+                     if (ThreadPoolGlobals.enableWorkerTracking)
+@@ -643,20 +668,12 @@ namespace System.Threading
+                 //
+                 workItem?.MarkAborted(tae);
+ 
+-                //
+-                // In this case, the VM is going to request another thread on our behalf.  No need to do it twice.
+-                //
+-                needAnotherThread = false;
+                 // throw;  //no need to explicitly rethrow a ThreadAbortException, and doing so causes allocations on amd64.
+             }
+             finally
+             {
+-                //
+-                // If we are exiting for any reason other than that the queue is definitely empty, ask for another
+-                // thread to pick up where we left off.
+-                //
+-                if (needAnotherThread)
+-                    workQueue.EnsureThreadRequested();
++                // Update count of running threads and request another thread if needed
++                workQueue.ThreadExit();
+             }
+ 
+             // we can never reach this point, but the C# compiler doesn't know that, because it doesn't know the ThreadAbortException will be reraised above.
+-- 
+2.7.4
+
