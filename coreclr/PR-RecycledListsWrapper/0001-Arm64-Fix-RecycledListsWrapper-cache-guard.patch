@@ -1,0 +1,31 @@
+From 4fa0f681c4e68836d5f1da75e95cdc89a8562228 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Tue, 1 Aug 2017 13:25:43 -0400
+Subject: [PATCH] [Arm64] Fix RecycledListsWrapper cache guard
+
+---
+ src/vm/win32threadpool.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/vm/win32threadpool.h b/src/vm/win32threadpool.h
+index dec336b..fc5742b 100644
+--- a/src/vm/win32threadpool.h
++++ b/src/vm/win32threadpool.h
+@@ -963,11 +963,11 @@ public:
+     //
+     class RecycledListsWrapper
+     {
+-        DWORD                        CacheGuardPre[64/sizeof(DWORD)];
++        DWORD                        CacheGuardPre[MAX_CACHE_LINE_SIZE/sizeof(DWORD)];
+         
+         RecycledListInfo            (*pRecycledListPerProcessor)[MEMTYPE_COUNT];  // RecycledListInfo [numProc][MEMTYPE_COUNT]
+ 
+-        DWORD                        CacheGuardPost[64/sizeof(DWORD)];
++        DWORD                        CacheGuardPost[MAX_CACHE_LINE_SIZE/sizeof(DWORD)];
+ 
+     public:
+         void Initialize( unsigned int numProcs );
+-- 
+2.7.4
+
