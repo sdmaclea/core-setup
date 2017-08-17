@@ -1,0 +1,38 @@
+From b8544b541961122351403b8df0a4a1c02fda1112 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 17 Aug 2017 16:37:35 -0400
+Subject: [PATCH] ThreadPool pad hot cache line
+
+---
+ src/mscorlib/src/System/Threading/ThreadPool.cs | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/mscorlib/src/System/Threading/ThreadPool.cs b/src/mscorlib/src/System/Threading/ThreadPool.cs
+index 3993d6f..e19d8e8 100644
+--- a/src/mscorlib/src/System/Threading/ThreadPool.cs
++++ b/src/mscorlib/src/System/Threading/ThreadPool.cs
+@@ -39,6 +39,7 @@ namespace System.Threading
+         public static readonly ThreadPoolWorkQueue workQueue = new ThreadPoolWorkQueue();
+     }
+ 
++    [StructLayout(LayoutKind.Sequential)] // enforce layout so that padding reduces false sharing
+     internal sealed class ThreadPoolWorkQueue
+     {
+         internal static class WorkStealingQueueList
+@@ -384,8 +385,12 @@ namespace System.Threading
+         internal bool loggingEnabled;
+         internal readonly ConcurrentQueue<IThreadPoolWorkItem> workItems = new ConcurrentQueue<IThreadPoolWorkItem>();
+ 
++        private System.Threading.Tasks.PaddingFor32 pad1;
++
+         private volatile int numOutstandingThreadRequests = 0;
+ 
++        private System.Threading.Tasks.PaddingFor32 pad2;
++
+         public ThreadPoolWorkQueue()
+         {
+             loggingEnabled = FrameworkEventSource.Log.IsEnabled(EventLevel.Verbose, FrameworkEventSource.Keywords.ThreadPool | FrameworkEventSource.Keywords.ThreadTransfer);
+-- 
+2.7.4
+
