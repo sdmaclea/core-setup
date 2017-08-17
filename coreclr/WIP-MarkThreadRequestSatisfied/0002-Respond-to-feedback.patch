@@ -1,0 +1,47 @@
+From edae50d7e26bbbce824a882edd695ce3e1cef18f Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 17 Aug 2017 18:00:53 -0400
+Subject: [PATCH] Respond to feedback
+
+---
+ src/mscorlib/src/System/Threading/ThreadPool.cs | 16 +++++++++-------
+ 1 file changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/src/mscorlib/src/System/Threading/ThreadPool.cs b/src/mscorlib/src/System/Threading/ThreadPool.cs
+index 00b4936..d92303a 100644
+--- a/src/mscorlib/src/System/Threading/ThreadPool.cs
++++ b/src/mscorlib/src/System/Threading/ThreadPool.cs
+@@ -424,6 +424,15 @@ namespace System.Threading
+             // by the time we reach this point.
+             //
+             int count = numOutstandingThreadRequests;
++
++            if (dequeSuccessful && (count == ThreadPoolGlobals.processorCount))
++            {
++                // If we gated threads due to too many outstanding requests and queue was not empty
++                // Request another thread.
++                ThreadPool.RequestWorkerThread();
++                return;
++            }
++
+             while (count > 0)
+             {
+                 int prev = Interlocked.CompareExchange(ref numOutstandingThreadRequests, count - 1, count);
+@@ -433,13 +442,6 @@ namespace System.Threading
+                 }
+                 count = prev;
+             }
+-
+-            if (dequeSuccessful && (count == ThreadPoolGlobals.processorCount))
+-            {
+-                // If we gated threads due to too many outstanding requests and queue was not empty
+-                // Request another thread.
+-                EnsureThreadRequested();
+-            }
+         }
+ 
+         public void Enqueue(IThreadPoolWorkItem callback, bool forceGlobal)
+-- 
+2.7.4
+
