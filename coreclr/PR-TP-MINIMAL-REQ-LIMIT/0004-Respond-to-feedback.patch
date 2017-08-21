@@ -1,0 +1,55 @@
+From c166f8a57902e8b2f5e13bc94569abf1db1b0deb Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 21 Aug 2017 16:34:05 -0400
+Subject: [PATCH] Respond to feedback
+
+---
+ src/mscorlib/src/System/Threading/ThreadPool.cs | 11 ++++++-----
+ 1 file changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/src/mscorlib/src/System/Threading/ThreadPool.cs b/src/mscorlib/src/System/Threading/ThreadPool.cs
+index 6876be6..369bcb0 100644
+--- a/src/mscorlib/src/System/Threading/ThreadPool.cs
++++ b/src/mscorlib/src/System/Threading/ThreadPool.cs
+@@ -401,7 +401,7 @@ namespace System.Threading
+             (ThreadPoolWorkQueueThreadLocals.threadLocals = new ThreadPoolWorkQueueThreadLocals(this));
+ 
+         internal bool ThreadRequestNeeded(int count) => (count < ThreadPoolGlobals.processorCount) &&
+-            ((count < workItems.Count) || (WorkStealingQueueList.wsqActive > 0));
++            (!workItems.IsEmpty || (WorkStealingQueueList.wsqActive > 0));
+ 
+         internal void EnsureThreadRequested()
+         {
+@@ -425,7 +425,7 @@ namespace System.Threading
+             }
+         }
+ 
+-        internal void MarkThreadRequestSatisfied(bool dequeSuccessful)
++        internal void MarkThreadRequestSatisfied(bool dequeueSuccessful)
+         {
+             //
+             // The VM has called us, so one of our outstanding thread requests has been satisfied.
+@@ -434,7 +434,10 @@ namespace System.Threading
+             // by the time we reach this point.
+             //
+             int count = numOutstandingThreadRequests;
+-            if (dequeSuccessful && ThreadRequestNeeded(count))
++
++            while (count > 0)
++            {
++                if (dequeueSuccessful && (count == ThreadPoolGlobals.processorCount) && ThreadRequestNeeded(count - 1))
+                 {
+                     // If we gated threads due to too many outstanding requests and queue was not empty
+                     // Request another thread.
+@@ -442,8 +445,6 @@ namespace System.Threading
+                     return;
+                 }
+ 
+-            while (count > 0)
+-            {
+                 int prev = Interlocked.CompareExchange(ref numOutstandingThreadRequests, count - 1, count);
+                 if (prev == count)
+                 {
+-- 
+2.7.4
+
