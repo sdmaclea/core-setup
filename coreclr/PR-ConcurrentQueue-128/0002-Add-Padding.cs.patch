@@ -1,0 +1,161 @@
+From 9641c9d29501f39481721a7ed539a27be5b6c985 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 23 Aug 2017 15:49:29 -0400
+Subject: [PATCH] Add Padding.cs
+
+---
+ src/mscorlib/System.Private.CoreLib.csproj         |  1 +
+ src/mscorlib/src/Internal/Padding.cs               | 27 ++++++++++++++++++++++
+ .../Collections/Concurrent/ConcurrentQueue.cs      | 17 +++-----------
+ .../Threading/Tasks/ProducerConsumerQueues.cs      | 19 +++------------
+ src/mscorlib/src/System/Threading/ThreadPool.cs    |  4 ++--
+ 5 files changed, 36 insertions(+), 32 deletions(-)
+ create mode 100644 src/mscorlib/src/Internal/Padding.cs
+
+diff --git a/src/mscorlib/System.Private.CoreLib.csproj b/src/mscorlib/System.Private.CoreLib.csproj
+index e7065d1..6099868 100644
+--- a/src/mscorlib/System.Private.CoreLib.csproj
++++ b/src/mscorlib/System.Private.CoreLib.csproj
+@@ -356,6 +356,7 @@
+     <Compile Include="$(BclSourcesRoot)\Internal\Runtime\Augments\EnvironmentAugments.cs" />
+     <Compile Include="$(BclSourcesRoot)\Internal\Runtime\Augments\RuntimeThread.cs" />
+     <Compile Include="$(BclSourcesRoot)\Internal\Console.cs" />
++    <Compile Include="$(BclSourcesRoot)\Internal\Padding.cs" />
+   </ItemGroup>
+   <ItemGroup>
+     <Compile Include="$(BclSourcesRoot)\System\Reflection\Assembly.CoreCLR.cs" />
+diff --git a/src/mscorlib/src/Internal/Padding.cs b/src/mscorlib/src/Internal/Padding.cs
+new file mode 100644
+index 0000000..d25acdc
+--- /dev/null
++++ b/src/mscorlib/src/Internal/Padding.cs
+@@ -0,0 +1,27 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++using System.Runtime.InteropServices;
++
++namespace Internal
++{
++
++    /// <summary>A class for common padding constants and eventually routines.</summary>
++    internal static class PaddingHelpers
++    {
++        /// <summary>A size greater than or equal to the size of the most common CPU cache lines.</summary>
++#if ARM64
++        internal const int CACHE_LINE_SIZE = 128;
++#else
++        internal const int CACHE_LINE_SIZE = 64;
++#endif
++    }
++
++    /// <summary>Padding structure used to minimize false sharing</summary>
++    [StructLayout(LayoutKind.Explicit, Size = PaddingHelpers.CACHE_LINE_SIZE - sizeof(int))]
++    internal struct PaddingFor32
++    {
++    }
++}
++
+diff --git a/src/mscorlib/src/System/Collections/Concurrent/ConcurrentQueue.cs b/src/mscorlib/src/System/Collections/Concurrent/ConcurrentQueue.cs
+index 6896b03..53b7525 100644
+--- a/src/mscorlib/src/System/Collections/Concurrent/ConcurrentQueue.cs
++++ b/src/mscorlib/src/System/Collections/Concurrent/ConcurrentQueue.cs
+@@ -1109,23 +1109,12 @@ namespace System.Collections.Concurrent
+         }
+     }
+ 
+-    /// <summary>A placeholder class for common padding constants and eventually routines.</summary>
+-    internal static class PaddedHelper
+-    {
+-        /// <summary>A size greater than or equal to the size of the most common CPU cache lines.</summary>
+-#if ARM64
+-        internal const int CACHE_LINE_SIZE = 128;
+-#else
+-        internal const int CACHE_LINE_SIZE = 64;
+-#endif
+-    }
+-
+     /// <summary>Padded head and tail indices, to avoid false sharing between producers and consumers.</summary>
+     [DebuggerDisplay("Head = {Head}, Tail = {Tail}")]
+-    [StructLayout(LayoutKind.Explicit, Size = 3*PaddedHelper.CACHE_LINE_SIZE)] // padding before/between/after fields based on worst case cache line size of 128
++    [StructLayout(LayoutKind.Explicit, Size = 3*Internal.PaddingHelpers.CACHE_LINE_SIZE)] // padding before/between/after fields
+     internal struct PaddedHeadAndTail
+     {
+-        [FieldOffset(1*PaddedHelper.CACHE_LINE_SIZE)] public int Head;
+-        [FieldOffset(2*PaddedHelper.CACHE_LINE_SIZE)] public int Tail;
++        [FieldOffset(1*Internal.PaddingHelpers.CACHE_LINE_SIZE)] public int Head;
++        [FieldOffset(2*Internal.PaddingHelpers.CACHE_LINE_SIZE)] public int Tail;
+     }
+ }
+diff --git a/src/mscorlib/src/System/Threading/Tasks/ProducerConsumerQueues.cs b/src/mscorlib/src/System/Threading/Tasks/ProducerConsumerQueues.cs
+index beed1b4..df0dbe3 100644
+--- a/src/mscorlib/src/System/Threading/Tasks/ProducerConsumerQueues.cs
++++ b/src/mscorlib/src/System/Threading/Tasks/ProducerConsumerQueues.cs
+@@ -332,7 +332,7 @@ namespace System.Threading.Tasks
+         private struct SegmentState
+         {
+             /// <summary>Padding to reduce false sharing between the segment's array and m_first.</summary>
+-            internal PaddingFor32 m_pad0;
++            internal Internal.PaddingFor32 m_pad0;
+ 
+             /// <summary>The index of the current head in the segment.</summary>
+             internal volatile int m_first;
+@@ -340,7 +340,7 @@ namespace System.Threading.Tasks
+             internal int m_lastCopy; // not volatile as read and written by the producer, except for IsEmpty, and there m_lastCopy is only read after reading the volatile m_first
+ 
+             /// <summary>Padding to reduce false sharing between the first and last.</summary>
+-            internal PaddingFor32 m_pad1;
++            internal Internal.PaddingFor32 m_pad1;
+ 
+             /// <summary>A copy of the current head index.</summary>
+             internal int m_firstCopy; // not voliatle as only read and written by the consumer thread
+@@ -348,7 +348,7 @@ namespace System.Threading.Tasks
+             internal volatile int m_last;
+ 
+             /// <summary>Padding to reduce false sharing with the last and what's after the segment.</summary>
+-            internal PaddingFor32 m_pad2;
++            internal Internal.PaddingFor32 m_pad2;
+         }
+ 
+         /// <summary>Debugger type proxy for a SingleProducerSingleConsumerQueue of T.</summary>
+@@ -366,17 +366,4 @@ namespace System.Threading.Tasks
+             }
+         }
+     }
+-
+-    /// <summary>A placeholder class for common padding constants and eventually routines.</summary>
+-    internal static class PaddingHelpers
+-    {
+-        /// <summary>A size greater than or equal to the size of the most common CPU cache lines.</summary>
+-        internal const int CACHE_LINE_SIZE = 128;
+-    }
+-
+-    /// <summary>Padding structure used to minimize false sharing in SingleProducerSingleConsumerQueue{T}.</summary>
+-    [StructLayout(LayoutKind.Explicit, Size = PaddingHelpers.CACHE_LINE_SIZE - sizeof(Int32))]
+-    internal struct PaddingFor32
+-    {
+-    }
+ }
+diff --git a/src/mscorlib/src/System/Threading/ThreadPool.cs b/src/mscorlib/src/System/Threading/ThreadPool.cs
+index e457f15..ec9ceef 100644
+--- a/src/mscorlib/src/System/Threading/ThreadPool.cs
++++ b/src/mscorlib/src/System/Threading/ThreadPool.cs
+@@ -385,11 +385,11 @@ namespace System.Threading
+         internal bool loggingEnabled;
+         internal readonly ConcurrentQueue<IThreadPoolWorkItem> workItems = new ConcurrentQueue<IThreadPoolWorkItem>();
+ 
+-        private System.Threading.Tasks.PaddingFor32 pad1;
++        private Internal.PaddingFor32 pad1;
+ 
+         private volatile int numOutstandingThreadRequests = 0;
+ 
+-        private System.Threading.Tasks.PaddingFor32 pad2;
++        private Internal.PaddingFor32 pad2;
+ 
+         public ThreadPoolWorkQueue()
+         {
+-- 
+2.7.4
+
