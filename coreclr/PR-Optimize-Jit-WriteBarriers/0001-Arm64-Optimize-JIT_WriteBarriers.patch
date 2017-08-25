@@ -1,4 +1,4 @@
-From d15381137851d5573b7ebd8566b604fbadcd80f9 Mon Sep 17 00:00:00 2001
+From 7091c756f8da0e547290a2f5d43e3c4009e59010 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 16 Jun 2017 15:56:35 +0000
 Subject: [PATCH] [Arm64] Optimize JIT_WriteBarriers
@@ -14,7 +14,7 @@ Fixes #12197
  4 files changed, 314 insertions(+), 94 deletions(-)
 
 diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
-index 2e1d029..8e5875e 100644
+index 7a64665..a740605 100644
 --- a/src/vm/arm64/asmhelpers.S
 +++ b/src/vm/arm64/asmhelpers.S
 @@ -207,6 +207,106 @@ LEAF_END ThePreStubPatch, _TEXT
@@ -280,7 +280,7 @@ index 2e1d029..8e5875e 100644
  // VirtualMethodFixupStub
  //
 diff --git a/src/vm/arm64/asmhelpers.asm b/src/vm/arm64/asmhelpers.asm
-index 8da2151..7732c07 100644
+index edd40f7..fb968e9 100644
 --- a/src/vm/arm64/asmhelpers.asm
 +++ b/src/vm/arm64/asmhelpers.asm
 @@ -52,6 +52,14 @@
@@ -573,10 +573,10 @@ index 8da2151..7732c07 100644
  ; VirtualMethodFixupStub
  ;
 diff --git a/src/vm/arm64/stubs.cpp b/src/vm/arm64/stubs.cpp
-index 40d2749..d1689ea 100644
+index 8196ae0..52d179b 100644
 --- a/src/vm/arm64/stubs.cpp
 +++ b/src/vm/arm64/stubs.cpp
-@@ -19,6 +19,8 @@ EXTERN_C void JIT_GetSharedNonGCStaticBase_SingleAppDomain();
+@@ -20,6 +20,8 @@ EXTERN_C void JIT_GetSharedNonGCStaticBase_SingleAppDomain();
  EXTERN_C void JIT_GetSharedNonGCStaticBaseNoCtor_SingleAppDomain();
  EXTERN_C void JIT_GetSharedGCStaticBase_SingleAppDomain();
  EXTERN_C void JIT_GetSharedGCStaticBaseNoCtor_SingleAppDomain();
@@ -585,7 +585,7 @@ index 40d2749..d1689ea 100644
  
  #ifndef DACCESS_COMPILE
  //-----------------------------------------------------------------------
-@@ -1093,7 +1095,11 @@ void InitJITHelpers1()
+@@ -1119,7 +1121,11 @@ void InitJITHelpers1()
          SetJitHelperFunction(CORINFO_HELP_GETSHARED_GCSTATIC_BASE_NOCTOR,   JIT_GetSharedGCStaticBaseNoCtor_SingleAppDomain);
          SetJitHelperFunction(CORINFO_HELP_GETSHARED_NONGCSTATIC_BASE_NOCTOR,JIT_GetSharedNonGCStaticBaseNoCtor_SingleAppDomain);
      }
@@ -597,7 +597,7 @@ index 40d2749..d1689ea 100644
  #endif // !defined(DACCESS_COMPILE) && !defined(CROSSGEN_COMPILE)
  
  EXTERN_C void __stdcall ProfileEnterNaked(UINT_PTR clientData)
-@@ -1307,28 +1313,29 @@ LONG CLRNoCatchHandler(EXCEPTION_POINTERS* pExceptionInfo, PVOID pv)
+@@ -1338,28 +1344,29 @@ LONG CLRNoCatchHandler(EXCEPTION_POINTERS* pExceptionInfo, PVOID pv)
      return EXCEPTION_CONTINUE_SEARCH;
  }
  
@@ -633,7 +633,7 @@ index 40d2749..d1689ea 100644
  #ifdef DACCESS_COMPILE
  BOOL GetAnyThunkTarget (T_CONTEXT *pctx, TADDR *pTarget, TADDR *pTargetMethodDesc)
 diff --git a/src/vm/gcenv.ee.cpp b/src/vm/gcenv.ee.cpp
-index 6fe9a71..dd34651 100644
+index b61069f..b135173 100644
 --- a/src/vm/gcenv.ee.cpp
 +++ b/src/vm/gcenv.ee.cpp
 @@ -861,7 +861,7 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
