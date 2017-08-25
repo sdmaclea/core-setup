@@ -1,0 +1,202 @@
+From 2d8f5c28f05d1aac67c47ecd51cc74bf419088b1 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 16 Aug 2017 17:56:08 -0400
+Subject: [PATCH] [Arm64/Unix] Add JIT_Stelem_Ref helper
+
+---
+ src/vm/arm64/asmconstants.h | 34 ++++++++++++++++
+ src/vm/arm64/asmhelpers.S   | 97 +++++++++++++++++++++++++++++++++++++++++++++
+ src/vm/arm64/cgencpu.h      | 12 ++++++
+ 3 files changed, 143 insertions(+)
+
+diff --git a/src/vm/arm64/asmconstants.h b/src/vm/arm64/asmconstants.h
+index 12b72f9..dca845d 100644
+--- a/src/vm/arm64/asmconstants.h
++++ b/src/vm/arm64/asmconstants.h
+@@ -23,6 +23,13 @@
+ #define ASMCONSTANTS_RUNTIME_ASSERT(cond)
+ #endif
+ 
++// Some contants are different in _DEBUG builds.  This macro factors out ifdefs from below.
++#ifdef _DEBUG
++#define DBG_FRE(dbg,fre) dbg
++#else
++#define DBG_FRE(dbg,fre) fre
++#endif
++
+ #define DynamicHelperFrameFlags_Default     0
+ #define DynamicHelperFrameFlags_ObjectArg   1
+ #define DynamicHelperFrameFlags_ObjectArg2  2
+@@ -75,6 +82,11 @@ ASMCONSTANTS_C_ASSERT(   CORINFO_NullReferenceException_ASM
+                       == CORINFO_NullReferenceException);
+ 
+ 
++#define                  CORINFO_IndexOutOfRangeException_ASM 3
++ASMCONSTANTS_C_ASSERT(   CORINFO_IndexOutOfRangeException_ASM
++                      == CORINFO_IndexOutOfRangeException);
++
++
+ // Offset of the array containing the address of captured registers in MachState
+ #define MachState__captureX19_X29 0x0
+ ASMCONSTANTS_C_ASSERT(MachState__captureX19_X29 == offsetof(MachState, captureX19_X29))
+@@ -114,6 +126,28 @@ ASMCONSTANTS_C_ASSERT(SIZEOF__Frame == sizeof(Frame));
+ ASMCONSTANTS_C_ASSERT(SIZEOF__CONTEXT == sizeof(T_CONTEXT));
+ 
+ 
++//=========================================
++#define MethodTable__m_dwFlags         0x0
++ASMCONSTANTS_C_ASSERT(MethodTable__m_dwFlags == offsetof(MethodTable, m_dwFlags));
++
++#define MethodTable__m_BaseSize         0x04
++ASMCONSTANTS_C_ASSERT(MethodTable__m_BaseSize == offsetof(MethodTable, m_BaseSize));
++
++#define MethodTable__m_ElementType     DBG_FRE(0x38, 0x30)
++ASMCONSTANTS_C_ASSERT(MethodTable__m_ElementType == offsetof(MethodTable, m_pMultipurposeSlot1));
++
++#define ArrayBase__m_NumComponents     0x8
++ASMCONSTANTS_C_ASSERT(ArrayBase__m_NumComponents == offsetof(ArrayBase, m_NumComponents));
++
++#define PtrArray__m_Array              0x10
++ASMCONSTANTS_C_ASSERT(PtrArray__m_Array == offsetof(PtrArray, m_Array));
++
++#define TypeHandle_CanCast 0x1 // TypeHandle::CanCast
++
++//=========================================
++
++
++
+ #ifdef FEATURE_COMINTEROP
+ 
+ #define SIZEOF__ComMethodFrame 0x70
+diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
+index 7a64665..bc4a826 100644
+--- a/src/vm/arm64/asmhelpers.S
++++ b/src/vm/arm64/asmhelpers.S
+@@ -1302,3 +1302,100 @@ LEAF_ENTRY JIT_GetSharedGCStaticBaseNoCtor_SingleAppDomain, _TEXT
+     ldr x0, [x0, #DomainLocalModule__m_pGCStatics]
+     ret lr
+ LEAF_END JIT_GetSharedGCStaticBaseNoCtor_SingleAppDomain, _TEXT
++
++// ------------------------------------------------------------------
++// __declspec(naked) void F_CALL_CONV JIT_Stelem_Ref(PtrArray* array, unsigned idx, Object* val)
++LEAF_ENTRY JIT_Stelem_Ref, _TEXT
++    // We retain arguments as they were passed and use r0 == array// r1 == idx// r2 == val
++
++    // check for null array
++    cbz     x0, LOCAL_LABEL(ThrowNullReferenceException)
++
++    // idx bounds check
++    ldr     x3,[x0,#ArrayBase__m_NumComponents]
++    cmp     x3, x1
++    bls     LOCAL_LABEL(ThrowIndexOutOfRangeException)
++
++    // fast path to null assignment (doesn't need any write-barriers)
++    cbz     x2, LOCAL_LABEL(AssigningNull)
++
++    // Verify the array-type and val-type matches before writing
++    ldr     x12, [x0] // x12 = array MT
++    ldr     x3, [x2] // x3 = val->GetMethodTable()
++    ldr     x12, [x12, #MethodTable__m_ElementType] // array->GetArrayElementTypeHandle()
++    cmp     x3, x12
++    beq     C_FUNC(JIT_Stelem_DoWrite)
++
++    // Types didnt match but allow writing into an array of objects
++    ldr     x3, =g_pObjectClass
++    ldr     x3, [x3]  // x3 = *g_pObjectClass
++    cmp     x3, x12   // array type matches with Object*
++    beq     C_FUNC(JIT_Stelem_DoWrite)
++
++    // array type and val type do not exactly match. Raise frame and do detailed match
++    b       C_FUNC(JIT_Stelem_Ref_NotExactMatch)
++
++LOCAL_LABEL(AssigningNull):
++    // Assigning null doesn't need write barrier
++    add     x0, x0, x1, LSL #3           // x0 = x0 + (x1 x 8) = array->m_array[idx]
++    str     x2, [x0, #PtrArray__m_Array] // array->m_array[idx] = val
++    ret
++
++LOCAL_LABEL(ThrowNullReferenceException):
++    // Tail call JIT_InternalThrow(NullReferenceException)
++    ldr     x0, =CORINFO_NullReferenceException_ASM
++    b       C_FUNC(JIT_InternalThrow)
++
++LOCAL_LABEL(ThrowIndexOutOfRangeException):
++    // Tail call JIT_InternalThrow(NullReferenceException)
++    ldr     x0, =CORINFO_IndexOutOfRangeException_ASM
++    b       C_FUNC(JIT_InternalThrow)
++
++LEAF_END JIT_Stelem_Ref, _TEXT
++
++// ------------------------------------------------------------------
++// __declspec(naked) void F_CALL_CONV JIT_Stelem_Ref_NotExactMatch(PtrArray* array,
++//                                                       unsigned idx, Object* val)
++//   x12 = array->GetArrayElementTypeHandle()
++//
++NESTED_ENTRY JIT_Stelem_Ref_NotExactMatch, _TEXT, NoHandler
++    PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, -48
++    // Spill callee saved registers
++    PROLOG_SAVE_REG_PAIR   x0, x1, 16
++    PROLOG_SAVE_REG        x2, 32
++
++    // allow in case val can be casted to array element type
++    // call ObjIsInstanceOfNoGC(val, array->GetArrayElementTypeHandle())
++    mov     x1, x12 // array->GetArrayElementTypeHandle()
++    mov     x0, x2
++    bl      C_FUNC(ObjIsInstanceOfNoGC)
++    cmp     x0, TypeHandle_CanCast
++    beq     LOCAL_LABEL(DoWrite)             // ObjIsInstance returned TypeHandle::CanCast
++
++    // check via raising frame
++LOCAL_LABEL(NeedFrame):
++    add     x1, sp, #16             // r1 = &array
++    add     x0, sp, #32             // r0 = &val
++
++    bl      C_FUNC(ArrayStoreCheck) // ArrayStoreCheck(&val, &array)
++
++LOCAL_LABEL(DoWrite):
++    EPILOG_RESTORE_REG_PAIR           x0, x1, 16
++    EPILOG_RESTORE_REG                x2, 32
++    EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr,   48
++    b C_FUNC(JIT_Stelem_DoWrite)
++NESTED_END JIT_Stelem_Ref_NotExactMatch, _TEXT
++
++// ------------------------------------------------------------------
++// __declspec(naked) void F_CALL_CONV JIT_Stelem_DoWrite(PtrArray* array, unsigned idx, Object* val)
++LEAF_ENTRY  JIT_Stelem_DoWrite, _TEXT
++
++    // Setup args for JIT_WriteBarrier. x14 = &array->m_array[idx] x15 = val
++    add     x14, x0, #PtrArray__m_Array // x14 = &array->m_array
++    add     x14, x14, x1, LSL #3
++    mov     x15, x2                     // x15 = val
++
++    // Branch to the write barrier (which is already correctly overwritten with
++    // single or multi-proc code based on the current CPU
++    b       C_FUNC(JIT_WriteBarrier)
++LEAF_END JIT_Stelem_DoWrite, _TEXT
+diff --git a/src/vm/arm64/cgencpu.h b/src/vm/arm64/cgencpu.h
+index 5c522c5..b23d6f5 100644
+--- a/src/vm/arm64/cgencpu.h
++++ b/src/vm/arm64/cgencpu.h
+@@ -79,6 +79,18 @@ typedef INT64 StackElemType;
+ // !! This expression assumes STACK_ELEM_SIZE is a power of 2.
+ #define StackElemSize(parmSize) (((parmSize) + STACK_ELEM_SIZE - 1) & ~((ULONG)(STACK_ELEM_SIZE - 1)))
+ 
++
++#ifdef FEATURE_PAL // TODO-ARM64-WINDOWS Add JIT_Stelem_Ref support
++//
++// JIT HELPERS.
++//
++// Create alias for optimized implementations of helpers provided on this platform
++//
++// optimized static helpers
++#define JIT_Stelem_Ref                      JIT_Stelem_Ref
++#endif
++
++
+ //**********************************************************************
+ // Frames
+ //**********************************************************************
+-- 
+2.7.4
+
