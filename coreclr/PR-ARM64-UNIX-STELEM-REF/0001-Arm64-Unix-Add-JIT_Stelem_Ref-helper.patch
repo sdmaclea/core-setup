@@ -1,4 +1,4 @@
-From 2d8f5c28f05d1aac67c47ecd51cc74bf419088b1 Mon Sep 17 00:00:00 2001
+From 5462508a11969e32b5e53364a1f27d18a0fd6cec Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Wed, 16 Aug 2017 17:56:08 -0400
@@ -70,7 +70,7 @@ index 12b72f9..dca845d 100644
  
  #define SIZEOF__ComMethodFrame 0x70
 diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
-index 7a64665..bc4a826 100644
+index 7a64665..017cc50 100644
 --- a/src/vm/arm64/asmhelpers.S
 +++ b/src/vm/arm64/asmhelpers.S
 @@ -1302,3 +1302,100 @@ LEAF_ENTRY JIT_GetSharedGCStaticBaseNoCtor_SingleAppDomain, _TEXT
@@ -81,7 +81,7 @@ index 7a64665..bc4a826 100644
 +// ------------------------------------------------------------------
 +// __declspec(naked) void F_CALL_CONV JIT_Stelem_Ref(PtrArray* array, unsigned idx, Object* val)
 +LEAF_ENTRY JIT_Stelem_Ref, _TEXT
-+    // We retain arguments as they were passed and use r0 == array// r1 == idx// r2 == val
++    // We retain arguments as they were passed and use x0 == array x1 == idx x2 == val
 +
 +    // check for null array
 +    cbz     x0, LOCAL_LABEL(ThrowNullReferenceException)
@@ -149,8 +149,8 @@ index 7a64665..bc4a826 100644
 +
 +    // check via raising frame
 +LOCAL_LABEL(NeedFrame):
-+    add     x1, sp, #16             // r1 = &array
-+    add     x0, sp, #32             // r0 = &val
++    add     x1, sp, #16             // x1 = &array
++    add     x0, sp, #32             // x0 = &val
 +
 +    bl      C_FUNC(ArrayStoreCheck) // ArrayStoreCheck(&val, &array)
 +
