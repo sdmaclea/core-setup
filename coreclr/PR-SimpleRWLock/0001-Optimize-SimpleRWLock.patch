@@ -1,0 +1,214 @@
+From 6c4f64d385d7dd950aeeb95378c66517047c329e Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 14 Jul 2017 15:47:29 +0000
+Subject: [PATCH] Optimize SimpleRWLock
+
+Keep hot/cold data on separate cache lines
+Fix errors in exponential backoff
+Make m_WriterWaiting Volatile and only use MemoryBarriers on write
+Simplfy code
+---
+ src/vm/ceeload.cpp      |  1 -
+ src/vm/simplerwlock.cpp | 50 +++++++++++++++----------------------------------
+ src/vm/simplerwlock.hpp | 38 +++++++++++++++----------------------
+ 3 files changed, 30 insertions(+), 59 deletions(-)
+
+diff --git a/src/vm/ceeload.cpp b/src/vm/ceeload.cpp
+index c64d9e9..727e0d3 100644
+--- a/src/vm/ceeload.cpp
++++ b/src/vm/ceeload.cpp
+@@ -9578,7 +9578,6 @@ void Module::Fixup(DataImage *image)
+     // Clear active dependencies - they will be refilled at load time
+     image->ZeroField(this, offsetof(Module, m_activeDependencies), sizeof(m_activeDependencies));
+     new (image->GetImagePointer(this, offsetof(Module, m_unconditionalDependencies))) SynchronizedBitMask();
+-    image->ZeroField(this, offsetof(Module, m_unconditionalDependencies) + offsetof(SynchronizedBitMask, m_bitMaskLock) + offsetof(SimpleRWLock,m_spinCount), sizeof(m_unconditionalDependencies.m_bitMaskLock.m_spinCount));
+     image->ZeroField(this, offsetof(Module, m_dwNumberOfActivations), sizeof(m_dwNumberOfActivations));
+ 
+     image->ZeroField(this, offsetof(Module, m_LookupTableCrst), sizeof(m_LookupTableCrst));
+diff --git a/src/vm/simplerwlock.cpp b/src/vm/simplerwlock.cpp
+index 8c5b50f..73433fa 100644
+--- a/src/vm/simplerwlock.cpp
++++ b/src/vm/simplerwlock.cpp
+@@ -17,13 +17,15 @@ BOOL SimpleRWLock::TryEnterRead()
+     PreEnter();
+ #endif //_DEBUG
+ 
+-    LONG RWLock;
++    LONG RWLock = m_RWLock.LoadWithoutBarrier();
++
++    if( RWLock == -1 )
++        return FALSE;
+ 
+-    do {
+-        RWLock = m_RWLock;
+-        if( RWLock == -1 ) return FALSE;
+     _ASSERTE (RWLock >= 0);
+-    } while( RWLock != InterlockedCompareExchange( &m_RWLock, RWLock+1, RWLock ));
++
++    if( InterlockedCompareExchange( &m_RWLock, RWLock+1, RWLock ) != RWLock)
++        return FALSE;
+ 
+     INCTHREADLOCKCOUNT();
+     EE_LOCK_TAKEN(this);
+@@ -56,27 +58,13 @@ void SimpleRWLock::EnterRead()
+ 
+     while (TRUE)
+     {
+-        // prevent writers from being starved. This assumes that writers are rare and 
+-        // dont hold the lock for a long time. 
+-        while (IsWriterWaiting())
+-        {
+-            int spinCount = m_spinCount;
+-            while (spinCount > 0) {
+-                spinCount--;
+-                YieldProcessor();
+-            }
+-            __SwitchToThread(0, ++dwSwitchCount);
+-        }
+-
+-        if (TryEnterRead())
+-        {
+-            return;
+-        }
+-
+         DWORD i = g_SpinConstants.dwInitialDuration;
+         do
+         {
+-            if (TryEnterRead())
++            // Only try to acquire the lock if no writers arre waiting.  This prevents
++            // writers from being starved. This assumes that writers are rare and
++            // dont hold the lock for a long time.
++            if (!IsWriterWaiting() && TryEnterRead())
+             {
+                 return;
+             }
+@@ -151,31 +139,23 @@ void SimpleRWLock::EnterWrite()
+     PreEnter();
+ #endif //_DEBUG
+ 
+-    BOOL set = FALSE;
+-
+     DWORD dwSwitchCount = 0;
+ 
+     while (TRUE)
+     {
++        DWORD i = g_SpinConstants.dwInitialDuration;
++        do
++        {
+             if (TryEnterWrite())
+             {
+                 return;
+             }
+ 
+             // set the writer waiting word, if not already set, to notify potential
+-        // readers to wait. Remember, if the word is set, so it can be reset later.
++            // readers to wait.
+             if (!IsWriterWaiting())
+             {
+                 SetWriterWaiting();
+-            set = TRUE;
+-        }
+-
+-        DWORD i = g_SpinConstants.dwInitialDuration;
+-        do
+-        {
+-            if (TryEnterWrite())
+-            {
+-                return;
+             }
+ 
+             if (g_SystemInfo.dwNumberOfProcessors <= 1)
+diff --git a/src/vm/simplerwlock.hpp b/src/vm/simplerwlock.hpp
+index 7800b8d..b87546f 100644
+--- a/src/vm/simplerwlock.hpp
++++ b/src/vm/simplerwlock.hpp
+@@ -61,7 +61,7 @@ private:
+     BOOL IsWriterWaiting()
+     {
+         LIMITED_METHOD_CONTRACT;
+-        return m_WriterWaiting != 0;
++        return m_WriterWaiting.LoadWithoutBarrier() != 0;
+     }
+ 
+     void SetWriterWaiting()
+@@ -84,33 +84,26 @@ private:
+     void CheckGCNoTrigger();
+ #endif  //ENABLE_CONTRACTS_IMPL
+ 
+-    // lock used for R/W synchronization
+-    Volatile<LONG>                m_RWLock;     
++#ifdef _DEBUG
++    void                PostEnter ();
++    void                PreEnter ();
++    void                PreLeave ();
++
++    // Check for dead lock situation.
++    Volatile<LONG>                                     m_countNoTriggerGC;
++#endif //_DEBUG
+ 
+     // Does this lock require to be taken in PreemptiveGC mode?
+     const GC_MODE                                      m_gcMode;
+ 
+-    // spin count for a reader waiting for a writer to release the lock
+-    LONG                m_spinCount;
++    // lock used for R/W synchronization
++    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) Volatile<LONG> m_RWLock;
+ 
+     // used to prevent writers from being starved by readers
+     // we currently do not prevent writers from starving readers since writers
+     // are supposed to be rare.
+-    BOOL                m_WriterWaiting;
++    DECLSPEC_ALIGN(MAX_CACHE_LINE_SIZE) Volatile<BOOL> m_WriterWaiting;
+ 
+-#ifdef _DEBUG
+-    // Check for dead lock situation.
+-    Volatile<LONG>      m_countNoTriggerGC;
+-
+-#ifdef _WIN64
+-    // ensures that we are a multiple of 8-bytes
+-    UINT32 pad;      
+-#endif
+-
+-    void                PostEnter ();
+-    void                PreEnter ();
+-    void                PreLeave ();
+-#endif //_DEBUG
+ 
+ #ifndef DACCESS_COMPILE
+     static void AcquireReadLock(SimpleRWLock *s) { LIMITED_METHOD_CONTRACT; s->EnterRead(); }
+@@ -148,7 +141,6 @@ public:
+         } CONTRACTL_END;
+ 
+         m_RWLock = 0;
+-        m_spinCount = (GetCurrentProcessCpuCount() == 1) ? 0 : 4000;
+         m_WriterWaiting = FALSE;
+ 
+ #ifdef _DEBUG
+@@ -211,13 +203,13 @@ public:
+     BOOL LockTaken ()
+     {
+         LIMITED_METHOD_CONTRACT;
+-        return m_RWLock != 0;
++        return m_RWLock.LoadWithoutBarrier() != 0;
+     }
+ 
+     BOOL IsReaderLock ()
+     {
+         LIMITED_METHOD_CONTRACT;
+-        return m_RWLock > 0;
++        return m_RWLock.LoadWithoutBarrier() > 0;
+     }
+ 
+ #endif  
+@@ -225,7 +217,7 @@ public:
+     BOOL IsWriterLock ()
+     {
+         LIMITED_METHOD_DAC_CONTRACT;
+-        return m_RWLock < 0;
++        return m_RWLock.LoadWithoutBarrier() < 0;
+     }
+     
+ };
+-- 
+2.7.4
+
