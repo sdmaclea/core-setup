@@ -1,0 +1,127 @@
+From 8080fd035e3db84f2dd04093c4166aa529c8d659 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 20 Jul 2017 19:08:30 -0400
+Subject: [PATCH] Make DispatchCache lockless
+
+Improve scalability by using lockless updates to
+DisplayCache hash
+---
+ src/vm/virtualcallstub.cpp | 23 ++++++++++++-----------
+ src/vm/virtualcallstub.h   | 11 +++++------
+ 2 files changed, 17 insertions(+), 17 deletions(-)
+
+diff --git a/src/vm/virtualcallstub.cpp b/src/vm/virtualcallstub.cpp
+index 2e94a16..2b28920 100644
+--- a/src/vm/virtualcallstub.cpp
++++ b/src/vm/virtualcallstub.cpp
+@@ -3467,9 +3467,6 @@ void BucketTable::LogStats()
+ }
+ 
+ DispatchCache::DispatchCache()
+-#ifdef CHAIN_LOOKUP 
+-    : m_writeLock(CrstStubDispatchCache, CRST_UNSAFE_ANYMODE)
+-#endif
+ {
+     CONTRACTL
+     {
+@@ -3541,14 +3538,12 @@ BOOL DispatchCache::Insert(ResolveCacheElem* elem, InsertKind insertKind)
+         PRECONDITION(insertKind != IK_NONE);
+     } CONTRACTL_END;
+ 
+-#ifdef CHAIN_LOOKUP 
+-    CrstHolder lh(&m_writeLock);
+-#endif
+-
+     // Figure out what bucket this element belongs in
+     UINT16 tokHash = HashToken(elem->token);
+     UINT16 hash    = HashMT(tokHash, elem->pMT);
+     UINT16 idx     = hash;
++
++retry:
+     BOOL   write   = FALSE;
+     BOOL   miss    = FALSE;
+     BOOL   hit     = FALSE;
+@@ -3620,7 +3615,8 @@ BOOL DispatchCache::Insert(ResolveCacheElem* elem, InsertKind insertKind)
+ #else // !CHAIN_LOOKUP
+         elem->pNext = empty;
+ #endif // !CHAIN_LOOKUP
+-        SetCacheEntry(idx, elem);
++        if(!SetCacheEntry(idx, elem))
++            goto retry;
+         stats.insert_cache_write++;
+     }
+ 
+@@ -3657,7 +3653,6 @@ void DispatchCache::PromoteChainEntry(ResolveCacheElem* elem)
+         FORBID_FAULT;
+     } CONTRACTL_END;
+ 
+-    CrstHolder lh(&m_writeLock);
+     g_chained_entry_promoted++;
+ 
+     // Figure out what bucket this element belongs in
+@@ -3665,6 +3660,7 @@ void DispatchCache::PromoteChainEntry(ResolveCacheElem* elem)
+     UINT16 hash    = HashMT(tokHash, elem->pMT);
+     UINT16 idx     = hash;
+ 
++retryRemove:
+     ResolveCacheElem *curElem = GetCacheEntry(idx);
+ 
+     // If someone raced in and promoted this element before us,
+@@ -3687,11 +3683,16 @@ void DispatchCache::PromoteChainEntry(ResolveCacheElem* elem)
+ 
+     // Remove the element from the chain
+     CONSISTENCY_CHECK(curElem->pNext == elem);
+-    curElem->pNext = elem->pNext;
++    if(FastInterlockCompareExchangePointer(&curElem->pNext, elem->pNext, elem) != elem)
++    {
++        goto retryRemove;
++    }
+ 
+     // Set the promoted entry to the head of the list.
++retryInsert:
+     elem->pNext = GetCacheEntry(idx);
+-    SetCacheEntry(idx, elem);
++    if(!SetCacheEntry(idx, elem))
++        goto retryInsert;
+ }
+ #endif // CHAIN_LOOKUP
+ 
+diff --git a/src/vm/virtualcallstub.h b/src/vm/virtualcallstub.h
+index 7b6fedf..54a9bf6 100644
+--- a/src/vm/virtualcallstub.h
++++ b/src/vm/virtualcallstub.h
+@@ -1250,16 +1250,18 @@ public:
+     inline BOOL IsCacheEntryEmpty(size_t idx)
+         { LIMITED_METHOD_CONTRACT; return cache[idx] == empty; }
+ 
+-    inline void SetCacheEntry(size_t idx, ResolveCacheElem *elem)
++    inline bool SetCacheEntry(size_t idx, ResolveCacheElem *elem)
+     {
+         LIMITED_METHOD_CONTRACT;
+ #ifdef STUB_LOGGING 
+           cacheData[idx].numWrites++;
+ #endif
+ #ifdef CHAIN_LOOKUP
+-        CONSISTENCY_CHECK(m_writeLock.OwnedByCurrentThread());
+-#endif
++          return FastInterlockCompareExchangePointer(&cache[idx], elem, elem->pNext) == elem->pNext;
++#else
+           cache[idx] = elem;
++          return true;
++#endif
+         }
+ 
+     inline void ClearCacheEntry(size_t idx)
+@@ -1314,9 +1316,6 @@ public:
+     };
+ 
+ private:
+-#ifdef CHAIN_LOOKUP 
+-    Crst m_writeLock;
+-#endif
+ 
+     //the following hash computation is also inlined in the resolve stub in asm (SO NO TOUCHIE)
+     inline static UINT16 HashMT(UINT16 tokenHash, void* mt)
+-- 
+2.7.4
+
