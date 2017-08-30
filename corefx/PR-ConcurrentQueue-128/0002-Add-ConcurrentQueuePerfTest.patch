@@ -1,0 +1,97 @@
+From b18f89334447079231bbd2f72d5fce3b942eefd1 Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Wed, 30 Aug 2017 14:06:57 -0400
+Subject: [PATCH] Add ConcurrentQueuePerfTest
+
+---
+ .../ConcurrentQueuePerfTest.netcoreapp.cs          | 44 ++++++++++++++++++++++
+ ...Collections.Concurrent.Performance.Tests.csproj | 25 ++++++++++++
+ 2 files changed, 69 insertions(+)
+ create mode 100644 src/System.Collections.Concurrent/tests/Performance/ConcurrentQueuePerfTest.netcoreapp.cs
+ create mode 100644 src/System.Collections.Concurrent/tests/Performance/System.Collections.Concurrent.Performance.Tests.csproj
+
+diff --git a/src/System.Collections.Concurrent/tests/Performance/ConcurrentQueuePerfTest.netcoreapp.cs b/src/System.Collections.Concurrent/tests/Performance/ConcurrentQueuePerfTest.netcoreapp.cs
+new file mode 100644
+index 0000000..d6bbedd
+--- /dev/null
++++ b/src/System.Collections.Concurrent/tests/Performance/ConcurrentQueuePerfTest.netcoreapp.cs
+@@ -0,0 +1,44 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++using System.Collections.Generic;
++using System.Linq;
++using System.Threading;
++using System.Threading.Tasks;
++using Microsoft.Xunit.Performance;
++using Xunit;
++
++namespace System.Collections.Concurrent.Tests
++{
++    public class Perf_ConcurrentQueueTests
++    {
++        /// <summary>
++        /// Creates a list containing a number of elements equal to the specified size
++        /// </summary>
++        [Benchmark]
++        [InlineData(8, 1000)]
++        [InlineData(50, 1000)]
++        public void Enqueue_Dequeue(int threadsCount, int itemsPerThread)
++        {
++            var q = new ConcurrentQueue<int>();
++            Task.WaitAll((from i in Enumerable.Range(0, threadsCount) select Task.Run(() =>
++            {
++                var random = new Random();
++                for (int j = 0; j < itemsPerThread; j++)
++                {
++                    switch (random.Next(2))
++                    {
++                        case 0:
++                            q.Enqueue(random.Next(int.MaxValue));
++                            break;
++                        case 1:
++                            int d;
++                            q.TryDequeue(out d);
++                            break;
++                    }
++                }
++            })).ToArray());
++        }
++    }
++}
+diff --git a/src/System.Collections.Concurrent/tests/Performance/System.Collections.Concurrent.Performance.Tests.csproj b/src/System.Collections.Concurrent/tests/Performance/System.Collections.Concurrent.Performance.Tests.csproj
+new file mode 100644
+index 0000000..fb4acb9
+--- /dev/null
++++ b/src/System.Collections.Concurrent/tests/Performance/System.Collections.Concurrent.Performance.Tests.csproj
+@@ -0,0 +1,25 @@
++﻿<?xml version="1.0" encoding="utf-8"?>
++<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
++  <PropertyGroup>
++    <IncludePerformanceTests>true</IncludePerformanceTests>
++    <ProjectGuid>{13A6510E-E11C-4329-BCDD-4DE561AB6CC0}</ProjectGuid>
++    <DisableTests Condition="'$(TargetGroup)' == 'uap' AND ('$(ArchGroup)' == 'arm' OR '$(ArchGroup)' == 'arm64')">true</DisableTests>
++  </PropertyGroup>
++  <!-- Default configurations to help VS understand the configurations -->
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' " />
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />
++  <ItemGroup Condition="'$(DisableTests)' != 'true'">
++    <Compile Include="ConcurrentQueuePerfTest.netcoreapp.cs" />
++    <Compile Include="$(CommonTestPath)\System\PerfUtils.cs">
++      <Link>Common\System\PerfUtils.cs</Link>
++    </Compile>
++  </ItemGroup>
++  <ItemGroup Condition="'$(DisableTests)' != 'true'">
++    <ProjectReference Include="$(CommonPath)\..\perf\PerfRunner\PerfRunner.csproj">
++      <Project>{69e46a6f-9966-45a5-8945-2559fe337827}</Project>
++      <Name>PerfRunner</Name>
++    </ProjectReference>
++  </ItemGroup>
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
++</Project>
+-- 
+2.7.4
+

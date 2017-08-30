@@ -1,4 +1,4 @@
-From 930c4c2d81f8e20a14c9826b57ac9fd40028b876 Mon Sep 17 00:00:00 2001
+From d26d8e54524d5c0ce98925be1c65adb52a4fec53 Mon Sep 17 00:00:00 2001
 From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
  <sdmaclea@qti.qualcomm.com>
 Date: Fri, 28 Jul 2017 12:50:53 -0400
@@ -10,10 +10,10 @@ Subject: [PATCH] ConcurrentQueue 128-byte cache line
  2 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/src/System.Collections.Concurrent/src/System/Collections/Concurrent/ConcurrentQueue.cs b/src/System.Collections.Concurrent/src/System/Collections/Concurrent/ConcurrentQueue.cs
-index 7458942..3f3786b 100644
+index 1fe4a45..ef14425 100644
 --- a/src/System.Collections.Concurrent/src/System/Collections/Concurrent/ConcurrentQueue.cs
 +++ b/src/System.Collections.Concurrent/src/System/Collections/Concurrent/ConcurrentQueue.cs
-@@ -1141,10 +1141,10 @@ namespace System.Collections.Concurrent
+@@ -1112,10 +1112,10 @@ namespace System.Collections.Concurrent
  
      /// <summary>Padded head and tail indices, to avoid false sharing between producers and consumers.</summary>
      [DebuggerDisplay("Head = {Head}, Tail = {Tail}")]
