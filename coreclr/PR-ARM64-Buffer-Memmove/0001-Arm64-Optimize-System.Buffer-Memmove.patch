@@ -1,0 +1,59 @@
+From ac933130bde6231edf3d5d795d5316825face5ab Mon Sep 17 00:00:00 2001
+From: "Steve MacLean, Qualcomm Datacenter Technologies Inc"
+ <sdmaclea@qti.qualcomm.com>
+Date: Thu, 31 Aug 2017 09:23:10 -0400
+Subject: [PATCH] [Arm64] Optimize System.Buffer:Memmove
+
+Enable HAS_BLOCKS
+
+Disable code to fall back to native memmove until memmove
+optimizations are merged to OS mainline
+---
+ src/mscorlib/src/System/Buffer.cs | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/src/mscorlib/src/System/Buffer.cs b/src/mscorlib/src/System/Buffer.cs
+index 92b938d..ccdef65 100644
+--- a/src/mscorlib/src/System/Buffer.cs
++++ b/src/mscorlib/src/System/Buffer.cs
+@@ -2,7 +2,7 @@
+ // The .NET Foundation licenses this file to you under the MIT license.
+ // See the LICENSE file in the project root for more information.
+ 
+-#if AMD64 || (BIT32 && !ARM)
++#if AMD64 || ARM64 || (BIT32 && !ARM)
+ #define HAS_CUSTOM_BLOCKS
+ #endif
+ 
+@@ -262,7 +262,7 @@ namespace System
+         {
+ #if AMD64 || (BIT32 && !ARM)
+             const nuint CopyThreshold = 2048;
+-#else
++#elif !ARM64
+             const nuint CopyThreshold = 512;
+ #endif // AMD64 || (BIT32 && !ARM)
+ 
+@@ -364,15 +364,18 @@ namespace System
+             return;
+ 
+             MCPY05:
++#if !ARM64
+             // PInvoke to the native version when the copy length exceeds the threshold.
+             if (len > CopyThreshold)
+             {
+                 goto PInvoke;
+             }
+-
+             // Copy 64-bytes at a time until the remainder is less than 64.
+             // If remainder is greater than 16 bytes, then jump to MCPY00. Otherwise, unconditionally copy the last 16 bytes and return.
+             Debug.Assert(len > 64 && len <= CopyThreshold);
++#else
++            Debug.Assert(len > 64);
++#endif
+             nuint n = len >> 6;
+ 
+             MCPY06:
+-- 
+2.7.4
+
