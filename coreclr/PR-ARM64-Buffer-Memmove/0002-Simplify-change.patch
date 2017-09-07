@@ -1,0 +1,52 @@
+From 0eec2da7934396bde896f3adf595e17fe03d81e9 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 7 Sep 2017 15:02:15 -0400
+Subject: [PATCH] Simplify change
+
+---
+ src/mscorlib/src/System/Buffer.cs | 15 ++++++++++-----
+ 1 file changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/src/mscorlib/src/System/Buffer.cs b/src/mscorlib/src/System/Buffer.cs
+index ccdef65..a2cf2da 100644
+--- a/src/mscorlib/src/System/Buffer.cs
++++ b/src/mscorlib/src/System/Buffer.cs
+@@ -262,7 +262,16 @@ namespace System
+         {
+ #if AMD64 || (BIT32 && !ARM)
+             const nuint CopyThreshold = 2048;
+-#elif !ARM64
++#elif ARM64
++#if PLATFORM_WINDOWS
++            // TODO-ARM64-WINDOWS-OPT determine optimal value for Windows
++            const nuint CopyThreshold = 2048;
++#else // PLATFORM_WINDOWS
++            // Managed code is currently faster than glibc unoptimized memmove
++            // TODO-ARM64-UNIX-OPT revisit when glibc optimized memmove is in Linux distros
++            const nuint CopyThreshold = UInt64.MaxValue;
++#endif // PLATFORM_WINDOWS
++#else
+             const nuint CopyThreshold = 512;
+ #endif // AMD64 || (BIT32 && !ARM)
+ 
+@@ -364,7 +373,6 @@ namespace System
+             return;
+ 
+             MCPY05:
+-#if !ARM64
+             // PInvoke to the native version when the copy length exceeds the threshold.
+             if (len > CopyThreshold)
+             {
+@@ -373,9 +381,6 @@ namespace System
+             // Copy 64-bytes at a time until the remainder is less than 64.
+             // If remainder is greater than 16 bytes, then jump to MCPY00. Otherwise, unconditionally copy the last 16 bytes and return.
+             Debug.Assert(len > 64 && len <= CopyThreshold);
+-#else
+-            Debug.Assert(len > 64);
+-#endif
+             nuint n = len >> 6;
+ 
+             MCPY06:
+-- 
+2.7.4
+
