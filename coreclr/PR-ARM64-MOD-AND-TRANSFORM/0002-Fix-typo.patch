@@ -1,0 +1,25 @@
+From d396160e75cfd01ba5d4a8b2f6610917b62a1106 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 7 Sep 2017 14:22:04 -0400
+Subject: [PATCH] Fix typo
+
+---
+ src/jit/morph.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
+index d910250..bdb5307 100644
+--- a/src/jit/morph.cpp
++++ b/src/jit/morph.cpp
+@@ -11876,7 +11876,7 @@ GenTreePtr Compiler::fgMorphSmpOp(GenTreePtr tree, MorphAddrContext* mac)
+                 //
+                 // a % b = a - (a / b) * b;
+                 //
+-                // Use the suggested transform unless the special case tranform works:
++                // Use the suggested transform unless the special case transform works:
+                 //
+                 // a % b = a & (b - 1);
+                 //
+-- 
+2.7.4
+
