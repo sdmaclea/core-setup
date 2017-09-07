@@ -1,0 +1,127 @@
+From 969b7c59fc60fbbda680aa1d911166a4f291d5f8 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 6 Sep 2017 18:41:06 -0400
+Subject: [PATCH] [Arm64] Add GT_MULHI
+
+Enable related lowerings
+---
+ src/jit/codegenarm64.cpp | 53 ++++++++++++++++++++----------------------------
+ src/jit/lower.cpp        |  8 ++++----
+ 2 files changed, 26 insertions(+), 35 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 2e98e21..f36528e 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -1502,53 +1502,44 @@ void CodeGen::genSetRegToConst(regNumber targetReg, var_types targetType, GenTre
+ // Generate code to get the high N bits of a N*N=2N bit multiplication result
+ void CodeGen::genCodeForMulHi(GenTreeOp* treeNode)
+ {
+-    assert(!(treeNode->gtFlags & GTF_UNSIGNED));
+     assert(!treeNode->gtOverflowEx());
+ 
+-#if 0
++    genConsumeOperands(treeNode);
++
+     regNumber   targetReg  = treeNode->gtRegNum;
+     var_types   targetType = treeNode->TypeGet();
+-    emitter *emit        = getEmitter();
+-    emitAttr size        = emitTypeSize(treeNode);
+-    GenTree *op1         = treeNode->gtOp1;
+-    GenTree *op2         = treeNode->gtOp2;
++    emitter*    emit       = getEmitter();
++    emitAttr    attr       = emitTypeSize(treeNode);
++    bool        isUnsigned = (treeNode->gtFlags & GTF_UNSIGNED);
+ 
+-    // to get the high bits of the multiply, we are constrained to using the
+-    // 1-op form:  RDX:RAX = RAX * rm
+-    // The 3-op form (Rx=Ry*Rz) does not support it.
++    GenTreePtr  op1 = treeNode->gtGetOp1();
++    GenTreePtr  op2 = treeNode->gtGetOp2();
+ 
+-    genConsumeOperands(treeNode);
++    assert(!varTypeIsFloating(targetType));
+ 
+-    GenTree* regOp = op1;
+-    GenTree* rmOp  = op2; 
++    // The arithmetic node must be sitting in a register (since it's not contained)
++    noway_assert(targetReg != REG_NA);
+ 
+-    // Set rmOp to the contained memory operand (if any)
+-    //
+-    if (op1->isContained() || (!op2->isContained() && (op2->gtRegNum == targetReg)))
++    if (EA_SIZE(attr) == EA_8BYTE)
+     {
+-        regOp = op2;
+-        rmOp  = op1;
+-    }
+-    assert(!regOp->isContained());
++        instruction ins = isUnsigned ? INS_umulh : INS_smulh;
+ 
+-    // Setup targetReg when neither of the source operands was a matching register
+-    if (regOp->gtRegNum != targetReg)
+-    {
+-        inst_RV_RV(ins_Copy(targetType), targetReg, regOp->gtRegNum, targetType);
++        regNumber r = emit->emitInsTernary(ins, attr, treeNode, op1, op2);
++
++        noway_assert(r == targetReg);
+     }
++    else
++    {
++        assert(EA_SIZE(attr) == EA_4BYTE);
+ 
+-    emit->emitInsBinary(INS_imulEAX, size, treeNode, rmOp);
++        instruction ins = isUnsigned ? INS_umull : INS_smull;
+ 
+-    // Move the result to the desired register, if necessary
+-    if (targetReg != REG_RDX)
+-    {
+-        inst_RV_RV(INS_mov, targetReg, REG_RDX, targetType);
++        regNumber r = emit->emitInsTernary(ins, EA_4BYTE, treeNode, op1, op2);
++
++        emit->emitIns_R_R_I(isUnsigned ? INS_lsr : INS_asr, EA_8BYTE, targetReg, targetReg, 32);
+     }
+ 
+     genProduceReg(treeNode);
+-#else  // !0
+-    NYI("genCodeForMulHi");
+-#endif // !0
+ }
+ 
+ // Generate code for ADD, SUB, MUL, DIV, UDIV, AND, OR and XOR
+diff --git a/src/jit/lower.cpp b/src/jit/lower.cpp
+index 7c60405..7ca2252 100644
+--- a/src/jit/lower.cpp
++++ b/src/jit/lower.cpp
+@@ -4115,8 +4115,8 @@ bool Lowering::LowerUnsignedDivOrMod(GenTreeOp* divMod)
+         }
+     }
+ 
+-// TODO-ARM-CQ: Currently there's no GT_MULHI for ARM32/64
+-#ifdef _TARGET_XARCH_
++// TODO-ARM-CQ: Currently there's no GT_MULHI for ARM32
++#if defined(_TARGET_XARCH_) || defined(_TARGET_ARM64_)
+     if (!comp->opts.MinOpts() && (divisorValue >= 3))
+     {
+         size_t magic;
+@@ -4293,7 +4293,7 @@ GenTree* Lowering::LowerConstIntDivOrMod(GenTree* node)
+             return next;
+         }
+ 
+-#ifdef _TARGET_XARCH_
++#if defined(_TARGET_XARCH_) || defined(_TARGET_ARM64_)
+         ssize_t magic;
+         int     shift;
+ 
+@@ -4400,7 +4400,7 @@ GenTree* Lowering::LowerConstIntDivOrMod(GenTree* node)
+ 
+         return mulhi;
+ #else
+-        // Currently there's no GT_MULHI for ARM32/64
++        // Currently there's no GT_MULHI for ARM32
+         return next;
+ #endif
+     }
+-- 
+2.7.4
+
