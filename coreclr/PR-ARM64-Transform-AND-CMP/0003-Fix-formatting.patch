@@ -1,0 +1,30 @@
+From 1591c66f6740e13d5a9cc74f865e30f4bac30cd8 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 7 Sep 2017 14:17:53 -0400
+Subject: [PATCH] Fix formatting
+
+---
+ src/jit/lower.cpp | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/jit/lower.cpp b/src/jit/lower.cpp
+index 7bc756b..89b2410 100644
+--- a/src/jit/lower.cpp
++++ b/src/jit/lower.cpp
+@@ -2455,9 +2455,12 @@ void Lowering::LowerCompare(GenTree* cmp)
+                 }
+             }
+         }
+-        else
+ #endif
++#ifdef _TARGET_XARCH_
++        else if (op1->OperIs(GT_AND) && cmp->OperIs(GT_EQ, GT_NE))
++#else
+         if (op1->OperIs(GT_AND) && cmp->OperIs(GT_EQ, GT_NE))
++#endif
+         {
+             //
+             // Transform ((x AND y) EQ|NE 0) into (x TEST_EQ|TEST_NE y) when possible.
+-- 
+2.7.4
+
