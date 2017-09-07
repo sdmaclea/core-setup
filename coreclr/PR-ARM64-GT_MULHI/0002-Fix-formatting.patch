@@ -1,0 +1,12 @@
+From 47a92f5bdafb830467cede2b2ffc1c66212cc33b Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 7 Sep 2017 19:21:27 -0400
+Subject: [PATCH] Fix formatting
+
+---
+ src/jit/codegenarm64.cpp | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+
+-- 
+2.7.4
+
