@@ -1,0 +1,29 @@
+From f8bffd5c7bd61f98d831d43fe32213d65cccc27a Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 8 Sep 2017 13:48:21 -0400
+Subject: [PATCH] Add links to issues
+
+---
+ src/mscorlib/src/System/Buffer.cs | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/mscorlib/src/System/Buffer.cs b/src/mscorlib/src/System/Buffer.cs
+index a2cf2da..71859ec 100644
+--- a/src/mscorlib/src/System/Buffer.cs
++++ b/src/mscorlib/src/System/Buffer.cs
+@@ -265,10 +265,12 @@ namespace System
+ #elif ARM64
+ #if PLATFORM_WINDOWS
+             // TODO-ARM64-WINDOWS-OPT determine optimal value for Windows
++            // https://github.com/dotnet/coreclr/issues/13843
+             const nuint CopyThreshold = 2048;
+ #else // PLATFORM_WINDOWS
+             // Managed code is currently faster than glibc unoptimized memmove
+             // TODO-ARM64-UNIX-OPT revisit when glibc optimized memmove is in Linux distros
++            // https://github.com/dotnet/coreclr/issues/13844
+             const nuint CopyThreshold = UInt64.MaxValue;
+ #endif // PLATFORM_WINDOWS
+ #else
+-- 
+2.7.4
+
