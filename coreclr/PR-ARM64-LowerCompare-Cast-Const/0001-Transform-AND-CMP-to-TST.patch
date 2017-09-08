@@ -1,0 +1,162 @@
+From 641871a0fd9bb5b2da3172c7952ffed6be764ccd Mon Sep 17 00:00:00 2001
+From: Mike Danes <onemihaid@hotmail.com>
+Date: Tue, 5 Sep 2017 22:20:34 +0300
+Subject: [PATCH] Transform AND-CMP to TST
+
+---
+ src/jit/codegenarm64.cpp   | 6 ++++--
+ src/jit/codegenarmarch.cpp | 2 ++
+ src/jit/codegencommon.cpp  | 6 ++++++
+ src/jit/lower.cpp          | 9 +++++++--
+ src/jit/lowerarmarch.cpp   | 2 ++
+ src/jit/lsraarm64.cpp      | 2 ++
+ 6 files changed, 23 insertions(+), 4 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 2e98e21..a61be7c 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3501,14 +3501,16 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
+             cmpSize = EA_8BYTE;
+         }
+ 
++        instruction ins = tree->OperIs(GT_TEST_EQ, GT_TEST_NE) ? INS_tst : INS_cmp;
++
+         if (op2->isContainedIntOrIImmed())
+         {
+             GenTreeIntConCommon* intConst = op2->AsIntConCommon();
+-            emit->emitIns_R_I(INS_cmp, cmpSize, op1->gtRegNum, intConst->IconValue());
++            emit->emitIns_R_I(ins, cmpSize, op1->gtRegNum, intConst->IconValue());
+         }
+         else
+         {
+-            emit->emitIns_R_R(INS_cmp, cmpSize, op1->gtRegNum, op2->gtRegNum);
++            emit->emitIns_R_R(ins, cmpSize, op1->gtRegNum, op2->gtRegNum);
+         }
+     }
+ 
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index 81bbb2a..e2342ce 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -235,6 +235,8 @@ void CodeGen::genCodeForTreeNode(GenTreePtr treeNode)
+         case GT_GE:
+         case GT_GT:
+         case GT_CMP:
++        case GT_TEST_EQ:
++        case GT_TEST_NE:
+             genCodeForCompare(treeNode->AsOp());
+             break;
+ 
+diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
+index c96d675..f3c67f6 100644
+--- a/src/jit/codegencommon.cpp
++++ b/src/jit/codegencommon.cpp
+@@ -2511,6 +2511,8 @@ emitJumpKind CodeGen::genJumpKindForOper(genTreeOps cmp, CompareKind compareKind
+         EJ_le,   // GT_LE
+         EJ_ge,   // GT_GE
+         EJ_gt,   // GT_GT
++        EJ_eq,   // GT_TEST_EQ
++        EJ_ne,   // GT_TEST_NE
+ #endif
+     };
+ 
+@@ -2534,6 +2536,8 @@ emitJumpKind CodeGen::genJumpKindForOper(genTreeOps cmp, CompareKind compareKind
+         EJ_ls,   // GT_LE
+         EJ_hs,   // GT_GE
+         EJ_hi,   // GT_GT
++        EJ_eq,   // GT_TEST_EQ
++        EJ_ne,   // GT_TEST_NE
+ #endif
+     };
+ 
+@@ -2557,6 +2561,8 @@ emitJumpKind CodeGen::genJumpKindForOper(genTreeOps cmp, CompareKind compareKind
+         EJ_NONE, // GT_LE
+         EJ_pl,   // GT_GE   (N == 0)
+         EJ_NONE, // GT_GT
++        EJ_eq,   // GT_TEST_EQ
++        EJ_ne,   // GT_TEST_NE
+ #endif
+     };
+ 
+diff --git a/src/jit/lower.cpp b/src/jit/lower.cpp
+index 7c60405..9baa08a 100644
+--- a/src/jit/lower.cpp
++++ b/src/jit/lower.cpp
+@@ -2346,7 +2346,6 @@ void Lowering::LowerCompare(GenTree* cmp)
+     }
+ #endif
+ 
+-#ifdef _TARGET_XARCH_
+ #ifdef _TARGET_AMD64_
+     if (cmp->gtGetOp1()->TypeGet() != cmp->gtGetOp2()->TypeGet())
+     {
+@@ -2398,6 +2397,7 @@ void Lowering::LowerCompare(GenTree* cmp)
+         GenTreeIntCon* op2      = cmp->gtGetOp2()->AsIntCon();
+         ssize_t        op2Value = op2->IconValue();
+ 
++#ifdef _TARGET_XARCH_
+         if (IsContainableMemoryOp(op1) && varTypeIsSmall(op1Type) && genTypeCanRepresentValue(op1Type, op2Value))
+         {
+             //
+@@ -2454,7 +2454,9 @@ void Lowering::LowerCompare(GenTree* cmp)
+                 }
+             }
+         }
+-        else if (op1->OperIs(GT_AND) && cmp->OperIs(GT_EQ, GT_NE))
++        else 
++#endif
++        if (op1->OperIs(GT_AND) && cmp->OperIs(GT_EQ, GT_NE))
+         {
+             //
+             // Transform ((x AND y) EQ|NE 0) into (x TEST_EQ|TEST_NE y) when possible.
+@@ -2490,6 +2492,7 @@ void Lowering::LowerCompare(GenTree* cmp)
+                 andOp1->ClearContained();
+                 andOp2->ClearContained();
+ 
++#ifdef _TARGET_XARCH_
+                 if (IsContainableMemoryOp(andOp1) && andOp2->IsIntegralConst())
+                 {
+                     //
+@@ -2521,10 +2524,12 @@ void Lowering::LowerCompare(GenTree* cmp)
+                         andOp2->gtType = TYP_CHAR;
+                     }
+                 }
++#endif
+             }
+         }
+     }
+ 
++#ifdef _TARGET_XARCH_
+     if (cmp->gtGetOp1()->TypeGet() == cmp->gtGetOp2()->TypeGet())
+     {
+         if (varTypeIsSmall(cmp->gtGetOp1()->TypeGet()) && varTypeIsUnsigned(cmp->gtGetOp1()->TypeGet()))
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index 5bd31d2..5720393 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -121,6 +121,8 @@ bool Lowering::IsContainableImmed(GenTree* parentNode, GenTree* childNode)
+             case GT_LE:
+             case GT_GE:
+             case GT_GT:
++            case GT_TEST_EQ:
++            case GT_TEST_NE:
+                 return emitter::emitIns_valid_imm_for_cmp(immVal, size);
+                 break;
+             case GT_AND:
+diff --git a/src/jit/lsraarm64.cpp b/src/jit/lsraarm64.cpp
+index 7d0ae0a..ef603d4 100644
+--- a/src/jit/lsraarm64.cpp
++++ b/src/jit/lsraarm64.cpp
+@@ -362,6 +362,8 @@ void LinearScan::TreeNodeInfoInit(GenTree* tree)
+         case GT_LE:
+         case GT_GE:
+         case GT_GT:
++        case GT_TEST_EQ:
++        case GT_TEST_NE:
+             TreeNodeInfoInitCmp(tree);
+             break;
+ 
+-- 
+2.7.4
+
