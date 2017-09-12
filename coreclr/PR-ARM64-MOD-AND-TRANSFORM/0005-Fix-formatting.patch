@@ -1,0 +1,33 @@
+From ca36d1eda94c8e0a198c572e5eafc0ccad0afd37 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 12 Sep 2017 11:54:11 -0400
+Subject: [PATCH] Fix formatting
+
+---
+ src/jit/morph.cpp | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
+index 64bfb1a..dcc40d4 100644
+--- a/src/jit/morph.cpp
++++ b/src/jit/morph.cpp
+@@ -11889,12 +11889,12 @@ GenTreePtr Compiler::fgMorphSmpOp(GenTreePtr tree, MorphAddrContext* mac)
+                 // * Dividend must not be constant.  Lower disables this rare const % const case
+                 //
+                 {
+-                    // Do "a % b = a - (a / b) * b" morph if ...................
++                    // Do "a % b = a - (a / b) * b" morph if ...........................
+                     bool doMorphModToSubMulDiv =
+-                        !op2->IsIntegralConst() ||             // Divisor is not an integer constant
+                         (tree->OperGet() == GT_MOD) ||           // Modulo operation is signed
+-                        op1->IsCnsIntOrI() ||                  // Dividend is constant
+-                        !isPow2(op2->AsIntCon()->IconValue()); // Divisor is not a power of two
++                        !op2->IsIntegralConst() ||               // Divisor is not an integer constant
++                        !isPow2(op2->AsIntCon()->IconValue()) || // Divisor is not a power of two
++                        op1->IsCnsIntOrI();                      // Dividend is constant
+ 
+                     if (doMorphModToSubMulDiv)
+                     {
+-- 
+2.7.4
+
