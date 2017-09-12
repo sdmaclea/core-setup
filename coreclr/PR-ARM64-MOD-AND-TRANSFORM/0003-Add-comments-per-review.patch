@@ -1,0 +1,73 @@
+From 85499512da1018a0d80863be01f4afa03900af6e Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 12 Sep 2017 11:15:26 -0400
+Subject: [PATCH] Add comments per review
+
+---
+ src/jit/morph.cpp | 26 ++++++++++++++++++--------
+ 1 file changed, 18 insertions(+), 8 deletions(-)
+
+diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
+index bdb5307..6f50a0c 100644
+--- a/src/jit/morph.cpp
++++ b/src/jit/morph.cpp
+@@ -11869,30 +11869,40 @@ GenTreePtr Compiler::fgMorphSmpOp(GenTreePtr tree, MorphAddrContext* mac)
+                 }
+ 
+ #ifdef _TARGET_ARM64_
+-
+                 // For ARM64 we don't have a remainder instruction,
+                 // The architecture manual suggests the following transformation to
+                 // generate code for such operator:
+                 //
+                 // a % b = a - (a / b) * b;
+                 //
+-                // Use the suggested transform unless the special case transform works:
++                // We will use the suggested transform except in the special case
++                // when the modulo operation is unsigned and the divisor is a
++                // integer constant power of two.  In this case, we will rely on lower
++                // to make the transform:
+                 //
+                 // a % b = a & (b - 1);
+                 //
++                // Note: We must alwoys perform one or the other of these transforms.
++                // Therefore we must also detect the special cases where lower does not do the
++                // % to & transform.  In our case there is only currently one extra condition:
++                //
++                // * Dividend must not be constant.  Lower disables this rare const % const case
++                //
+                 {
+-                    bool doMorph = !op2->IsIntegralConst() || op1->IsCnsIntOrI() || (tree->OperGet() == GT_MOD);
+-
+-                    if (!doMorph)
++                    // Do "a % b = a - (a / b) * b" morph if ...................
++                    bool doMorphModToSubMulDiv = !op2->IsIntegralConst() ||     // Divisor is not an integer constant
++                                                 (tree->OperGet() == GT_MOD) || // Modulo operation is signed
++                                                 op1->IsCnsIntOrI();            // Dividend is constant
++                    if (!doMorphModToSubMulDiv)                                 // Dividend is not a power of two
+                     {
+                         size_t divisorValue = (tree->OperGet() == GT_MOD) && (tree->TypeGet() == TYP_INT)
+                                                   ? op2->AsIntCon()->IconValue() & UINT32_MAX
+                                                   : op2->AsIntCon()->IconValue();
+ 
+-                        doMorph |= !isPow2(divisorValue);
++                        doMorphModToSubMulDiv |= !isPow2(divisorValue);
+                     }
+ 
+-                    if (doMorph)
++                    if (doMorphModToSubMulDiv)
+                     {
+                         assert(!optValnumCSE_phase);
+ 
+@@ -11901,7 +11911,7 @@ GenTreePtr Compiler::fgMorphSmpOp(GenTreePtr tree, MorphAddrContext* mac)
+                         op2  = tree->gtOp.gtOp2;
+                     }
+                 }
+-#else  //_TARGET_ARM64_
++#else  // !_TARGET_ARM64_
+                 // If b is not a power of 2 constant then lowering replaces a % b
+                 // with a - (a / b) * b and applies magic division optimization to
+                 // a / b. The code may already contain an a / b expression (e.g.
+-- 
+2.7.4
+
