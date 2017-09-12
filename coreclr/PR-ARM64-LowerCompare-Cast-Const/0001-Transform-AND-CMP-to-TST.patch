@@ -1,4 +1,4 @@
-From 641871a0fd9bb5b2da3172c7952ffed6be764ccd Mon Sep 17 00:00:00 2001
+From 4425f09437d9a593d0b82d1684bf97bada291a9d Mon Sep 17 00:00:00 2001
 From: Mike Danes <onemihaid@hotmail.com>
 Date: Tue, 5 Sep 2017 22:20:34 +0300
 Subject: [PATCH] Transform AND-CMP to TST
