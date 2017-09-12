@@ -1,4 +1,4 @@
-From 85499512da1018a0d80863be01f4afa03900af6e Mon Sep 17 00:00:00 2001
+From ee977d8f782780bdad1b24531f818957e3f3b5e5 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 12 Sep 2017 11:15:26 -0400
 Subject: [PATCH] Add comments per review
@@ -8,7 +8,7 @@ Subject: [PATCH] Add comments per review
  1 file changed, 18 insertions(+), 8 deletions(-)
 
 diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
-index bdb5307..6f50a0c 100644
+index bdb5307..dc2471f 100644
 --- a/src/jit/morph.cpp
 +++ b/src/jit/morph.cpp
 @@ -11869,30 +11869,40 @@ GenTreePtr Compiler::fgMorphSmpOp(GenTreePtr tree, MorphAddrContext* mac)
@@ -30,7 +30,7 @@ index bdb5307..6f50a0c 100644
                  //
                  // a % b = a & (b - 1);
                  //
-+                // Note: We must alwoys perform one or the other of these transforms.
++                // Note: We must always perform one or the other of these transforms.
 +                // Therefore we must also detect the special cases where lower does not do the
 +                // % to & transform.  In our case there is only currently one extra condition:
 +                //
