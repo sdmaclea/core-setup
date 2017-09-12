@@ -1,0 +1,48 @@
+From c9493317b8fc5ca3ec1adbf6f8a2f513110157cf Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 12 Sep 2017 18:00:58 -0400
+Subject: [PATCH] [Arm64] Enable Lowering GT_ARR_BOUNDS_CHECK
+
+---
+ src/jit/codegenarmarch.cpp | 11 ++++++++++-
+ src/jit/lower.cpp          |  2 +-
+ 2 files changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index 81bbb2a..1cf3ec0 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -1225,7 +1225,16 @@ void CodeGen::genRangeCheck(GenTreePtr oper)
+         jmpKind = genJumpKindForOper(GT_GE, CK_UNSIGNED);
+     }
+ 
+-    getEmitter()->emitInsBinary(INS_cmp, EA_4BYTE, src1, src2);
++    var_types bndsChkType = genActualType(src2->TypeGet());
++#if DEBUG
++    // Bounds checks can only be 32 or 64 bit sized comparisons.
++    assert(bndsChkType == TYP_INT || bndsChkType == TYP_LONG);
++
++    // The type of the bounds check should always wide enough to compare against the index.
++    assert(emitTypeSize(bndsChkType) >= emitTypeSize(genActualType(src1->TypeGet())));
++#endif // DEBUG
++
++    getEmitter()->emitInsBinary(INS_cmp, emitTypeSize(bndsChkType), src1, src2);
+     genJumpToThrowHlpBlk(jmpKind, SCK_RNGCHK_FAIL, bndsChk->gtIndRngFailBB);
+ }
+ 
+diff --git a/src/jit/lower.cpp b/src/jit/lower.cpp
+index 7c60405..724d30b 100644
+--- a/src/jit/lower.cpp
++++ b/src/jit/lower.cpp
+@@ -210,7 +210,7 @@ GenTree* Lowering::LowerNode(GenTree* node)
+             LowerCast(node);
+             break;
+ 
+-#ifdef _TARGET_XARCH_
++#if defined(_TARGET_XARCH_) || defined(_TARGET_ARM64_)
+         case GT_ARR_BOUNDS_CHECK:
+ #ifdef FEATURE_SIMD
+         case GT_SIMD_CHK:
+-- 
+2.7.4
+
