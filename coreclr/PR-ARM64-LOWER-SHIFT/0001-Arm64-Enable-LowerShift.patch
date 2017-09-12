@@ -1,0 +1,138 @@
+From 6c5756a2d4d408f2fab2404bed3b472816beddd1 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 12 Sep 2017 15:45:58 -0400
+Subject: [PATCH] [Arm64] Enable LowerShift
+
+---
+ src/jit/lower.cpp      | 49 ++++++++++++++++++++++++++++++++++++++++++++++++-
+ src/jit/lowerxarch.cpp | 47 -----------------------------------------------
+ 2 files changed, 48 insertions(+), 48 deletions(-)
+
+diff --git a/src/jit/lower.cpp b/src/jit/lower.cpp
+index 7c60405..5f93f79 100644
+--- a/src/jit/lower.cpp
++++ b/src/jit/lower.cpp
+@@ -240,7 +240,7 @@ GenTree* Lowering::LowerNode(GenTree* node)
+         case GT_LSH:
+         case GT_RSH:
+         case GT_RSZ:
+-#ifdef _TARGET_XARCH_
++#if defined(_TARGET_XARCH_) || defined(_TARGET_ARM64_)
+             LowerShift(node->AsOp());
+ #else
+             ContainCheckShiftRotate(node->AsOp());
+@@ -4521,6 +4521,53 @@ GenTree* Lowering::LowerSignedDivOrMod(GenTreePtr node)
+     return next;
+ }
+ 
++//------------------------------------------------------------------------
++// LowerShift: Lower shift nodes
++//
++// Arguments:
++//    shift - the shift node (GT_LSH, GT_RSH or GT_RSZ)
++//
++// Notes:
++//    Remove unnecessary shift count masking, xarch shift instructions
++//    mask the shift count to 5 bits (or 6 bits for 64 bit operations).
++
++void Lowering::LowerShift(GenTreeOp* shift)
++{
++    assert(shift->OperIs(GT_LSH, GT_RSH, GT_RSZ));
++
++    size_t mask = 0x1f;
++#ifdef _TARGET_64BIT_
++    if (varTypeIsLong(shift->TypeGet()))
++    {
++        mask = 0x3f;
++    }
++#else
++    assert(!varTypeIsLong(shift->TypeGet()));
++#endif
++
++    for (GenTree* andOp = shift->gtGetOp2(); andOp->OperIs(GT_AND); andOp = andOp->gtGetOp1())
++    {
++        GenTree* maskOp = andOp->gtGetOp2();
++
++        if (!maskOp->IsCnsIntOrI())
++        {
++            break;
++        }
++
++        if ((static_cast<size_t>(maskOp->AsIntCon()->IconValue()) & mask) != mask)
++        {
++            break;
++        }
++
++        shift->gtOp2 = andOp->gtGetOp1();
++        BlockRange().Remove(andOp);
++        BlockRange().Remove(maskOp);
++        // The parent was replaced, clear contain and regOpt flag.
++        shift->gtOp2->ClearContained();
++    }
++    ContainCheckShiftRotate(shift);
++}
++
+ void Lowering::WidenSIMD12IfNecessary(GenTreeLclVarCommon* node)
+ {
+ #ifdef FEATURE_SIMD
+diff --git a/src/jit/lowerxarch.cpp b/src/jit/lowerxarch.cpp
+index 20a0875..3240711 100644
+--- a/src/jit/lowerxarch.cpp
++++ b/src/jit/lowerxarch.cpp
+@@ -36,53 +36,6 @@ void Lowering::LowerRotate(GenTree* tree)
+ }
+ 
+ //------------------------------------------------------------------------
+-// LowerShift: Lower shift nodes
+-//
+-// Arguments:
+-//    shift - the shift node (GT_LSH, GT_RSH or GT_RSZ)
+-//
+-// Notes:
+-//    Remove unnecessary shift count masking, xarch shift instructions
+-//    mask the shift count to 5 bits (or 6 bits for 64 bit operations).
+-
+-void Lowering::LowerShift(GenTreeOp* shift)
+-{
+-    assert(shift->OperIs(GT_LSH, GT_RSH, GT_RSZ));
+-
+-    size_t mask = 0x1f;
+-#ifdef _TARGET_AMD64_
+-    if (varTypeIsLong(shift->TypeGet()))
+-    {
+-        mask = 0x3f;
+-    }
+-#else
+-    assert(!varTypeIsLong(shift->TypeGet()));
+-#endif
+-
+-    for (GenTree* andOp = shift->gtGetOp2(); andOp->OperIs(GT_AND); andOp = andOp->gtGetOp1())
+-    {
+-        GenTree* maskOp = andOp->gtGetOp2();
+-
+-        if (!maskOp->IsCnsIntOrI())
+-        {
+-            break;
+-        }
+-
+-        if ((static_cast<size_t>(maskOp->AsIntCon()->IconValue()) & mask) != mask)
+-        {
+-            break;
+-        }
+-
+-        shift->gtOp2 = andOp->gtGetOp1();
+-        BlockRange().Remove(andOp);
+-        BlockRange().Remove(maskOp);
+-        // The parent was replaced, clear contain and regOpt flag.
+-        shift->gtOp2->ClearContained();
+-    }
+-    ContainCheckShiftRotate(shift);
+-}
+-
+-//------------------------------------------------------------------------
+ // LowerStoreLoc: Lower a store of a lclVar
+ //
+ // Arguments:
+-- 
+2.7.4
+
