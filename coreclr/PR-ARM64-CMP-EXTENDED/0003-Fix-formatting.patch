@@ -1,0 +1,12 @@
+From 79d21cc37b4b5749948324876dada1c5eb287486 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 13 Sep 2017 12:28:11 -0400
+Subject: [PATCH] Fix formatting
+
+---
+ src/jit/lower.cpp | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+
+-- 
+2.7.4
+
