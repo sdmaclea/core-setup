@@ -1,0 +1,21 @@
+From 2c0fbc103b42423231d539c69413efd7859fccdc Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 14 Sep 2017 18:25:56 -0400
+Subject: [PATCH] Remove ConcurrentQueuePerfTest
+
+---
+ .../tests/Performance/ConcurrentQueuePerfTest.cs   | 93 ----------------------
+ ...Collections.Concurrent.Performance.Tests.csproj | 25 ------
+ 2 files changed, 118 deletions(-)
+ delete mode 100644 src/System.Collections.Concurrent/tests/Performance/ConcurrentQueuePerfTest.cs
+ delete mode 100644 src/System.Collections.Concurrent/tests/Performance/System.Collections.Concurrent.Performance.Tests.csproj
+
+diff --git a/src/System.Collections.Concurrent/tests/Performance/ConcurrentQueuePerfTest.cs b/src/System.Collections.Concurrent/tests/Performance/ConcurrentQueuePerfTest.cs
+deleted file mode 100644
+index 85691b8..0000000
+diff --git a/src/System.Collections.Concurrent/tests/Performance/System.Collections.Concurrent.Performance.Tests.csproj b/src/System.Collections.Concurrent/tests/Performance/System.Collections.Concurrent.Performance.Tests.csproj
+deleted file mode 100644
+index 342c59d..0000000
+-- 
+2.7.4
+

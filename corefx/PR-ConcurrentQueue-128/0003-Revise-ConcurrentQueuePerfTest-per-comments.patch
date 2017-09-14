@@ -1,0 +1,131 @@
+From 380198c5a8f86c141257ccf2c8465c8694341fc3 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 14 Sep 2017 18:24:17 -0400
+Subject: [PATCH] Revise ConcurrentQueuePerfTest per comments
+
+---
+ .../tests/Performance/ConcurrentQueuePerfTest.cs   | 93 ++++++++++++++++++++++
+ .../ConcurrentQueuePerfTest.netcoreapp.cs          | 44 ----------
+ ...Collections.Concurrent.Performance.Tests.csproj |  2 +-
+ 3 files changed, 94 insertions(+), 45 deletions(-)
+ create mode 100644 src/System.Collections.Concurrent/tests/Performance/ConcurrentQueuePerfTest.cs
+ delete mode 100644 src/System.Collections.Concurrent/tests/Performance/ConcurrentQueuePerfTest.netcoreapp.cs
+
+diff --git a/src/System.Collections.Concurrent/tests/Performance/ConcurrentQueuePerfTest.cs b/src/System.Collections.Concurrent/tests/Performance/ConcurrentQueuePerfTest.cs
+new file mode 100644
+index 0000000..85691b8
+--- /dev/null
++++ b/src/System.Collections.Concurrent/tests/Performance/ConcurrentQueuePerfTest.cs
+@@ -0,0 +1,93 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++using System.Collections.Generic;
++using System.Linq;
++using System.Threading;
++using System.Threading.Tasks;
++using Microsoft.Xunit.Performance;
++using Xunit;
++
++namespace System.Collections.Concurrent.Tests
++{
++    public class Perf_ConcurrentQueueTests
++    {
++        internal struct FastRandom // xorshift prng
++        {
++            private uint _w, _x, _y, _z;
++
++            public FastRandom(int seed)
++            {
++                _x = (uint)seed;
++                _w = 88675123;
++                _y = 362436069;
++                _z = 521288629;
++            }
++
++            public int Next(int maxValue)
++            {
++                uint t = _x ^ (_x << 11);
++                _x = _y; _y = _z; _z = _w;
++                _w = _w ^ (_w >> 19) ^ (t ^ (t >> 8));
++
++                return (int)(_w % (uint)maxValue);
++            }
++        }
++
++        /// <summary>
++        /// Benchmark many thread enqueue/dequeue from ConcurrentQueue
++        /// </summary>
++        [Benchmark(InnerIterationCount = 10)]
++        [InlineData(8,  100000)]
++        [InlineData(50, 100000)]
++        public void Enqueue_Dequeue(int threadCount, int itemsPerThread)
++        {
++            foreach (var iteration in Benchmark.Iterations)
++            {
++                var q = new ConcurrentQueue<int>();
++
++                var startTest = new ManualResetEvent(false);
++
++                var tasks = new Task[threadCount];
++                for (int i = 0; i < tasks.Length; ++i)
++                {
++                    tasks[i] = Task.Factory.StartNew(() =>
++                    {
++                        var random = new FastRandom(i);
++
++                        // Short Warmup
++                        for (int j = 0; j < 10; j++)
++                        {
++                            int d;
++                            q.Enqueue(random.Next(1024));
++                            q.TryDequeue(out d);
++                        }
++
++                        startTest.WaitOne();
++
++                        for (int j = 0; j < itemsPerThread; j++)
++                        {
++                            if (random.Next(1024) < 511) // Slight Dequeue bias
++                            {
++                                q.Enqueue(0);
++                            }
++                            else
++                            {
++                                int d;
++                                q.TryDequeue(out d);
++                            }
++                        }
++                    }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
++                }
++
++                using (iteration.StartMeasurement())
++                {
++                    startTest.Set();
++
++                    Task.WaitAll(tasks);
++                }
++            }
++        }
++    }
++}
+diff --git a/src/System.Collections.Concurrent/tests/Performance/ConcurrentQueuePerfTest.netcoreapp.cs b/src/System.Collections.Concurrent/tests/Performance/ConcurrentQueuePerfTest.netcoreapp.cs
+deleted file mode 100644
+index d6bbedd..0000000
+diff --git a/src/System.Collections.Concurrent/tests/Performance/System.Collections.Concurrent.Performance.Tests.csproj b/src/System.Collections.Concurrent/tests/Performance/System.Collections.Concurrent.Performance.Tests.csproj
+index fb4acb9..342c59d 100644
+--- a/src/System.Collections.Concurrent/tests/Performance/System.Collections.Concurrent.Performance.Tests.csproj
++++ b/src/System.Collections.Concurrent/tests/Performance/System.Collections.Concurrent.Performance.Tests.csproj
+@@ -10,7 +10,7 @@
+   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' " />
+   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />
+   <ItemGroup Condition="'$(DisableTests)' != 'true'">
+-    <Compile Include="ConcurrentQueuePerfTest.netcoreapp.cs" />
++    <Compile Include="ConcurrentQueuePerfTest.cs" />
+     <Compile Include="$(CommonTestPath)\System\PerfUtils.cs">
+       <Link>Common\System\PerfUtils.cs</Link>
+     </Compile>
+-- 
+2.7.4
+
