@@ -1,0 +1,35 @@
+From 0e152345ef39795fc9be3cf36296aeda3e2b79cb Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 15 Sep 2017 13:37:02 -0400
+Subject: [PATCH] Fixup Lower bool cast removal
+
+---
+ src/jit/lower.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/jit/lower.cpp b/src/jit/lower.cpp
+index fab8754..d4b06c8 100644
+--- a/src/jit/lower.cpp
++++ b/src/jit/lower.cpp
+@@ -2448,8 +2448,10 @@ void Lowering::LowerCompare(GenTree* cmp)
+ 
+                     cmp->SetOperRaw(cmpEq ? GT_TEST_EQ : GT_TEST_NE);
+                     op2->SetIconValue((op2Value == 0) ? 0xff : 0x1);
++                    op2->gtType = castOp->gtType;
+ #else
+                     castOp->gtType = castToType;
++                    op2->gtType    = castToType;
+ #endif
+                     // If we have any contained memory ops on castOp, they must now not be contained.
+                     if (castOp->OperIsLogical())
+@@ -2466,7 +2468,6 @@ void Lowering::LowerCompare(GenTree* cmp)
+                         }
+                     }
+                     cmp->gtOp.gtOp1 = castOp;
+-                    op2->gtType     = castToType;
+ 
+                     BlockRange().Remove(cast);
+                 }
+-- 
+2.7.4
+
