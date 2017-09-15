@@ -1,0 +1,131 @@
+From 09c7c432cc17e29d6252c92c7da4f8117a1fef69 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 15 Sep 2017 12:09:25 -0400
+Subject: [PATCH] [Arm/Arm64] LowerCast remove small int widen cast
+
+---
+ src/jit/codegenarm.cpp   |  5 +----
+ src/jit/codegenarm64.cpp |  5 +----
+ src/jit/lowerarmarch.cpp | 21 +++++----------------
+ src/jit/lsraarm64.cpp    | 12 +-----------
+ 4 files changed, 8 insertions(+), 35 deletions(-)
+
+diff --git a/src/jit/codegenarm.cpp b/src/jit/codegenarm.cpp
+index 26c6854..1a94789 100644
+--- a/src/jit/codegenarm.cpp
++++ b/src/jit/codegenarm.cpp
+@@ -1555,7 +1555,7 @@ void CodeGen::genIntToFloatCast(GenTreePtr treeNode)
+     assert(genIsValidIntReg(op1->gtRegNum)); // Must be a valid int reg.
+ 
+     var_types dstType = treeNode->CastToType();
+-    var_types srcType = op1->TypeGet();
++    var_types srcType = genActualType(op1->TypeGet());
+     assert(!varTypeIsFloating(srcType) && varTypeIsFloating(dstType));
+ 
+     // force the srcType to unsigned if GT_UNSIGNED flag is set
+@@ -1565,9 +1565,6 @@ void CodeGen::genIntToFloatCast(GenTreePtr treeNode)
+     }
+ 
+     // We only expect a srcType whose size is EA_4BYTE.
+-    // For conversions from small types (byte/sbyte/int16/uint16) to float/double,
+-    // we expect the front-end or lowering phase to have generated two levels of cast.
+-    //
+     emitAttr srcSize = EA_ATTR(genTypeSize(srcType));
+     noway_assert(srcSize == EA_4BYTE);
+ 
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 640478b..b17d8e6 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3232,7 +3232,7 @@ void CodeGen::genIntToFloatCast(GenTreePtr treeNode)
+     assert(genIsValidIntReg(op1->gtRegNum)); // Must be a valid int reg.
+ 
+     var_types dstType = treeNode->CastToType();
+-    var_types srcType = op1->TypeGet();
++    var_types srcType = genActualType(op1->TypeGet());
+     assert(!varTypeIsFloating(srcType) && varTypeIsFloating(dstType));
+ 
+     // force the srcType to unsigned if GT_UNSIGNED flag is set
+@@ -3242,9 +3242,6 @@ void CodeGen::genIntToFloatCast(GenTreePtr treeNode)
+     }
+ 
+     // We should never see a srcType whose size is neither EA_4BYTE or EA_8BYTE
+-    // For conversions from small types (byte/sbyte/int16/uint16) to float/double,
+-    // we expect the front-end or lowering phase to have generated two levels of cast.
+-    //
+     emitAttr srcSize = EA_ATTR(genTypeSize(srcType));
+     noway_assert((srcSize == EA_4BYTE) || (srcSize == EA_8BYTE));
+ 
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index 64c7886..2154626 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -393,13 +393,7 @@ void Lowering::LowerBlockStore(GenTreeBlk* blkNode)
+ //    None.
+ //
+ // Notes:
+-//    Casts from small int type to float/double are transformed as follows:
+-//    GT_CAST(byte, float/double)     =   GT_CAST(GT_CAST(byte, int32), float/double)
+-//    GT_CAST(sbyte, float/double)    =   GT_CAST(GT_CAST(sbyte, int32), float/double)
+-//    GT_CAST(int16, float/double)    =   GT_CAST(GT_CAST(int16, int32), float/double)
+-//    GT_CAST(uint16, float/double)   =   GT_CAST(GT_CAST(uint16, int32), float/double)
+-//
+-//    Similarly casts from float/double to a smaller int type are transformed as follows:
++//    Casts from float/double to a smaller int type are transformed as follows:
+ //    GT_CAST(float/double, byte)     =   GT_CAST(GT_CAST(float/double, int32), byte)
+ //    GT_CAST(float/double, sbyte)    =   GT_CAST(GT_CAST(float/double, int32), sbyte)
+ //    GT_CAST(float/double, int16)    =   GT_CAST(GT_CAST(double/double, int32), int16)
+@@ -419,7 +413,7 @@ void Lowering::LowerCast(GenTree* tree)
+ 
+     GenTreePtr op1     = tree->gtOp.gtOp1;
+     var_types  dstType = tree->CastToType();
+-    var_types  srcType = op1->TypeGet();
++    var_types  srcType = genActualType(op1->TypeGet());
+     var_types  tmpType = TYP_UNDEF;
+ 
+     if (varTypeIsFloating(srcType))
+@@ -427,15 +421,10 @@ void Lowering::LowerCast(GenTree* tree)
+         noway_assert(!tree->gtOverflow());
+     }
+ 
+-    // Case of src is a small type and dst is a floating point type.
+-    if (varTypeIsSmall(srcType) && varTypeIsFloating(dstType))
+-    {
+-        // These conversions can never be overflow detecting ones.
+-        noway_assert(!tree->gtOverflow());
+-        tmpType = TYP_INT;
+-    }
++    assert(!varTypeIsSmall(srcType));
++
+     // case of src is a floating point type and dst is a small type.
+-    else if (varTypeIsFloating(srcType) && varTypeIsSmall(dstType))
++    if (varTypeIsFloating(srcType) && varTypeIsSmall(dstType))
+     {
+         NYI_ARM("Lowering for cast from float to small type"); // Not tested yet.
+         tmpType = TYP_INT;
+diff --git a/src/jit/lsraarm64.cpp b/src/jit/lsraarm64.cpp
+index cea80e2..e39c0d9 100644
+--- a/src/jit/lsraarm64.cpp
++++ b/src/jit/lsraarm64.cpp
+@@ -302,17 +302,7 @@ void LinearScan::TreeNodeInfoInit(GenTree* tree)
+             {
+                 castOpType = genUnsignedType(castOpType);
+             }
+-#ifdef DEBUG
+-            if (!tree->gtOverflow() && (varTypeIsFloating(castToType) || varTypeIsFloating(castOpType)))
+-            {
+-                // If converting to float/double, the operand must be 4 or 8 byte in size.
+-                if (varTypeIsFloating(castToType))
+-                {
+-                    unsigned opSize = genTypeSize(castOpType);
+-                    assert(opSize == 4 || opSize == 8);
+-                }
+-            }
+-#endif // DEBUG
++
+             // Some overflow checks need a temp reg
+ 
+             Lowering::CastInfo castInfo;
+-- 
+2.7.4
+
