@@ -1,0 +1,26 @@
+From 6c408433a82f80df64b55de0ab01012a53a8159e Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 18 Sep 2017 16:10:47 -0400
+Subject: [PATCH] Fix formatting
+
+---
+ src/jit/codegenarmarch.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index 044751a..95b79e3 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -1615,7 +1615,8 @@ void CodeGen::genCodeForIndexAddr(GenTreeIndexAddr* node)
+     {
+         case 1:
+             // dest = base + index
+-            getEmitter()->emitIns_R_R_R(INS_add, emitActualTypeSize(node), node->gtRegNum, base->gtRegNum, index->gtRegNum);
++            getEmitter()->emitIns_R_R_R(INS_add, emitActualTypeSize(node), node->gtRegNum, base->gtRegNum,
++                                        index->gtRegNum);
+             break;
+ 
+         case 2:
+-- 
+2.7.4
+
