@@ -1,0 +1,26 @@
+From 9e7162dca05b72ee0971496cd805ce8cf5efe58d Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 18 Sep 2017 15:28:01 -0400
+Subject: [PATCH] [Arm64] Remove bogus CQ ToDo
+
+---
+ src/jit/codegenarm64.cpp | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index f83942c..748fff8 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3376,9 +3376,6 @@ void CodeGen::genFloatToIntCast(GenTreePtr treeNode)
+ // Assumptions:
+ //    GT_CKFINITE node has reserved an internal register.
+ //
+-// TODO-ARM64-CQ - mark the operand as contained if known to be in
+-// memory (e.g. field or an array element).
+-//
+ void CodeGen::genCkfinite(GenTreePtr treeNode)
+ {
+     assert(treeNode->OperGet() == GT_CKFINITE);
+-- 
+2.7.4
+
