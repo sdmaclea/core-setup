@@ -1,4 +1,4 @@
-From cc1cbe9232199856f4baf97bae58023676f9cfe0 Mon Sep 17 00:00:00 2001
+From 7642b957b6a511acdcdfb8b1d756cd8eb1f7c837 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 19 Sep 2017 12:39:20 -0400
 Subject: [PATCH] [Arm64] Add lower to cbz, cbnz, tbz, or tbnz
@@ -119,7 +119,7 @@ index f579aee..4fc97bb 100644
          {
              ssz = LBL_SIZE_SMALL;
 diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
-index d7fa43d..df5efde 100644
+index d7fa43d..cbac00e 100644
 --- a/src/jit/emitarm64.cpp
 +++ b/src/jit/emitarm64.cpp
 @@ -6691,8 +6691,20 @@ void emitter::emitSetShortJump(instrDescJmp* id)
@@ -197,8 +197,8 @@ index d7fa43d..df5efde 100644
 +    id->idInsFmt(fmt);
 +    id->idReg1(reg);
 +    id->idjShort = false;
-+    id->idSmallCns(imm & 0x3f);
 +    id->idOpSize(EA_SIZE(attr));
++    id->idSmallCns(imm & ((EA_SIZE(attr) == EA_8BYTE) ? 0x3f : 0x1f));
 +
 +    id->idAddr()->iiaBBlabel = dst;
 +    id->idjKeepLong          = emitComp->fgInDifferentRegions(emitComp->compCurBB, dst);
