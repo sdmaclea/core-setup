@@ -1,0 +1,406 @@
+From cc1cbe9232199856f4baf97bae58023676f9cfe0 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 19 Sep 2017 12:39:20 -0400
+Subject: [PATCH] [Arm64] Add lower to cbz, cbnz, tbz, or tbnz
+
+---
+ src/jit/codegenarm64.cpp   |   4 +-
+ src/jit/codegenarmarch.cpp |  36 ++++++++++++++
+ src/jit/emit.cpp           |  10 ++--
+ src/jit/emitarm64.cpp      | 120 ++++++++++++++++++++++++++++++++++++++++++---
+ src/jit/emitarm64.h        |  15 ++----
+ src/jit/lower.cpp          |  32 +++++++++++-
+ src/jit/lowerarmarch.cpp   |  10 +++-
+ src/jit/target.h           |   3 ++
+ 8 files changed, 202 insertions(+), 28 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 0bca7d7..fd57ea5 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3449,7 +3449,7 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
+ 
+     genConsumeOperands(tree);
+ 
+-    if ((tree->gtFlags & GTF_USE_FLAGS) == 0)
++    if ((tree->gtFlags & GTF_SET_FLAGS) != 0)
+     {
+         emitAttr cmpSize = EA_ATTR(genTypeSize(op1Type));
+ 
+@@ -3491,6 +3491,8 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
+         }
+     }
+ 
++    assert((targetReg == REG_NA) || ((tree->gtFlags & (GTF_SET_FLAGS | GTF_USE_FLAGS)) != 0));
++
+     // Are we evaluating this into a register?
+     if (targetReg != REG_NA)
+     {
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index e9a12af..ec6514d 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -3081,6 +3081,41 @@ void CodeGen::genCodeForJumpTrue(GenTreePtr tree)
+     assert(cmp->OperIsCompare());
+     assert(compiler->compCurBB->bbJumpKind == BBJ_COND);
+ 
++#ifdef _TARGET_ARM64_
++    if ((tree->gtFlags & GTF_USE_FLAGS) == 0)
++    {
++        assert(cmp->OperIs(GT_EQ, GT_NE, GT_TEST_EQ, GT_TEST_NE));
++        assert(!varTypeIsFloating(cmp));
++        assert((cmp->gtFlags & GTF_SET_FLAGS) == 0);
++        assert(cmp->gtGetOp2()->IsCnsIntOrI());
++        assert(!cmp->gtGetOp1()->isUsedFromMemory());
++
++        regNumber reg  = cmp->gtGetOp1()->gtRegNum;
++        emitAttr  attr = emitActualTypeSize(cmp->gtGetOp1()->TypeGet());
++
++        if (cmp->OperIs(GT_EQ, GT_NE))
++        {
++            assert(cmp->gtGetOp2()->IsIntegralConst(0));
++
++            instruction ins = cmp->OperIs(GT_EQ) ? INS_cbz : INS_cbnz;
++
++            getEmitter()->emitIns_J_R(ins, attr, compiler->compCurBB->bbJumpDest, reg);
++        }
++        else
++        {
++            ssize_t compareImm = cmp->gtGetOp2()->gtIntCon.IconValue();
++
++            assert(isPow2(compareImm));
++
++            instruction ins = cmp->OperIs(GT_TEST_EQ) ? INS_tbz : INS_tbnz;
++            int imm = genLog2((size_t)compareImm);
++
++            getEmitter()->emitIns_J_R_I(ins, attr, compiler->compCurBB->bbJumpDest, reg, imm);
++        }
++    }
++    else
++#endif
++    {
+         // Get the "kind" and type of the comparison.  Note that whether it is an unsigned cmp
+         // is governed by a flag NOT by the inherent type of the node
+         emitJumpKind jumpKind[2];
+@@ -3098,6 +3133,7 @@ void CodeGen::genCodeForJumpTrue(GenTreePtr tree)
+             assert(branchToTrueLabel[1]);
+             inst_JMP(jumpKind[1], compiler->compCurBB->bbJumpDest);
+         }
++    }
+ }
+ 
+ #if defined(_TARGET_ARM_)
+diff --git a/src/jit/emit.cpp b/src/jit/emit.cpp
+index f579aee..4fc97bb 100644
+--- a/src/jit/emit.cpp
++++ b/src/jit/emit.cpp
+@@ -3647,8 +3647,10 @@ AGAIN:
+         if (emitIsCondJump(jmp))
+         {
+             ssz         = JCC_SIZE_SMALL;
+-            nsd = JCC_DIST_SMALL_MAX_NEG;
+-            psd = JCC_DIST_SMALL_MAX_POS;
++            bool isTest = (jmp->idIns() == INS_tbz) || (jmp->idIns() == INS_tbnz);
++
++            nsd = (isTest) ? TB_DIST_SMALL_MAX_NEG : JCC_DIST_SMALL_MAX_POS;
++            psd = (isTest) ? TB_DIST_SMALL_MAX_POS : JCC_DIST_SMALL_MAX_POS;
+         }
+         else if (emitIsUncondJump(jmp))
+         {
+@@ -3656,10 +3658,6 @@ AGAIN:
+             assert(jmp->idjShort);
+             ssz = JMP_SIZE_SMALL;
+         }
+-        else if (emitIsCmpJump(jmp))
+-        {
+-            NYI("branch shortening compare-and-branch instructions");
+-        }
+         else if (emitIsLoadLabel(jmp))
+         {
+             ssz = LBL_SIZE_SMALL;
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index d7fa43d..df5efde 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -6691,8 +6691,20 @@ void emitter::emitSetShortJump(instrDescJmp* id)
+     insFormat fmt = IF_NONE;
+     if (emitIsCondJump(id))
+     {
++        switch (id->idIns())
++        {
++            case INS_cbz:
++            case INS_cbnz:
++                fmt = IF_BI_1A;
++                break;
++            case INS_tbz:
++            case INS_tbnz:
++                fmt = IF_BI_1B;
++                break;
++            default:
+                 fmt = IF_BI_0B;
+         }
++    }
+     else if (emitIsLoadLabel(id))
+     {
+         fmt = IF_DI_1E;
+@@ -6784,7 +6796,77 @@ void emitter::emitIns_R_D(instruction ins, emitAttr attr, unsigned offs, regNumb
+ 
+ void emitter::emitIns_J_R(instruction ins, emitAttr attr, BasicBlock* dst, regNumber reg)
+ {
+-    NYI("emitIns_J_R");
++    assert((ins == INS_cbz) || (ins == INS_cbnz));
++
++    assert(dst && (dst->bbFlags & BBF_JMP_TARGET));
++
++    insFormat fmt = IF_LARGEJMP;
++
++    instrDescJmp* id = emitNewInstrJmp();
++
++    id->idIns(ins);
++    id->idInsFmt(fmt);
++    id->idReg1(reg);
++    id->idjShort = false;
++    id->idOpSize(EA_SIZE(attr));
++
++    id->idAddr()->iiaBBlabel = dst;
++    id->idjKeepLong          = emitComp->fgInDifferentRegions(emitComp->compCurBB, dst);
++
++    /* Record the jump's IG and offset within it */
++
++    id->idjIG   = emitCurIG;
++    id->idjOffs = emitCurIGsize;
++
++    /* Append this jump to this IG's jump list */
++
++    id->idjNext      = emitCurIGjmpList;
++    emitCurIGjmpList = id;
++
++#if EMITTER_STATS
++    emitTotalIGjmps++;
++#endif
++
++    dispIns(id);
++    appendToCurIG(id);
++}
++
++void emitter::emitIns_J_R_I(instruction ins, emitAttr attr, BasicBlock* dst, regNumber reg, int imm)
++{
++    assert((ins == INS_tbz) || (ins == INS_tbnz));
++
++    assert(dst && (dst->bbFlags & BBF_JMP_TARGET));
++
++    insFormat fmt = IF_LARGEJMP;
++
++    instrDescJmp* id = emitNewInstrJmp();
++
++    id->idIns(ins);
++    id->idInsFmt(fmt);
++    id->idReg1(reg);
++    id->idjShort = false;
++    id->idSmallCns(imm & 0x3f);
++    id->idOpSize(EA_SIZE(attr));
++
++    id->idAddr()->iiaBBlabel = dst;
++    id->idjKeepLong          = emitComp->fgInDifferentRegions(emitComp->compCurBB, dst);
++
++    /* Record the jump's IG and offset within it */
++
++    id->idjIG   = emitCurIG;
++    id->idjOffs = emitCurIGsize;
++
++    /* Append this jump to this IG's jump list */
++
++    id->idjNext      = emitCurIGjmpList;
++    emitCurIGjmpList = id;
++
++#if EMITTER_STATS
++    emitTotalIGjmps++;
++#endif
++
++    dispIns(id);
++    appendToCurIG(id);
+ }
+ 
+ void emitter::emitIns_J(instruction ins, BasicBlock* dst, int instrCount)
+@@ -8253,7 +8335,7 @@ BYTE* emitter::emitOutputLJ(insGroup* ig, BYTE* dst, instrDesc* i)
+             // Short conditional/unconditional jump
+             assert(!id->idjKeepLong);
+             assert(emitJumpCrossHotColdBoundary(srcOffs, dstOffs) == false);
+-            assert((fmt == IF_BI_0A) || (fmt == IF_BI_0B));
++            assert((fmt == IF_BI_0A) || (fmt == IF_BI_0B) || (fmt == IF_BI_1A) || (fmt == IF_BI_1B));
+         }
+         else
+         {
+@@ -8278,13 +8360,39 @@ BYTE* emitter::emitOutputLJ(insGroup* ig, BYTE* dst, instrDesc* i)
+             // the correct offset. Note also that this works for both integer and floating-point conditions, because
+             // the condition inversion takes ordered/unordered into account, preserving NaN behavior. For example,
+             // "GT" (greater than) is inverted to "LE" (less than, equal, or unordered).
++
++            instruction revereIns;
++            insFormat   reverseFmt;
++
++            switch (ins)
++            {
++                case INS_cbz:
++                    revereIns  = INS_cbnz;
++                    reverseFmt = IF_BI_1A;
++                    break;
++                case INS_cbnz:
++                    revereIns  = INS_cbz;
++                    reverseFmt = IF_BI_1A;
++                    break;
++                case INS_tbz:
++                    revereIns  = INS_tbnz;
++                    reverseFmt = IF_BI_1B;
++                    break;
++                case INS_tbnz:
++                    revereIns  = INS_tbz;
++                    reverseFmt = IF_BI_1B;
++                    break;
++                default:
++                    revereIns  = emitJumpKindToIns(emitReverseJumpKind(emitInsToJumpKind(ins)));
++                    reverseFmt = IF_BI_0B;
++            }
++
+             dst =
+                 emitOutputShortBranch(dst,
+-                                      emitJumpKindToIns(emitReverseJumpKind(
+-                                          emitInsToJumpKind(ins))), // reverse the conditional instruction
+-                                      IF_BI_0B,
++                                      revereIns, // reverse the conditional instruction
++                                      reverseFmt,
+                                       8, /* 8 bytes from start of this large conditional pseudo-instruction to L_not. */
+-                                      nullptr /* only used for tbz/tbnzcbz/cbnz */);
++                                      id);
+ 
+             // Now, pretend we've got a normal unconditional branch, and fall through to the code to emit that.
+             ins = INS_b;
+diff --git a/src/jit/emitarm64.h b/src/jit/emitarm64.h
+index ebebf51..87d9995 100644
+--- a/src/jit/emitarm64.h
++++ b/src/jit/emitarm64.h
+@@ -781,6 +781,8 @@ void emitIns_R_D(instruction ins, emitAttr attr, unsigned offs, regNumber reg);
+ 
+ void emitIns_J_R(instruction ins, emitAttr attr, BasicBlock* dst, regNumber reg);
+ 
++void emitIns_J_R_I(instruction ins, emitAttr attr, BasicBlock* dst, regNumber reg, int imm);
++
+ void emitIns_I_AR(
+     instruction ins, emitAttr attr, int val, regNumber reg, int offs, int memCookie = 0, void* clsCookie = NULL);
+ 
+@@ -856,17 +858,8 @@ BYTE* emitOutputShortConstant(
+ 
+ inline bool emitIsCondJump(instrDesc* jmp)
+ {
+-    return ((jmp->idInsFmt() == IF_BI_0B) || (jmp->idInsFmt() == IF_LARGEJMP));
+-}
+-
+-/*****************************************************************************
+- *
+- *  Given an instrDesc, return true if it's a compare and jump.
+- */
+-
+-inline bool emitIsCmpJump(instrDesc* jmp)
+-{
+-    return ((jmp->idInsFmt() == IF_BI_1A) || (jmp->idInsFmt() == IF_BI_1B));
++    return ((jmp->idInsFmt() == IF_BI_0B) || (jmp->idInsFmt() == IF_BI_1A) || (jmp->idInsFmt() == IF_BI_1B) ||
++            (jmp->idInsFmt() == IF_LARGEJMP));
+ }
+ 
+ /*****************************************************************************
+diff --git a/src/jit/lower.cpp b/src/jit/lower.cpp
+index 40e03b0..2acdafb 100644
+--- a/src/jit/lower.cpp
++++ b/src/jit/lower.cpp
+@@ -5580,11 +5580,39 @@ void Lowering::ContainCheckJTrue(GenTreeOp* node)
+ {
+     // The compare does not need to be generated into a register.
+     GenTree* cmp = node->gtGetOp1();
+-    cmp->gtLsraInfo.isNoRegCompare = true;
+ 
+-#ifdef FEATURE_SIMD
+     assert(node->OperIs(GT_JTRUE));
+ 
++    cmp->gtLsraInfo.isNoRegCompare = true;
++
++#ifdef _TARGET_ARM64_
++    // cmp will not use flags to produce a register
++    cmp->gtFlags &= ~GTF_USE_FLAGS;
++
++    // By default JTRUE will use flags as jump condition
++    node->gtFlags |= GTF_USE_FLAGS;
++
++    GenTree* cmpOp2 = cmp->gtGetOp2();
++
++    if (!varTypeIsFloating(cmp) && cmpOp2->IsCnsIntOrI() && ((cmp->gtFlags & GTF_SET_FLAGS) != 0))
++    {
++        if (cmp->OperIs(GT_EQ, GT_NE) && cmpOp2->IsIntegralConst(0))
++        {
++            // Codegen will use cbz or cbnz in codegen which do not affect the flag register
++            cmp->gtFlags &= ~GTF_SET_FLAGS;
++            node->gtFlags &= ~GTF_USE_FLAGS;
++        }
++
++        if (cmp->OperIs(GT_TEST_EQ, GT_TEST_NE) && isPow2(cmpOp2->gtIntCon.IconValue()))
++        {
++            // Codegen will use tbz or tbnz in codegen which do not affect the flag register
++            cmp->gtFlags &= ~GTF_SET_FLAGS;
++            node->gtFlags &= ~GTF_USE_FLAGS;
++        }
++    }
++#endif
++
++#ifdef FEATURE_SIMD
+     // Say we have the following IR
+     //   simdCompareResult = GT_SIMD((In)Equality, v1, v2)
+     //   integerCompareResult = GT_EQ/NE(simdCompareResult, true/false)
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index 4156c13..53b3f73 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -693,9 +693,10 @@ void Lowering::ContainCheckCast(GenTreeCast* node)
+ //
+ void Lowering::ContainCheckCompare(GenTreeOp* cmp)
+ {
++#ifdef _TARGET_ARM64_
++    cmp->gtFlags |= GTF_SET_FLAGS;
+     if (CheckImmedAndMakeContained(cmp, cmp->gtOp2))
+     {
+-#ifdef _TARGET_ARM64_
+         GenTreePtr op1 = cmp->gtOp.gtOp1;
+         GenTreePtr op2 = cmp->gtOp.gtOp2;
+ 
+@@ -718,10 +719,15 @@ void Lowering::ContainCheckCompare(GenTreeOp* cmp)
+         {
+             assert(!op1->gtSetFlags());
+             op1->gtFlags |= GTF_SET_FLAGS;
++            cmp->gtFlags &= ~GTF_SET_FLAGS;
++
++            if (!cmp->gtLsraInfo.isNoRegCompare)
+                 cmp->gtFlags |= GTF_USE_FLAGS;
+         }
+-#endif // _TARGET_ARM64_
+     }
++#else
++    ContainCheckBinary(cmp);
++#endif // _TARGET_ARM64_
+ }
+ 
+ //------------------------------------------------------------------------
+diff --git a/src/jit/target.h b/src/jit/target.h
+index 83e95bf..e1c97dd 100644
+--- a/src/jit/target.h
++++ b/src/jit/target.h
+@@ -1804,6 +1804,9 @@ typedef unsigned short regPairNoSmall; // arm: need 12 bits
+   #define JCC_DIST_SMALL_MAX_NEG  (-1048576)
+   #define JCC_DIST_SMALL_MAX_POS  (+1048575)
+ 
++  #define TB_DIST_SMALL_MAX_NEG   (-32768)
++  #define TB_DIST_SMALL_MAX_POS   (+32767)
++
+   #define JCC_SIZE_SMALL          (4)
+   #define JCC_SIZE_LARGE          (8)
+ 
+-- 
+2.7.4
+
