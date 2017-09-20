@@ -1,12 +1,12 @@
-From b7d6c2a33acfc021b2cb0d6957f1843cddcad8a3 Mon Sep 17 00:00:00 2001
+From 6d2c21faf54e4fdad47c36e700cf415a5f177305 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 20 Sep 2017 19:05:43 -0400
 Subject: [PATCH] [Arm64] Remove LegacyBackend defines
 
 ---
  src/jit/codegenarm64.cpp |  8 ++++----
- src/jit/compiler.h       | 14 --------------
- 2 files changed, 4 insertions(+), 18 deletions(-)
+ src/jit/compiler.h       | 15 ---------------
+ 2 files changed, 4 insertions(+), 19 deletions(-)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
 index a6e5d75..4ecba7d 100644
@@ -49,10 +49,10 @@ index a6e5d75..4ecba7d 100644
  
      stackAdjustment = 0;
 diff --git a/src/jit/compiler.h b/src/jit/compiler.h
-index 0997154..a30ec93 100644
+index 0997154..c04765b 100644
 --- a/src/jit/compiler.h
 +++ b/src/jit/compiler.h
-@@ -10287,23 +10287,9 @@ const instruction INS_SQRT  = INS_vsqrt;
+@@ -10287,23 +10287,8 @@ const instruction INS_SQRT  = INS_vsqrt;
  
  #ifdef _TARGET_ARM64_
  
@@ -64,7 +64,7 @@ index 0997154..a30ec93 100644
 -const instruction INS_OR              = INS_orr;
 -const instruction INS_XOR             = INS_eor;
 -const instruction INS_NEG             = INS_neg;
- const instruction INS_TEST            = INS_tst;
+-const instruction INS_TEST            = INS_tst;
 -const instruction INS_MUL             = INS_mul;
  const instruction INS_MULADD          = INS_madd;
 -const instruction INS_SIGNED_DIVIDE   = INS_sdiv;
