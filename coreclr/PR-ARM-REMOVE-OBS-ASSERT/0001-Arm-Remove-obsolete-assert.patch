@@ -1,0 +1,37 @@
+From 2759a62b412d23c81ee0a5688dd65aaf394bb839 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 20 Sep 2017 11:29:31 -0400
+Subject: [PATCH] [Arm] Remove obsolete assert
+
+Assert should have been removed with #14018
+
+Fixes #14082
+---
+ src/jit/lsraarm.cpp | 11 -----------
+ 1 file changed, 11 deletions(-)
+
+diff --git a/src/jit/lsraarm.cpp b/src/jit/lsraarm.cpp
+index 6991bdd..00d466e 100644
+--- a/src/jit/lsraarm.cpp
++++ b/src/jit/lsraarm.cpp
+@@ -279,17 +279,6 @@ void LinearScan::TreeNodeInfoInit(GenTree* tree)
+             {
+                 castOpType = genUnsignedType(castOpType);
+             }
+-#ifdef DEBUG
+-            if (!tree->gtOverflow() && (varTypeIsFloating(castToType) || varTypeIsFloating(castOpType)))
+-            {
+-                // If converting to float/double, the operand must be 4 or 8 byte in size.
+-                if (varTypeIsFloating(castToType))
+-                {
+-                    unsigned opSize = genTypeSize(castOpType);
+-                    assert(opSize == 4 || opSize == 8);
+-                }
+-            }
+-#endif // DEBUG
+ 
+             if (varTypeIsLong(castOpType))
+             {
+-- 
+2.7.4
+
