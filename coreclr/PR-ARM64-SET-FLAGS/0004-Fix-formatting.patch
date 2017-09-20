@@ -1,11 +1,12 @@
-From a13938084639a443034cbedfb4fcdbfe957a9ee4 Mon Sep 17 00:00:00 2001
+From 8f42b9f07827ecbf5c157fe1ff83d96e52cdf2f7 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 20 Sep 2017 11:41:02 -0400
 Subject: [PATCH] Fix formatting
 
 ---
- src/jit/lower.cpp | 0
- 1 file changed, 0 insertions(+), 0 deletions(-)
+ src/jit/codegenarmarch.cpp | 0
+ src/jit/lower.cpp          | 0
+ 2 files changed, 0 insertions(+), 0 deletions(-)
 
 -- 
 2.7.4
