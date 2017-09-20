@@ -1,0 +1,32 @@
+From 5c8462083060469a18d1db2d5c597be6935a3131 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 20 Sep 2017 19:48:53 -0400
+Subject: [PATCH] Fix formatting
+
+---
+ src/jit/codegenarmarch.cpp | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index 7692c7c..364e755 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -3280,7 +3280,6 @@ void CodeGen::genCodeForJumpTrue(GenTreePtr tree)
+     }
+ }
+ 
+-
+ //------------------------------------------------------------------------
+ // genCodeForJcc: Produce code for a GT_JCC node.
+ //
+@@ -3349,7 +3348,6 @@ void CodeGen::genCodeForSetcc(GenTreeCC* setcc)
+     genProduceReg(setcc);
+ }
+ 
+-
+ //------------------------------------------------------------------------
+ // genCodeForStoreBlk: Produce code for a GT_STORE_OBJ/GT_STORE_DYN_BLK/GT_STORE_BLK node.
+ //
+-- 
+2.7.4
+
