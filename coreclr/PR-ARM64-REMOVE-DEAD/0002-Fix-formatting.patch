@@ -1,0 +1,12 @@
+From ae5b5c1a9296f5ef50b7395269e523b902433655 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 21 Sep 2017 11:04:26 -0400
+Subject: [PATCH] Fix formatting
+
+---
+ src/jit/compiler.h | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+
+-- 
+2.7.4
+
