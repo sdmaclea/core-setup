@@ -1,0 +1,25 @@
+From 18816689f32f9e6c329b1e8986f75f2a5a9dbdb8 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 22 Sep 2017 13:50:01 -0400
+Subject: [PATCH] [Arm64] Fix typo
+
+---
+ src/jit/codegenarmarch.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index a41fe96..b13f1ab 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -1825,7 +1825,7 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* cpBlkNode)
+     // Grab the integer temp register to emit the loads and stores.
+     regNumber tmpReg = cpBlkNode->ExtractTempReg(RBM_ALLINT);
+ 
+-#ifdef _TARGAET_ARM64_
++#ifdef _TARGET_ARM64_
+     if (size >= 2 * REGSIZE_BYTES)
+     {
+         regNumber tmp2Reg = cpBlkNode->ExtractTempReg(RBM_ALLINT);
+-- 
+2.7.4
+
