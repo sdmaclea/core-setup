@@ -1,0 +1,105 @@
+From 29d70ee933e3a6f038103ac28e27b99dcf8a995c Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 19 Sep 2017 10:03:35 -0400
+Subject: [PATCH] [Arm64] Add Floor/Ceiling intrinsics
+
+---
+ src/jit/codegenarmarch.cpp | 13 ++++++++++++-
+ src/jit/importer.cpp       |  2 ++
+ src/jit/lsraarm64.cpp      |  4 ++--
+ src/jit/valuenum.cpp       | 12 ++++++++++++
+ 4 files changed, 28 insertions(+), 3 deletions(-)
+
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index a41fe96..dc09109 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -449,7 +449,7 @@ void CodeGen::genIntrinsic(GenTreePtr treeNode)
+     assert(varTypeIsFloating(srcNode));
+     assert(srcNode->TypeGet() == treeNode->TypeGet());
+ 
+-    // Right now only Abs/Round/Sqrt are treated as math intrinsics.
++    // Right now only Abs/Ceiling/Floor/Round/Sqrt are treated as math intrinsics.
+     //
+     switch (treeNode->gtIntrinsic.gtIntrinsicId)
+     {
+@@ -458,6 +458,17 @@ void CodeGen::genIntrinsic(GenTreePtr treeNode)
+             getEmitter()->emitInsBinary(INS_ABS, emitTypeSize(treeNode), treeNode, srcNode);
+             break;
+ 
++#ifdef _TARGET_ARM64_
++        case CORINFO_INTRINSIC_Ceiling:
++            genConsumeOperands(treeNode->AsOp());
++            getEmitter()->emitInsBinary(INS_frintp, emitActualTypeSize(treeNode), treeNode, srcNode);
++            break;
++
++        case CORINFO_INTRINSIC_Floor:
++            genConsumeOperands(treeNode->AsOp());
++            getEmitter()->emitInsBinary(INS_frintm, emitActualTypeSize(treeNode), treeNode, srcNode);
++            break;
++#endif
+         case CORINFO_INTRINSIC_Round:
+             NYI_ARM("genIntrinsic for round - not implemented yet");
+             genConsumeOperands(treeNode->AsOp());
+diff --git a/src/jit/importer.cpp b/src/jit/importer.cpp
+index ddee0ab..e10ae6a 100644
+--- a/src/jit/importer.cpp
++++ b/src/jit/importer.cpp
+@@ -18701,6 +18701,8 @@ bool Compiler::IsTargetIntrinsic(CorInfoIntrinsics intrinsicId)
+         case CORINFO_INTRINSIC_Sqrt:
+         case CORINFO_INTRINSIC_Abs:
+         case CORINFO_INTRINSIC_Round:
++        case CORINFO_INTRINSIC_Floor:
++        case CORINFO_INTRINSIC_Ceiling:
+             return true;
+ 
+         default:
+diff --git a/src/jit/lsraarm64.cpp b/src/jit/lsraarm64.cpp
+index e39c0d9..0b6891a 100644
+--- a/src/jit/lsraarm64.cpp
++++ b/src/jit/lsraarm64.cpp
+@@ -260,9 +260,9 @@ void LinearScan::TreeNodeInfoInit(GenTree* tree)
+ 
+         case GT_INTRINSIC:
+         {
+-            // TODO-ARM64-NYI
+-            // Right now only Abs/Round/Sqrt are treated as math intrinsics
+             noway_assert((tree->gtIntrinsic.gtIntrinsicId == CORINFO_INTRINSIC_Abs) ||
++                         (tree->gtIntrinsic.gtIntrinsicId == CORINFO_INTRINSIC_Ceiling) ||
++                         (tree->gtIntrinsic.gtIntrinsicId == CORINFO_INTRINSIC_Floor) ||
+                          (tree->gtIntrinsic.gtIntrinsicId == CORINFO_INTRINSIC_Round) ||
+                          (tree->gtIntrinsic.gtIntrinsicId == CORINFO_INTRINSIC_Sqrt));
+ 
+diff --git a/src/jit/valuenum.cpp b/src/jit/valuenum.cpp
+index e4990d6..473f0ce 100644
+--- a/src/jit/valuenum.cpp
++++ b/src/jit/valuenum.cpp
+@@ -3514,6 +3514,12 @@ ValueNum ValueNumStore::EvalMathFuncUnary(var_types typ, CorInfoIntrinsics gtMat
+                 case CORINFO_INTRINSIC_Abs:
+                     res = fabs(arg0Val);
+                     break;
++                case CORINFO_INTRINSIC_Ceiling:
++                    res = ceil(arg0Val);
++                    break;
++                case CORINFO_INTRINSIC_Floor:
++                    res = floor(arg0Val);
++                    break;
+                 case CORINFO_INTRINSIC_Round:
+                     res = FloatingPointUtils::round(arg0Val);
+                     break;
+@@ -3544,6 +3550,12 @@ ValueNum ValueNumStore::EvalMathFuncUnary(var_types typ, CorInfoIntrinsics gtMat
+                 case CORINFO_INTRINSIC_Abs:
+                     res = fabsf(arg0Val);
+                     break;
++                case CORINFO_INTRINSIC_Ceiling:
++                    res = ceilf(arg0Val);
++                    break;
++                case CORINFO_INTRINSIC_Floor:
++                    res = floorf(arg0Val);
++                    break;
+                 case CORINFO_INTRINSIC_Round:
+                     res = FloatingPointUtils::round(arg0Val);
+                     break;
+-- 
+2.7.4
+
