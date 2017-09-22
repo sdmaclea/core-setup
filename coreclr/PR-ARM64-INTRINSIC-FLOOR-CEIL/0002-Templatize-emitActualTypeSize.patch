@@ -1,0 +1,33 @@
+From 043450cb8f0e0c23c508d21cc30d7e3e26bad348 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 22 Sep 2017 13:23:03 -0400
+Subject: [PATCH] Templatize emitActualTypeSize
+
+---
+ src/jit/emit.h | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/src/jit/emit.h b/src/jit/emit.h
+index a9dc076..8c2b825 100644
+--- a/src/jit/emit.h
++++ b/src/jit/emit.h
+@@ -2382,11 +2382,12 @@ inline emitAttr emitTypeSize(T type)
+ 
+ extern const unsigned short emitTypeActSz[TYP_COUNT];
+ 
+-inline emitAttr emitActualTypeSize(var_types type)
++template <class T>
++inline emitAttr emitActualTypeSize(T type)
+ {
+-    assert(type < TYP_COUNT);
+-    assert(emitTypeActSz[type] > 0);
+-    return (emitAttr)emitTypeActSz[type];
++    assert(TypeGet(type) < TYP_COUNT);
++    assert(emitTypeActSz[TypeGet(type)] > 0);
++    return (emitAttr)emitTypeActSz[TypeGet(type)];
+ }
+ 
+ /*****************************************************************************
+-- 
+2.7.4
+
