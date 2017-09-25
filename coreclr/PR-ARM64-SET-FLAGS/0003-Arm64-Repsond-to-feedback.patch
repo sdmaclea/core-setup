@@ -1,0 +1,123 @@
+From d11ca21103627ef5eed573cb8ce5b208d385adbb Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 25 Sep 2017 15:07:22 -0400
+Subject: [PATCH] [Arm64] Repsond to feedback
+
+---
+ src/jit/codegenarm64.cpp | 40 ++++++++++++++++++++++++++++++++++++----
+ src/jit/codegenxarch.cpp |  3 +++
+ src/jit/lowerarmarch.cpp |  2 +-
+ 3 files changed, 40 insertions(+), 5 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index e5c1c46..e16d151 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -1572,7 +1572,7 @@ void CodeGen::genCodeForBinary(GenTree* treeNode)
+                 ins = INS_ands;
+                 break;
+             default:
+-                assert(!"Unexpected BinaryOp with GTF_SET_FLAGS set");
++                noway_assert(!"Unexpected BinaryOp with GTF_SET_FLAGS set");
+         }
+     }
+ 
+@@ -3280,7 +3280,7 @@ void CodeGen::genCkfinite(GenTreePtr treeNode)
+ }
+ 
+ //------------------------------------------------------------------------
+-// genCodeForCompare: Produce code for a GT_EQ/GT_NE/GT_LT/GT_LE/GT_GE/GT_GT node.
++// genCodeForCompare: Produce code for a GT_EQ/GT_NE/GT_LT/GT_LE/GT_GE/GT_GT/GT_TEST_EQ/GT_TEST_NE node.
+ //
+ // Arguments:
+ //    tree - the node
+@@ -3298,10 +3298,42 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
+     assert(!op1->isUsedFromMemory());
+     assert(!op2->isUsedFromMemory());
+ 
++    // Case of op1 == 0 or op1 != 0:
++    // Optimize generation of 'test' instruction if op1 sets flags.
++    //
++    // This behavior is designed to match the unexpected behavior
++    // of XARCH genCompareInt();
++    //
++    // TODO-Cleanup Review GTF_USE_FLAGS usage
++    // https://github.com/dotnet/coreclr/issues/14093
++    if ((tree->gtFlags & GTF_USE_FLAGS) != 0)
++    {
++        // op1 must set flags
++        assert(op1->gtSetFlags());
++
++        // Must be compare against zero.
++        assert(!tree->OperIs(GT_TEST_EQ, GT_TEST_NE));
++        assert(op2->IsIntegralConst(0));
++        assert(op2->isContained());
++
++        // Just consume the operands
+         genConsumeOperands(tree);
+ 
+-    if ((tree->gtFlags & GTF_USE_FLAGS) == 0)
++        // No need to generate compare instruction since
++        // op1 sets flags
++
++        // Are we evaluating this into a register?
++        if (targetReg != REG_NA)
+         {
++            genSetRegToCond(targetReg, tree);
++            genProduceReg(tree);
++        }
++
++        return;
++    }
++
++    genConsumeOperands(tree);
++
+     emitAttr cmpSize = EA_ATTR(genTypeSize(op1Type));
+ 
+     assert(genTypeSize(op1Type) == genTypeSize(op2Type));
+@@ -3314,6 +3346,7 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
+ 
+         if (op2->IsIntegralConst(0))
+         {
++            assert(op2->isContained());
+             emit->emitIns_R_F(INS_fcmp, cmpSize, op1->gtRegNum, 0.0);
+         }
+         else
+@@ -3340,7 +3373,6 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
+             emit->emitIns_R_R(ins, cmpSize, op1->gtRegNum, op2->gtRegNum);
+         }
+     }
+-    }
+ 
+     // Are we evaluating this into a register?
+     if (targetReg != REG_NA)
+diff --git a/src/jit/codegenxarch.cpp b/src/jit/codegenxarch.cpp
+index ce91b81..58c6c10 100644
+--- a/src/jit/codegenxarch.cpp
++++ b/src/jit/codegenxarch.cpp
+@@ -6246,6 +6246,9 @@ void CodeGen::genCompareInt(GenTreePtr treeNode)
+     // Case of op1 == 0 or op1 != 0:
+     // Optimize generation of 'test' instruction if op1 sets flags.
+     //
++    // TODO-Cleanup Review GTF_USE_FLAGS usage
++    // https://github.com/dotnet/coreclr/issues/14093
++    //
+     // Note that if LSRA has inserted any GT_RELOAD/GT_COPY before
+     // op1, it will not modify the flags set by codegen of op1.
+     // Similarly op1 could also be reg-optional at its use and
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index 65db5cd..a0a11fe 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -711,7 +711,7 @@ void Lowering::ContainCheckCompare(GenTreeOp* cmp)
+         // GenTree node we need to set the info whether its codegen
+         // will modify flags.
+         if (op2->IsIntegralConst(0) && (op1->gtNext == op2) && (op2->gtNext == cmp) &&
+-            cmp->OperIs(GT_EQ, GT_NE, GT_GT, GT_GE, GT_LT, GT_LE) && op1->OperIs(GT_ADD, GT_AND, GT_SUB))
++            !cmp->OperIs(GT_TEST_EQ, GT_TEST_NE) && op1->OperIs(GT_ADD, GT_AND, GT_SUB))
+         {
+             assert(!op1->gtSetFlags());
+             op1->gtFlags |= GTF_SET_FLAGS;
+-- 
+2.7.4
+

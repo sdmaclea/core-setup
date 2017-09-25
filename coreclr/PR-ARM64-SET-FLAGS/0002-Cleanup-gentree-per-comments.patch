@@ -1,4 +1,4 @@
-From 9c912333f2786d3765eac08d7557dc7753969203 Mon Sep 17 00:00:00 2001
+From e74fe85a47260881a5ebc0c2e3d5af7a6409a299 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 19 Sep 2017 18:27:11 -0400
 Subject: [PATCH] Cleanup gentree per comments
@@ -8,7 +8,7 @@ Subject: [PATCH] Cleanup gentree per comments
  1 file changed, 6 insertions(+), 29 deletions(-)
 
 diff --git a/src/jit/gentree.cpp b/src/jit/gentree.cpp
-index d5873ca..ea9b1f3 100644
+index 390aac1..9962be0 100644
 --- a/src/jit/gentree.cpp
 +++ b/src/jit/gentree.cpp
 @@ -8258,23 +8258,7 @@ bool GenTree::gtSetFlags() const

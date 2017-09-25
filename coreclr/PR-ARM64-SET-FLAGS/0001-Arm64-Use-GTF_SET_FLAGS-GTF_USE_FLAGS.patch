@@ -1,4 +1,4 @@
-From d3605194ac1807a8c013479028948838f3e3e976 Mon Sep 17 00:00:00 2001
+From 95f69bf863b500c645a072bc7a46f52bbdb3c491 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 15 Sep 2017 18:08:09 -0400
 Subject: [PATCH] [Arm64] Use GTF_SET_FLAGS/GTF_USE_FLAGS
@@ -12,7 +12,7 @@ Subject: [PATCH] [Arm64] Use GTF_SET_FLAGS/GTF_USE_FLAGS
  5 files changed, 54 insertions(+), 9 deletions(-)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index 9c9f823..0bca7d7 100644
+index 20061d4..e5c1c46 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
 @@ -1558,6 +1558,24 @@ void CodeGen::genCodeForBinary(GenTree* treeNode)
@@ -40,7 +40,7 @@ index 9c9f823..0bca7d7 100644
      // The arithmetic node must be sitting in a register (since it's not contained)
      assert(targetReg != REG_NA);
  
-@@ -3421,10 +3439,6 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
+@@ -3272,10 +3290,6 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
      regNumber targetReg = tree->gtRegNum;
      emitter*  emit      = getEmitter();
  
@@ -51,7 +51,7 @@ index 9c9f823..0bca7d7 100644
      GenTreePtr op1     = tree->gtOp1;
      GenTreePtr op2     = tree->gtOp2;
      var_types  op1Type = genActualType(op1->TypeGet());
-@@ -3435,6 +3449,8 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
+@@ -3286,6 +3300,8 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
  
      genConsumeOperands(tree);
  
@@ -60,7 +60,7 @@ index 9c9f823..0bca7d7 100644
          emitAttr cmpSize = EA_ATTR(genTypeSize(op1Type));
  
          assert(genTypeSize(op1Type) == genTypeSize(op2Type));
-@@ -3473,6 +3489,7 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
+@@ -3324,6 +3340,7 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
                  emit->emitIns_R_R(ins, cmpSize, op1->gtRegNum, op2->gtRegNum);
              }
          }
@@ -69,10 +69,10 @@ index 9c9f823..0bca7d7 100644
      // Are we evaluating this into a register?
      if (targetReg != REG_NA)
 diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
-index 6c9d61c..d7fa43d 100644
+index 0feb5e3..d901f8a 100644
 --- a/src/jit/emitarm64.cpp
 +++ b/src/jit/emitarm64.cpp
-@@ -11335,11 +11335,11 @@ regNumber emitter::emitInsTernary(instruction ins, emitAttr attr, GenTree* dst,
+@@ -11448,11 +11448,11 @@ regNumber emitter::emitInsTernary(instruction ins, emitAttr attr, GenTree* dst,
      bool isMulOverflow = false;
      if (dst->gtOverflowEx())
      {
@@ -87,7 +87,7 @@ index 6c9d61c..d7fa43d 100644
              ins = INS_subs;
          }
 diff --git a/src/jit/gentree.cpp b/src/jit/gentree.cpp
-index bcf8d36..d5873ca 100644
+index 17d86f8..390aac1 100644
 --- a/src/jit/gentree.cpp
 +++ b/src/jit/gentree.cpp
 @@ -8296,7 +8296,7 @@ bool GenTree::gtSetFlags() const
@@ -100,10 +100,10 @@ index bcf8d36..d5873ca 100644
      {
          // GTF_SET_FLAGS is not valid on GT_IND and is overlaid with GTF_NONFAULTING_IND
 diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
-index e44e6ce..4156c13 100644
+index 4cee63b..65db5cd 100644
 --- a/src/jit/lowerarmarch.cpp
 +++ b/src/jit/lowerarmarch.cpp
-@@ -693,7 +693,35 @@ void Lowering::ContainCheckCast(GenTreeCast* node)
+@@ -690,7 +690,35 @@ void Lowering::ContainCheckCast(GenTreeCast* node)
  //
  void Lowering::ContainCheckCompare(GenTreeOp* cmp)
  {
@@ -141,10 +141,10 @@ index e44e6ce..4156c13 100644
  
  //------------------------------------------------------------------------
 diff --git a/src/jit/target.h b/src/jit/target.h
-index 68b27f2..83e95bf 100644
+index 59bbdb4..fd28796 100644
 --- a/src/jit/target.h
 +++ b/src/jit/target.h
-@@ -1529,7 +1529,7 @@ typedef unsigned short regPairNoSmall; // arm: need 12 bits
+@@ -1533,7 +1533,7 @@ typedef unsigned short regPairNoSmall; // arm: need 12 bits
    #define FEATURE_MULTIREG_STRUCT_PROMOTE 1  // True when we want to promote fields of a multireg struct into registers
    #define FEATURE_FASTTAILCALL     1       // Tail calls made as epilog+jmp
    #define FEATURE_TAILCALL_OPT     1       // opportunistic Tail calls (i.e. without ".tail" prefix) made as fast tail calls.
