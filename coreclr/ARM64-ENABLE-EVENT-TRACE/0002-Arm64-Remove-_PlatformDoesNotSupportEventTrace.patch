@@ -1,0 +1,24 @@
+From ff3706a97cd33bf57fbba5ab3f6cee27aefeabbc Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 25 Sep 2017 17:00:39 -0400
+Subject: [PATCH] [Arm64] Remove _PlatformDoesNotSupportEventTrace
+
+---
+ .../runtime.Linux.Microsoft.NETCore.Runtime.CoreCLR.props                | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/src/.nuget/Microsoft.NETCore.Runtime.CoreCLR/runtime.Linux.Microsoft.NETCore.Runtime.CoreCLR.props b/src/.nuget/Microsoft.NETCore.Runtime.CoreCLR/runtime.Linux.Microsoft.NETCore.Runtime.CoreCLR.props
+index dd34d3d..69ebb80 100644
+--- a/src/.nuget/Microsoft.NETCore.Runtime.CoreCLR/runtime.Linux.Microsoft.NETCore.Runtime.CoreCLR.props
++++ b/src/.nuget/Microsoft.NETCore.Runtime.CoreCLR/runtime.Linux.Microsoft.NETCore.Runtime.CoreCLR.props
+@@ -7,7 +7,6 @@
+     <_PlatformDoesNotSupportCreatedump Condition="'$(Platform)' == 'arm64'">true</_PlatformDoesNotSupportCreatedump>
+     <_PlatformDoesNotSupportCreatedump Condition="'$(_runtimeOSFamily)' == 'tizen'">true</_PlatformDoesNotSupportCreatedump>
+     <_PlatformDoesNotSupportEventTrace Condition="'$(_runtimeOSFamily)' == 'tizen'">true</_PlatformDoesNotSupportEventTrace>
+-    <_PlatformDoesNotSupportEventTrace Condition="'$(Platform)' == 'arm64'">true</_PlatformDoesNotSupportEventTrace>
+     <_PlatformDoesNotSupportEventTrace Condition="'$(Platform)' == 'x86'">true</_PlatformDoesNotSupportEventTrace>
+     <_PlatformDoesNotSupportSosPlugin Condition="'$(_runtimeOSFamily)' == 'android'">true</_PlatformDoesNotSupportSosPlugin>
+     <_PlatformDoesNotSupportSosPlugin Condition="'$(Platform)' == 'arm64'">true</_PlatformDoesNotSupportSosPlugin>
+-- 
+2.7.4
+

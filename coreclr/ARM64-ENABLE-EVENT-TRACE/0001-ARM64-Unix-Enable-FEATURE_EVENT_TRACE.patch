@@ -1,0 +1,25 @@
+From dbd6644842783cd88c5e261927beee2234657835 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 25 Sep 2017 16:05:16 -0400
+Subject: [PATCH] [ARM64/Unix] Enable FEATURE_EVENT_TRACE
+
+---
+ clrfeatures.cmake | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/clrfeatures.cmake b/clrfeatures.cmake
+index 3d5d155..99d9971 100644
+--- a/clrfeatures.cmake
++++ b/clrfeatures.cmake
+@@ -18,6 +18,8 @@ if(NOT DEFINED FEATURE_EVENT_TRACE)
+       set(FEATURE_EVENT_TRACE 1)
+     elseif(CLR_CMAKE_TARGET_ARCH_ARM)
+       set(FEATURE_EVENT_TRACE 1)
++    elseif(CLR_CMAKE_TARGET_ARCH_ARM64)
++      set(FEATURE_EVENT_TRACE 1)
+     endif()
+   endif(CLR_CMAKE_PLATFORM_LINUX)
+ endif(NOT DEFINED FEATURE_EVENT_TRACE)
+-- 
+2.7.4
+
