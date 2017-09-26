@@ -1,0 +1,48 @@
+From a36c440378e30cf5247b3efa571a4d064ae16ca9 Mon Sep 17 00:00:00 2001
+From: Hyung-Kyu Choi <hk0110.choi@samsung.com>
+Date: Wed, 20 Sep 2017 16:05:07 +0900
+Subject: [PATCH] [RyuJIT/ARM32] Fix assertion condition in LSRA for ARM32
+
+Update assertion condition when handling an inactive
+constant interval for ARM32, because an inactive constant
+interval may be encountered.
+
+Fix #13750
+
+Signed-off-by: Hyung-Kyu Choi <hk0110.choi@samsung.com>
+---
+ src/jit/lsra.cpp | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/src/jit/lsra.cpp b/src/jit/lsra.cpp
+index 0d85a8a..e6a1b16 100644
+--- a/src/jit/lsra.cpp
++++ b/src/jit/lsra.cpp
+@@ -5927,9 +5927,24 @@ bool LinearScan::checkActiveInterval(Interval* interval, LsraLocation refLocatio
+             else
+             {
+                 RefPosition* nextAssignedRef = recentAssignedRef->nextRefPosition;
++#ifdef _TARGET_ARM_
++                // This function is invoked only from allocateBusyReg() through checkActiveIntervals().
++                //
++                // For ARM32, when we try to allocate a double register which consists of two float registers,
++                // tryAllocateFreeReg() may fail to allocate a double register even if one of two float
++                // reigsters is assigned to a inactive constant interval.
++                // https://github.com/dotnet/coreclr/pull/14080
++                //
++                // Therefore an inactive constant interval may be encountered here.
++                assert(nextAssignedRef != nullptr || interval->isConstant);
++                if (nextAssignedRef != nullptr)
++                    assert(nextAssignedRef->nodeLocation == refLocation ||
++                           (nextAssignedRef->nodeLocation + 1 == refLocation && nextAssignedRef->delayRegFree));
++#else  // !_TARGET_ARM_
+                 assert(nextAssignedRef != nullptr);
+                 assert(nextAssignedRef->nodeLocation == refLocation ||
+                        (nextAssignedRef->nodeLocation + 1 == refLocation && nextAssignedRef->delayRegFree));
++#endif // !_TARGET_ARM_
+             }
+         }
+         return false;
+-- 
+2.7.4
+

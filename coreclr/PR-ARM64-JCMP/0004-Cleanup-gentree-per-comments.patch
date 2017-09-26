@@ -1,0 +1,73 @@
+From 7e93ee31bd33b367458fc225d79b4260320b2195 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 19 Sep 2017 18:27:11 -0400
+Subject: [PATCH] Cleanup gentree per comments
+
+---
+ src/jit/gentree.cpp | 35 ++++++-----------------------------
+ 1 file changed, 6 insertions(+), 29 deletions(-)
+
+diff --git a/src/jit/gentree.cpp b/src/jit/gentree.cpp
+index 390aac1..9962be0 100644
+--- a/src/jit/gentree.cpp
++++ b/src/jit/gentree.cpp
+@@ -8258,23 +8258,7 @@ bool GenTree::gtSetFlags() const
+         return false;
+     }
+ 
+-#if FEATURE_SET_FLAGS
+-    assert(OperIsSimple());
+-
+-    if ((gtFlags & GTF_SET_FLAGS) && gtOper != GT_IND)
+-    {
+-        // GTF_SET_FLAGS is not valid on GT_IND and is overlaid with GTF_NONFAULTING_IND
+-        return true;
+-    }
+-    else
+-    {
+-        return false;
+-    }
+-
+-#else // !FEATURE_SET_FLAGS
+-
+-#ifdef LEGACY_BACKEND
+-#ifdef _TARGET_XARCH_
++#if defined(LEGACY_BACKEND) && !FEATURE_SET_FLAGS && defined(_TARGET_XARCH_)
+     // Return true if/when the codegen for this node will set the flags
+     //
+     //
+@@ -8290,13 +8274,11 @@ bool GenTree::gtSetFlags() const
+     {
+         return true;
+     }
+-#else
+-    // Otherwise for other architectures we should return false
+-    return false;
+-#endif
++#else // !(defined(LEGACY_BACKEND) && !FEATURE_SET_FLAGS && defined(_TARGET_XARCH_))
+ 
+-#else // !LEGACY_BACKEND
+-#if defined(_TARGET_XARCH_) || defined(_TARGET_ARM64_)
++#if FEATURE_SET_FLAGS
++    assert(OperIsSimple());
++#endif
+     if (((gtFlags & GTF_SET_FLAGS) != 0) && (gtOper != GT_IND))
+     {
+         // GTF_SET_FLAGS is not valid on GT_IND and is overlaid with GTF_NONFAULTING_IND
+@@ -8306,12 +8288,7 @@ bool GenTree::gtSetFlags() const
+     {
+         return false;
+     }
+-#else
+-    unreached();
+-#endif
+-#endif // !LEGACY_BACKEND
+-
+-#endif // !FEATURE_SET_FLAGS
++#endif // !(defined(LEGACY_BACKEND) && !FEATURE_SET_FLAGS && defined(_TARGET_XARCH_))
+ }
+ 
+ bool GenTree::gtRequestSetFlags()
+-- 
+2.7.4
+

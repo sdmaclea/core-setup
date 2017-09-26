@@ -1,0 +1,112 @@
+From 59c0637eba321f2d696737470020c2aa091d3cea Mon Sep 17 00:00:00 2001
+From: Hyung-Kyu Choi <hk0110.choi@samsung.com>
+Date: Tue, 26 Sep 2017 09:37:04 +0900
+Subject: [PATCH] [ARM32] Update armel rootfs for Tizen (#14173)
+
+* [Tizen/ARM32] Update armel rootfs for Tizen
+
+- Add lttng-ust-dev to Tizen rootfs for cross build
+- Use rootfs of the latest Tizen 4.0
+
+Signed-off-by: Hyung-Kyu Choi <hk0110.choi@samsung.com>
+
+* [Tizen/ARM32] Update Tizen CI script
+
+- Update arm32 CI script for Tizen to use the latest environment
+
+Signed-off-by: Hyung-Kyu Choi <hk0110.choi@samsung.com>
+---
+ cross/armel/tizen-fetch.sh        | 10 +++++-----
+ cross/armel/tizen/tizen-dotnet.ks | 11 +++++++++--
+ tests/scripts/arm32_ci_script.sh  |  4 ++--
+ 3 files changed, 16 insertions(+), 9 deletions(-)
+
+diff --git a/cross/armel/tizen-fetch.sh b/cross/armel/tizen-fetch.sh
+index c7a509a..6048ead 100755
+--- a/cross/armel/tizen-fetch.sh
++++ b/cross/armel/tizen-fetch.sh
+@@ -154,8 +154,8 @@ fetch_tizen_pkgs()
+ 	done
+ }
+ 
+-Inform "Initialize base"
+-fetch_tizen_pkgs_init standard base
++Inform "Initialize arm 4.0-base"
++fetch_tizen_pkgs_init arm 4.0-base
+ Inform "fetch common packages"
+ fetch_tizen_pkgs armv7l gcc glibc glibc-devel
+ fetch_tizen_pkgs noarch linux-glibc-devel
+@@ -164,12 +164,12 @@ fetch_tizen_pkgs armv7l lldb lldb-devel libuuid libuuid-devel libgcc libstdc++ l
+ Inform "fetch corefx packages"
+ fetch_tizen_pkgs armv7l libcom_err libcom_err-devel zlib zlib-devel libopenssl libopenssl-devel
+ 
+-Inform "Initialize unified"
+-fetch_tizen_pkgs_init standard unified
++Inform "Initialize standard 4.0-unified"
++fetch_tizen_pkgs_init standard 4.0-unified
+ Inform "fetch common packages"
+ fetch_tizen_pkgs armv7l libicu-devel
+ Inform "fetch coreclr packages"
+-fetch_tizen_pkgs armv7l tizen-release
++fetch_tizen_pkgs armv7l tizen-release lttng-ust-devel lttng-ust userspace-rcu-devel userspace-rcu
+ Inform "fetch corefx packages"
+ fetch_tizen_pkgs armv7l gssdp gssdp-devel krb5 krb5-devel libcurl libcurl-devel
+ 
+diff --git a/cross/armel/tizen/tizen-dotnet.ks b/cross/armel/tizen/tizen-dotnet.ks
+index e9b4b75..d67cf2b 100644
+--- a/cross/armel/tizen/tizen-dotnet.ks
++++ b/cross/armel/tizen/tizen-dotnet.ks
+@@ -4,8 +4,12 @@ timezone --utc Asia/Seoul
+ 
+ part / --fstype="ext4" --size=3500 --ondisk=mmcblk0 --label rootfs --fsoptions=defaults,noatime
+ 
+-repo --name=mobile  --baseurl=http://download.tizen.org/releases/weekly/tizen/mobile/latest/repos/arm-wayland/packages/ --ssl_verify=no
+-repo --name=base    --baseurl=http://download.tizen.org/releases/weekly/tizen/base/latest/repos/arm/packages/           --ssl_verify=no
++rootpw tizen
++desktop --autologinuser=root
++user --name root  --groups audio,video --password 'tizen'
++
++repo --name=standard  --baseurl=http://download.tizen.org/releases/daily/tizen/4.0-unified/latest/repos/standard/packages/ --ssl_verify=no
++repo --name=base      --baseurl=http://download.tizen.org/releases/daily/tizen/4.0-base/latest/repos/arm/packages/ --ssl_verify=no
+ 
+ %packages
+ tar
+@@ -19,10 +23,13 @@ perl
+ binutils
+ findutils
+ util-linux
++lttng-ust
++userspace-rcu
+ procps-ng
+ tzdata
+ ca-certificates
+ 
++
+ ### Core FX
+ libicu
+ libuuid
+diff --git a/tests/scripts/arm32_ci_script.sh b/tests/scripts/arm32_ci_script.sh
+index e73e266..aecb3e8 100755
+--- a/tests/scripts/arm32_ci_script.sh
++++ b/tests/scripts/arm32_ci_script.sh
+@@ -265,7 +265,7 @@ function cross_build_coreclr_with_docker {
+         # For armel Tizen, we are going to construct RootFS on the fly.
+         case $__linuxCodeName in
+         tizen)
+-            __dockerImage=" hqueue/dotnetcore:ubuntu1404_cross_prereqs_v4-tizen_rootfs"
++            __dockerImage=" hqueue/dotnet-buildtools-prereqs:ubuntu-14.04-cross-0cd4667-20172211042239-tizen-rootfs-20170925"
+             __skipRootFS=1
+             __dockerEnvironmentVariables+=" -e ROOTFS_DIR=/crossrootfs/armel.tizen.build"
+             __runtimeOS="tizen.4.0.0"
+@@ -388,7 +388,7 @@ function run_tests_using_docker {
+     elif [ "$__buildArch" == "armel" ]; then
+         case $__linuxCodeName in
+         tizen)
+-            __dockerImage=" hqueue/dotnetcore:ubuntu1404_cross_prereqs_v4-tizen_rootfs"
++            __dockerImage=" hqueue/dotnet-buildtools-prereqs:ubuntu-14.04-cross-0cd4667-20172211042239-tizen-rootfs-20170925"
+             __skipRootFS=1
+             __dockerEnvironmentVariables=" -e ROOTFS_DIR=/crossrootfs/armel.tizen.test"
+         ;;
+-- 
+2.7.4
+
