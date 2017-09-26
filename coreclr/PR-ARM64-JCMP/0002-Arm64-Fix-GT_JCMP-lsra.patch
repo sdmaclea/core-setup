@@ -1,0 +1,38 @@
+From 21dab2e6c9a3be7d528de219b8ba272d55850566 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 26 Sep 2017 17:04:24 -0400
+Subject: [PATCH] [Arm64] Fix GT_JCMP lsra
+
+---
+ src/jit/lsra.cpp | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/src/jit/lsra.cpp b/src/jit/lsra.cpp
+index b5a8f8a..4a8f537 100644
+--- a/src/jit/lsra.cpp
++++ b/src/jit/lsra.cpp
+@@ -10078,6 +10078,21 @@ void LinearScan::handleOutgoingCriticalEdges(BasicBlock* block)
+         switchRegs |= genRegMask(op2->gtRegNum);
+     }
+ 
++#ifdef _TARGET_ARM64_
++    // Next, if this blocks ends with a JCMP, we have to make sure not to copy
++    // into the registers that it uses.
++    if (block->bbJumpKind == BBJ_COND)
++    {
++        GenTree* lastNode = LIR::AsRange(block).LastNode();
++
++        if (lastNode->OperIs(GT_JCMP))
++        {
++            GenTree* op1 = lastNode->gtGetOp1();
++            switchRegs |= genRegMask(op1->gtRegNum);
++        }
++    }
++#endif
++
+     VarToRegMap sameVarToRegMap = sharedCriticalVarToRegMap;
+     regMaskTP   sameWriteRegs   = RBM_NONE;
+     regMaskTP   diffReadRegs    = RBM_NONE;
+-- 
+2.7.4
+
