@@ -1,0 +1,62 @@
+From 415e7a7c6a01d5f2c5c722ace07c16e3c4aafa95 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 27 Sep 2017 12:41:52 -0400
+Subject: [PATCH] [Arm64] Add JCMP comments per review
+
+---
+ src/jit/codegenarm64.cpp | 22 ++++++++++++++++++++++
+ src/jit/gentree.cpp      |  5 +++++
+ 2 files changed, 27 insertions(+)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 71ea16f..7485b20 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3385,6 +3385,28 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
+ //------------------------------------------------------------------------
+ // genCodeForJumpCompare: Generates code for jmpCompare statement.
+ //
++// A GT_JCMP node is created when a comparison and conditional branch
++// can be executed in a single instruction.
++//
++// Arm64 has a few instructions with this behavior.
++//   - cbz/cbnz -- Compare and branch register zero/not zero
++//   - tbz/tbnz -- Test and branch register bit zero/not zero
++//
++// A GT_JCMP cbz/cbnz node is created when there is a GT_EQ or GT_NE
++// integer/unsigned comparison against #0 which is used by a GT_JTRUE
++// condition jump node.
++//
++// A GT_JCMP cbz/cbnz node is created when there is a GT_TEST_EQ or GT_TEST_NE
++// integer/unsigned comparison against against a mask with a single bit set
++// which is used by a GT_JTRUE condition jump node.
++//
++// This node is repsonsible for consuming the register, and emitting the
++// appropriate fused compare/test and branch instruction
++//
++// Two flags guide code generation
++//    GTF_JCMP_TST -- Set if this is a tbz/tbnz rather than cbz/cbnz
++//    GTF_JCMP_EQ  -- Set if this is cbz/tbz rather than cbnz/tbnz
++//
+ // Arguments:
+ //    tree - The GT_JCMP tree node.
+ //
+diff --git a/src/jit/gentree.cpp b/src/jit/gentree.cpp
+index 4c938eb..77d6364 100644
+--- a/src/jit/gentree.cpp
++++ b/src/jit/gentree.cpp
+@@ -2544,6 +2544,11 @@ GenTreePtr Compiler::gtReverseCond(GenTree* tree)
+     }
+     else if (tree->OperIs(GT_JCMP))
+     {
++        // Flip the GTF_JCMP_EQ
++        //
++        // This causes switching
++        //     cbz <=> cbnz
++        //     tbz <=> tbnz
+         tree->gtFlags ^= GTF_JCMP_EQ;
+     }
+     else
+-- 
+2.7.4
+
