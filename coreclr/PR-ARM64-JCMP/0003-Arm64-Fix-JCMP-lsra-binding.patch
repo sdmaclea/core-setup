@@ -1,0 +1,53 @@
+From 021ecc08732cfd8d95ff5c1abd477f8bcf2a30f6 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 26 Sep 2017 19:31:18 -0400
+Subject: [PATCH] [Arm64] Fix JCMP lsra binding
+
+---
+ src/jit/lsra.cpp | 16 +++++++++++++++-
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/src/jit/lsra.cpp b/src/jit/lsra.cpp
+index 4a8f537..c219749 100644
+--- a/src/jit/lsra.cpp
++++ b/src/jit/lsra.cpp
+@@ -10080,7 +10080,8 @@ void LinearScan::handleOutgoingCriticalEdges(BasicBlock* block)
+ 
+ #ifdef _TARGET_ARM64_
+     // Next, if this blocks ends with a JCMP, we have to make sure not to copy
+-    // into the registers that it uses.
++    // into the register that it uses or modify the local variable it must consume
++    LclVarDsc* jcmpLocalVarDsc = nullptr;
+     if (block->bbJumpKind == BBJ_COND)
+     {
+         GenTree* lastNode = LIR::AsRange(block).LastNode();
+@@ -10089,6 +10090,12 @@ void LinearScan::handleOutgoingCriticalEdges(BasicBlock* block)
+         {
+             GenTree* op1 = lastNode->gtGetOp1();
+             switchRegs |= genRegMask(op1->gtRegNum);
++
++            if (op1->IsLocal())
++            {
++                GenTreeLclVarCommon* lcl = op1->AsLclVarCommon();
++                jcmpLocalVarDsc          = &compiler->lvaTable[lcl->gtLclNum];
++            }
+         }
+     }
+ #endif
+@@ -10166,6 +10173,13 @@ void LinearScan::handleOutgoingCriticalEdges(BasicBlock* block)
+                 sameToReg = REG_NA;
+             }
+ 
++#ifdef _TARGET_ARM64_
++            if (jcmpLocalVarDsc && (jcmpLocalVarDsc->lvVarIndex == outResolutionSetVarIndex))
++            {
++                sameToReg = REG_NA;
++            }
++#endif
++
+             // If the var is live only at those blocks connected by a split edge and not live-in at some of the
+             // target blocks, we will resolve it the same way as if it were in diffResolutionSet and resolution
+             // will be deferred to the handling of split edges, which means copy will only be at those target(s).
+-- 
+2.7.4
+
