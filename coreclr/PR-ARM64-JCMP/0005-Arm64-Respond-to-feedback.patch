@@ -1,0 +1,72 @@
+From 932b8b5cdd0fda242dfd183599a7e022bc2b66e3 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 27 Sep 2017 17:16:51 -0400
+Subject: [PATCH] [Arm64] Respond to feedback
+
+---
+ src/jit/codegenarm64.cpp | 5 ++++-
+ src/jit/gentree.h        | 4 ++--
+ src/jit/lowerarmarch.cpp | 5 ++++-
+ 3 files changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 7485b20..8d21ae3 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3392,11 +3392,14 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
+ //   - cbz/cbnz -- Compare and branch register zero/not zero
+ //   - tbz/tbnz -- Test and branch register bit zero/not zero
+ //
++// The cbz/cbnz supports the normal +/- 1MB branch range for conditional branches
++// The tbz/tbnz supports a  smaller +/- 32KB branch range
++//
+ // A GT_JCMP cbz/cbnz node is created when there is a GT_EQ or GT_NE
+ // integer/unsigned comparison against #0 which is used by a GT_JTRUE
+ // condition jump node.
+ //
+-// A GT_JCMP cbz/cbnz node is created when there is a GT_TEST_EQ or GT_TEST_NE
++// A GT_JCMP tbz/tbnz node is created when there is a GT_TEST_EQ or GT_TEST_NE
+ // integer/unsigned comparison against against a mask with a single bit set
+ // which is used by a GT_JTRUE condition jump node.
+ //
+diff --git a/src/jit/gentree.h b/src/jit/gentree.h
+index bd27050..1bdc1ae 100644
+--- a/src/jit/gentree.h
++++ b/src/jit/gentree.h
+@@ -991,8 +991,8 @@ public:
+ #define GTF_RELOP_ZTT               0x08000000 // GT_<relop> -- Loop test cloned for converting while-loops into do-while
+                                                //               with explicit "loop test" in the header block.
+ 
+-#define GTF_JCMP_EQ                 0x80000000 // GTF_JCMP_EQ  -- Branch on equalrather than not equal
+-#define GTF_JCMP_TST                0x40000000 // GTF_JCMP_TST -- Use test rather than compare
++#define GTF_JCMP_EQ                 0x80000000 // GTF_JCMP_EQ  -- Branch on equal rather than not equal
++#define GTF_JCMP_TST                0x40000000 // GTF_JCMP_TST -- Use bit test instruction rather than compare against zero instruction
+ 
+ #define GTF_RET_MERGED              0x80000000 // GT_RETURN -- This is a return generated during epilog merging.
+ 
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index 727e9f1..8986f2f 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -121,7 +121,6 @@ bool Lowering::IsContainableImmed(GenTree* parentNode, GenTree* childNode)
+             case GT_LE:
+             case GT_GE:
+             case GT_GT:
+-            case GT_JCMP:
+                 return emitter::emitIns_valid_imm_for_cmp(immVal, size);
+                 break;
+             case GT_AND:
+@@ -131,6 +130,10 @@ bool Lowering::IsContainableImmed(GenTree* parentNode, GenTree* childNode)
+             case GT_TEST_NE:
+                 return emitter::emitIns_valid_imm_for_alu(immVal, size);
+                 break;
++            case GT_JCMP:
++                assert(((parentNode->gtFlags & GTF_JCMP_TST) == 0) ? (immVal == 0) : isPow2(immVal));
++                return true;
++                break;
+ #elif defined(_TARGET_ARM_)
+             case GT_EQ:
+             case GT_NE:
+-- 
+2.7.4
+
