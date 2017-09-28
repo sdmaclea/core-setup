@@ -1,0 +1,42 @@
+From 658a42faddd842031c1340c272279a482a4c8dd9 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 28 Sep 2017 14:04:56 -0400
+Subject: [PATCH] Allow cross machine re-crossgen
+
+---
+ src/vm/readytoruninfo.cpp | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/vm/readytoruninfo.cpp b/src/vm/readytoruninfo.cpp
+index 996a862..5ac1eb1 100644
+--- a/src/vm/readytoruninfo.cpp
++++ b/src/vm/readytoruninfo.cpp
+@@ -495,12 +495,6 @@ PTR_ReadyToRunInfo ReadyToRunInfo::Initialize(Module * pModule, AllocMemTracker
+         return NULL;
+     }
+ 
+-    if (!pLayout->IsNativeMachineFormat())
+-    {
+-        // For CoreCLR, be strict about disallowing machine mismatches.
+-        COMPlusThrowHR(COR_E_BADIMAGEFORMAT);
+-    }
+-
+ #ifdef FEATURE_NATIVE_IMAGE_GENERATION
+     // Ignore ReadyToRun during NGen
+     if (IsCompilationProcess() && !IsNgenPDBCompilationProcess())
+@@ -510,6 +504,12 @@ PTR_ReadyToRunInfo ReadyToRunInfo::Initialize(Module * pModule, AllocMemTracker
+     }
+ #endif
+ 
++    if (!pLayout->IsNativeMachineFormat())
++    {
++        // For CoreCLR, be strict about disallowing machine mismatches.
++        COMPlusThrowHR(COR_E_BADIMAGEFORMAT);
++    }
++
+ #ifndef CROSSGEN_COMPILE
+     // The file must have been loaded using LoadLibrary
+     if (!pLayout->IsRelocated())
+-- 
+2.7.4
+
