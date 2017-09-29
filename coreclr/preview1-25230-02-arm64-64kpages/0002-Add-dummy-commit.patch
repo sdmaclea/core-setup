@@ -1,0 +1,21 @@
+From 130c91cf205d3f829649fc9a6063964d91e4903b Mon Sep 17 00:00:00 2001
+From: Ravi Eda <raeda@microsoft.com>
+Date: Thu, 20 Apr 2017 09:47:29 -0500
+Subject: [PATCH] Add dummy commit.
+
+---
+ Documentation/dummy.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Documentation/dummy.txt b/Documentation/dummy.txt
+index 5857466..ec583fd 100644
+--- a/Documentation/dummy.txt
++++ b/Documentation/dummy.txt
+@@ -1 +1 @@
+-Thursday, April 20, 2017 6:00:00 AM
+\ No newline at end of file
++Thursday, April 20, 2017 10:00:00 AM
+\ No newline at end of file
+-- 
+2.7.4
+

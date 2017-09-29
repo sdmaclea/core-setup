@@ -1,0 +1,179 @@
+From 677bcf58c222714e4364a8255eb1a63153201c43 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 8 Jun 2017 19:02:33 -0400
+Subject: [PATCH] [Arm64/Unix] Fix SOFTWARE_WRITE_WATCH for 64K pages (#11413)
+
+* Decouple Software Write Watch from page size
+
+* Use WRITE_WATCH_UNIT_SIZE in revisit_written_page(s)
+
+* GC add align_write_watch_lower_page
+---
+ src/gc/gc.cpp                 | 30 ++++++++++++++++++++++--------
+ src/gc/softwarewritewatch.cpp |  8 ++++----
+ src/gc/softwarewritewatch.h   |  4 +++-
+ 3 files changed, 29 insertions(+), 13 deletions(-)
+
+diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
+index 39f8af8..30cee50 100644
+--- a/src/gc/gc.cpp
++++ b/src/gc/gc.cpp
+@@ -18,6 +18,7 @@
+ //
+ 
+ #include "gcpriv.h"
++#include "softwarewritewatch.h"
+ 
+ #define USE_INTROSORT
+ 
+@@ -2161,6 +2162,19 @@ uint8_t* align_lower_page (uint8_t* add)
+ }
+ 
+ inline
++size_t align_write_watch_lower_page (size_t add)
++{
++    return (add & ~(WRITE_WATCH_UNIT_SIZE - 1));
++}
++
++inline
++uint8_t* align_write_watch_lower_page (uint8_t* add)
++{
++    return (uint8_t*)align_lower_page ((size_t)add);
++}
++
++
++inline
+ BOOL power_of_two_p (size_t integer)
+ {
+     return !(integer & (integer-1));
+@@ -26178,7 +26192,7 @@ void gc_heap::revisit_written_page (uint8_t* page,
+     }
+     else
+     {
+-        if (((last_page + OS_PAGE_SIZE) == page)
++        if (((last_page + WRITE_WATCH_UNIT_SIZE) == page)
+             || (start_address <= last_object))
+         {
+             o = last_object;
+@@ -26193,9 +26207,9 @@ void gc_heap::revisit_written_page (uint8_t* page,
+ 
+     dprintf (3,("page %Ix start: %Ix, %Ix[ ",
+                (size_t)page, (size_t)o,
+-               (size_t)(min (high_address, page + OS_PAGE_SIZE))));
++               (size_t)(min (high_address, page + WRITE_WATCH_UNIT_SIZE))));
+ 
+-    while (o < (min (high_address, page + OS_PAGE_SIZE)))
++    while (o < (min (high_address, page + WRITE_WATCH_UNIT_SIZE)))
+     {
+         size_t s;
+ 
+@@ -26250,7 +26264,7 @@ void gc_heap::revisit_written_page (uint8_t* page,
+             {
+                 dprintf (3, ("going through %Ix", (size_t)o));
+                 go_through_object (method_table(o), o, s, poo, start_address, use_start, (o + s),
+-                                    if ((uint8_t*)poo >= min (high_address, page + OS_PAGE_SIZE))
++                                    if ((uint8_t*)poo >= min (high_address, page + WRITE_WATCH_UNIT_SIZE))
+                                     {
+                                         no_more_loop_p = TRUE;
+                                         goto end_limit;
+@@ -26267,7 +26281,7 @@ void gc_heap::revisit_written_page (uint8_t* page,
+                 large_objects_p &&
+ #endif // !FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+                 ((CObjectHeader*)o)->IsFree() &&
+-                (next_o > min (high_address, page + OS_PAGE_SIZE)))
++                (next_o > min (high_address, page + WRITE_WATCH_UNIT_SIZE)))
+             {
+                 // We need to not skip the object here because of this corner scenario:
+                 // A large object was being allocated during BGC mark so we first made it 
+@@ -26304,7 +26318,7 @@ end_limit:
+ #ifdef MULTIPLE_HEAPS
+     if (concurrent_p)
+     {
+-        assert (last_object < (min (high_address, page + OS_PAGE_SIZE)));
++        assert (last_object < (min (high_address, page + WRITE_WATCH_UNIT_SIZE)));
+     }
+     else
+ #endif //MULTIPLE_HEAPS
+@@ -26313,7 +26327,7 @@ end_limit:
+     }
+ 
+     dprintf (3,("Last object: %Ix", (size_t)last_object));
+-    last_page = align_lower_page (o);
++    last_page = align_write_watch_lower_page (o);
+ }
+ 
+ // When reset_only_p is TRUE, we should only reset pages that are in range
+@@ -26494,7 +26508,7 @@ void gc_heap::revisit_written_pages (BOOL concurrent_p, BOOL reset_only_p)
+                     }
+ 
+                     if (bcount >= array_size){
+-                        base_address = background_written_addresses [array_size-1] + OS_PAGE_SIZE;
++                        base_address = background_written_addresses [array_size-1] + WRITE_WATCH_UNIT_SIZE;
+                         bcount = array_size;
+                     }
+                 }
+diff --git a/src/gc/softwarewritewatch.cpp b/src/gc/softwarewritewatch.cpp
+index b852938..e1f305e 100644
+--- a/src/gc/softwarewritewatch.cpp
++++ b/src/gc/softwarewritewatch.cpp
+@@ -10,7 +10,7 @@
+ #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ #ifndef DACCESS_COMPILE
+ 
+-static_assert((static_cast<size_t>(1) << SOFTWARE_WRITE_WATCH_AddressToTableByteIndexShift) == OS_PAGE_SIZE, "Unexpected OS_PAGE_SIZE");
++static_assert((static_cast<size_t>(1) << SOFTWARE_WRITE_WATCH_AddressToTableByteIndexShift) == WRITE_WATCH_UNIT_SIZE, "Unexpected WRITE_WATCH_UNIT_SIZE");
+ 
+ extern "C"
+ {
+@@ -95,7 +95,7 @@ bool SoftwareWriteWatch::GetDirtyFromBlock(
+             block[byteIndex] = 0;
+         }
+ 
+-        void *pageAddress = firstPageAddressInBlock + byteIndex * OS_PAGE_SIZE;
++        void *pageAddress = firstPageAddressInBlock + byteIndex * WRITE_WATCH_UNIT_SIZE;
+         assert(pageAddress >= GetHeapStartAddress());
+         assert(pageAddress < GetHeapEndAddress());
+         assert(dirtyPageIndex < dirtyPageCount);
+@@ -184,7 +184,7 @@ void SoftwareWriteWatch::GetDirty(
+                 break;
+             }
+             currentBlock += sizeof(size_t);
+-            firstPageAddressInCurrentBlock += sizeof(size_t) * OS_PAGE_SIZE;
++            firstPageAddressInCurrentBlock += sizeof(size_t) * WRITE_WATCH_UNIT_SIZE;
+         }
+ 
+         while (currentBlock < fullBlockEnd)
+@@ -202,7 +202,7 @@ void SoftwareWriteWatch::GetDirty(
+                 break;
+             }
+             currentBlock += sizeof(size_t);
+-            firstPageAddressInCurrentBlock += sizeof(size_t) * OS_PAGE_SIZE;
++            firstPageAddressInCurrentBlock += sizeof(size_t) * WRITE_WATCH_UNIT_SIZE;
+         }
+         if (currentBlock < fullBlockEnd)
+         {
+diff --git a/src/gc/softwarewritewatch.h b/src/gc/softwarewritewatch.h
+index 0e6e6c8..e59fd61 100644
+--- a/src/gc/softwarewritewatch.h
++++ b/src/gc/softwarewritewatch.h
+@@ -8,6 +8,8 @@
+ #include "gcinterface.h"
+ #include "gc.h"
+ 
++#define WRITE_WATCH_UNIT_SIZE 0x1000
++
+ #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ #ifndef DACCESS_COMPILE
+ 
+@@ -249,7 +251,7 @@ inline void *SoftwareWriteWatch::GetPageAddress(size_t tableByteIndex)
+     void *pageAddress = reinterpret_cast<void *>(tableByteIndex << AddressToTableByteIndexShift);
+     assert(pageAddress >= GetHeapStartAddress());
+     assert(pageAddress < GetHeapEndAddress());
+-    assert(ALIGN_DOWN(pageAddress, OS_PAGE_SIZE) == pageAddress);
++    assert(ALIGN_DOWN(pageAddress, WRITE_WATCH_UNIT_SIZE) == pageAddress);
+     return pageAddress;
+ }
+ 
+-- 
+2.7.4
+

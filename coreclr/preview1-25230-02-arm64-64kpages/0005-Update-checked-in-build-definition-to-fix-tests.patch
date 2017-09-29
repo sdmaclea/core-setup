@@ -1,0 +1,26 @@
+From 2b5f14becc80f75c7fd9a1687f210bac0a8e8afe Mon Sep 17 00:00:00 2001
+From: Matt Galbraith <MattGal@users.noreply.github.com>
+Date: Tue, 25 Apr 2017 16:14:59 -0700
+Subject: [PATCH] Update checked-in build definition to fix tests
+
+Checked in definition contains 'master' which ends up causing race condition in tests.  Set HelixBranch to actual branch used.
+---
+ buildpipeline/Dotnet-CoreClr-Trusted-BuildTests.json | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/buildpipeline/Dotnet-CoreClr-Trusted-BuildTests.json b/buildpipeline/Dotnet-CoreClr-Trusted-BuildTests.json
+index 3defd10..3bef03b 100644
+--- a/buildpipeline/Dotnet-CoreClr-Trusted-BuildTests.json
++++ b/buildpipeline/Dotnet-CoreClr-Trusted-BuildTests.json
+@@ -205,7 +205,7 @@
+       "value": "coreclr"
+     },
+     "HelixBranch": {
+-      "value": "master"
++      "value": "release/2.0.0"
+     },
+     "HelixApiAccessKey": {
+       "value": null,
+-- 
+2.7.4
+

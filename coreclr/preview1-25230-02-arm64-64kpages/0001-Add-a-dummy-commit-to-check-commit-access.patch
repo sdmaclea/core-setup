@@ -1,0 +1,21 @@
+From f1ef5dc7e2d0156b28d7ffb5892551d304a59dfc Mon Sep 17 00:00:00 2001
+From: Ravi Eda <raeda@microsoft.com>
+Date: Thu, 20 Apr 2017 06:49:56 -0500
+Subject: [PATCH] Add a dummy commit to check commit access.
+
+---
+ Documentation/dummy.txt | 1 +
+ 1 file changed, 1 insertion(+)
+ create mode 100644 Documentation/dummy.txt
+
+diff --git a/Documentation/dummy.txt b/Documentation/dummy.txt
+new file mode 100644
+index 0000000..5857466
+--- /dev/null
++++ b/Documentation/dummy.txt
+@@ -0,0 +1 @@
++Thursday, April 20, 2017 6:00:00 AM
+\ No newline at end of file
+-- 
+2.7.4
+

@@ -1,0 +1,238 @@
+From 20fd7f25d0244562fa20f61cb39670ce20853074 Mon Sep 17 00:00:00 2001
+From: dotnet bot <dotnet-bot@dotnetfoundation.org>
+Date: Sat, 29 Apr 2017 09:03:25 -0700
+Subject: [PATCH] Update CoreClr, CoreFx to preview1-25229-01,
+ preview1-25229-02, respectively (#11250)
+
+---
+ dependencies.props                                           |  8 ++++----
+ tests/src/Common/build_against_pkg_dependencies/project.json | 10 +++++-----
+ tests/src/Common/netcoreapp/project.json                     |  2 +-
+ tests/src/Common/targeting_pack_ref/project.json             |  2 +-
+ tests/src/Common/test_dependencies/project.json              | 10 +++++-----
+ tests/src/Common/test_runtime/project.json                   |  2 +-
+ tests/src/JIT/config/benchmark+roslyn/project.json           |  6 +++---
+ tests/src/JIT/config/benchmark+serialize/project.json        |  4 ++--
+ tests/src/JIT/config/benchmark/project.json                  | 10 +++++-----
+ tests/src/TestWrappersConfig/project.json                    |  2 +-
+ tests/src/performance/project.json                           |  6 +++---
+ 11 files changed, 31 insertions(+), 31 deletions(-)
+
+diff --git a/dependencies.props b/dependencies.props
+index 76a49b6..b2fb26d 100644
+--- a/dependencies.props
++++ b/dependencies.props
+@@ -1,18 +1,18 @@
+ <Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+   <!-- Source of truth for dependency tooling: the commit hash of the dotnet/versions master branch as of the last auto-upgrade. -->
+   <PropertyGroup>
+-    <CoreFxCurrentRef>62cd28f3ad92249231c9ebd26f5bd677f3c91630</CoreFxCurrentRef>
+-    <CoreClrCurrentRef>62cd28f3ad92249231c9ebd26f5bd677f3c91630</CoreClrCurrentRef>
++    <CoreFxCurrentRef>10667e2a9a601bc5fe5fe5ec8a50b73b3e271000</CoreFxCurrentRef>
++    <CoreClrCurrentRef>10667e2a9a601bc5fe5fe5ec8a50b73b3e271000</CoreClrCurrentRef>
+   </PropertyGroup>
+ 
+   <!-- Auto-upgraded properties for each build info dependency. -->
+   <PropertyGroup>
+-    <CoreFxExpectedPrerelease>preview1-25227-04</CoreFxExpectedPrerelease>
++    <CoreFxExpectedPrerelease>preview1-25229-02</CoreFxExpectedPrerelease>
+   </PropertyGroup>
+ 
+   <!-- Full package version strings that are used in other parts of the build. -->
+   <PropertyGroup>
+-    <CoreClrPackageVersion>2.0.0-preview1-25227-01</CoreClrPackageVersion>
++    <CoreClrPackageVersion>2.0.0-preview1-25229-01</CoreClrPackageVersion>
+     <XunitPackageVersion>2.2.0-beta2-build3300</XunitPackageVersion>
+   </PropertyGroup>
+ 
+diff --git a/tests/src/Common/build_against_pkg_dependencies/project.json b/tests/src/Common/build_against_pkg_dependencies/project.json
+index 7182c08..5a9cd45 100644
+--- a/tests/src/Common/build_against_pkg_dependencies/project.json
++++ b/tests/src/Common/build_against_pkg_dependencies/project.json
+@@ -1,10 +1,10 @@
+ {
+   "dependencies": {
+-    "Microsoft.NETCore.ILAsm": "2.0.0-preview1-25227-01",
+-    "Microsoft.NETCore.ILDAsm": "2.0.0-preview1-25227-01",
+-    "Microsoft.NETCore.Jit": "2.0.0-preview1-25227-01",
+-    "Microsoft.NETCore.Runtime.CoreCLR": "2.0.0-preview1-25227-01",
+-    "Microsoft.NETCore.TestHost": "2.0.0-preview1-25227-01"
++    "Microsoft.NETCore.ILAsm": "2.0.0-preview1-25229-01",
++    "Microsoft.NETCore.ILDAsm": "2.0.0-preview1-25229-01",
++    "Microsoft.NETCore.Jit": "2.0.0-preview1-25229-01",
++    "Microsoft.NETCore.Runtime.CoreCLR": "2.0.0-preview1-25229-01",
++    "Microsoft.NETCore.TestHost": "2.0.0-preview1-25229-01"
+   },
+   "frameworks": {
+     "netcoreapp2.0": {
+diff --git a/tests/src/Common/netcoreapp/project.json b/tests/src/Common/netcoreapp/project.json
+index bd25de2..c0d4d55 100644
+--- a/tests/src/Common/netcoreapp/project.json
++++ b/tests/src/Common/netcoreapp/project.json
+@@ -1,7 +1,7 @@
+ {
+   "dependencies": {
+     "Microsoft.NETCore.App": "2.0.0-beta-001494-00",
+-    "System.Runtime.CompilerServices.Unsafe": "4.4.0-preview1-25227-04"
++    "System.Runtime.CompilerServices.Unsafe": "4.4.0-preview1-25229-02"
+   },
+   "frameworks": {
+     "netcoreapp2.0": {}
+diff --git a/tests/src/Common/targeting_pack_ref/project.json b/tests/src/Common/targeting_pack_ref/project.json
+index 98e331a..30de631 100644
+--- a/tests/src/Common/targeting_pack_ref/project.json
++++ b/tests/src/Common/targeting_pack_ref/project.json
+@@ -1,6 +1,6 @@
+ {
+   "dependencies": {
+-    "Microsoft.TargetingPack.Private.CoreCLR": "2.0.0-preview1-25227-01"
++    "Microsoft.TargetingPack.Private.CoreCLR": "2.0.0-preview1-25229-01"
+   },
+   "frameworks": {
+     "netcoreapp1.1": {
+diff --git a/tests/src/Common/test_dependencies/project.json b/tests/src/Common/test_dependencies/project.json
+index 22b095a..695f4ab 100644
+--- a/tests/src/Common/test_dependencies/project.json
++++ b/tests/src/Common/test_dependencies/project.json
+@@ -1,10 +1,10 @@
+ {
+   "dependencies": {
+-    "Microsoft.NETCore.Platforms": "2.0.0-preview1-25227-04",
+-    "Microsoft.Private.CoreFx.NETCoreApp": "4.4.0-preview1-25227-04",
+-    "System.Memory": "4.4.0-preview1-25227-04",
+-    "System.Runtime.CompilerServices.Unsafe": "4.4.0-preview1-25227-04",
+-    "System.Security.Permissions": "4.4.0-preview1-25227-04"
++    "Microsoft.NETCore.Platforms": "2.0.0-preview1-25229-02",
++    "Microsoft.Private.CoreFx.NETCoreApp": "4.4.0-preview1-25229-02",
++    "System.Memory": "4.4.0-preview1-25229-02",
++    "System.Runtime.CompilerServices.Unsafe": "4.4.0-preview1-25229-02",
++    "System.Security.Permissions": "4.4.0-preview1-25229-02"
+   },
+   "frameworks": {
+     "netcoreapp2.0": {
+diff --git a/tests/src/Common/test_runtime/project.json b/tests/src/Common/test_runtime/project.json
+index 1a7f606..fa51a4b 100644
+--- a/tests/src/Common/test_runtime/project.json
++++ b/tests/src/Common/test_runtime/project.json
+@@ -1,6 +1,6 @@
+ {
+   "dependencies": {
+-    "Microsoft.NETCore.Platforms": "2.0.0-preview1-25227-04",
++    "Microsoft.NETCore.Platforms": "2.0.0-preview1-25229-02",
+     "Microsoft.DotNet.CoreCLR.TestDependencies": "1.0.0-prerelease",
+     "jit-dasm": "0.0.1.4",
+     "cijobs": "0.0.1.2",
+diff --git a/tests/src/JIT/config/benchmark+roslyn/project.json b/tests/src/JIT/config/benchmark+roslyn/project.json
+index 6f96381..db794fe 100644
+--- a/tests/src/JIT/config/benchmark+roslyn/project.json
++++ b/tests/src/JIT/config/benchmark+roslyn/project.json
+@@ -6,15 +6,15 @@
+     "xunit.performance.execution": "1.0.0-beta-build0003",
+     "xunit.performance.metrics": "1.0.0-beta-build0003",
+     "Microsoft.Diagnostics.Tracing.TraceEvent": "1.0.3-alpha-experimental",
+-    "Microsoft.NETCore.Platforms": "2.0.0-preview1-25227-04",
++    "Microsoft.NETCore.Platforms": "2.0.0-preview1-25229-02",
+     "System.Console": "4.4.0-beta-24913-02",
+     "System.Dynamic.Runtime": "4.4.0-beta-24913-02",
+     "System.Linq": "4.4.0-beta-24913-02",
+     "System.IO.FileSystem": "4.4.0-beta-24913-02",
+-    "System.Numerics.Vectors": "4.4.0-preview1-25227-04",
++    "System.Numerics.Vectors": "4.4.0-preview1-25229-02",
+     "System.Reflection": "4.4.0-beta-24913-02",
+     "System.Reflection.Extensions": "4.4.0-beta-24913-02",
+-    "System.Reflection.TypeExtensions": "4.4.0-preview1-25227-04",
++    "System.Reflection.TypeExtensions": "4.4.0-preview1-25229-02",
+     "System.Runtime": "4.4.0-beta-24913-02",
+     "System.Runtime.Extensions": "4.4.0-beta-24913-02",
+     "System.Runtime.Numerics": "4.4.0-beta-24913-02",
+diff --git a/tests/src/JIT/config/benchmark+serialize/project.json b/tests/src/JIT/config/benchmark+serialize/project.json
+index 5587f66..b689879 100644
+--- a/tests/src/JIT/config/benchmark+serialize/project.json
++++ b/tests/src/JIT/config/benchmark+serialize/project.json
+@@ -5,7 +5,7 @@
+     "xunit.performance.execution": "1.0.0-beta-build0003",
+     "xunit.performance.metrics": "1.0.0-beta-build0003",
+     "Microsoft.Diagnostics.Tracing.TraceEvent": "1.0.3-alpha-experimental",
+-    "Microsoft.NETCore.Platforms": "2.0.0-preview1-25227-04",
++    "Microsoft.NETCore.Platforms": "2.0.0-preview1-25229-02",
+     "Newtonsoft.Json": "7.0.1",
+     "System.Console": "4.4.0-beta-24913-02",
+     "System.IO": "4.4.0-beta-24913-02",
+@@ -15,7 +15,7 @@
+     "System.Dynamic.Runtime": "4.4.0-beta-24913-02",
+     "System.Reflection": "4.4.0-beta-24913-02",
+     "System.Reflection.Extensions": "4.4.0-beta-24913-02",
+-    "System.Reflection.TypeExtensions": "4.4.0-preview1-25227-04",
++    "System.Reflection.TypeExtensions": "4.4.0-preview1-25229-02",
+     "System.Runtime": "4.4.0-beta-24913-02",
+     "System.Runtime.Serialization.Json": "4.4.0-beta-24913-02",
+     "System.Runtime.Serialization.Primitives": "4.4.0-beta-24913-02",
+diff --git a/tests/src/JIT/config/benchmark/project.json b/tests/src/JIT/config/benchmark/project.json
+index 075b240..96e7f05 100644
+--- a/tests/src/JIT/config/benchmark/project.json
++++ b/tests/src/JIT/config/benchmark/project.json
+@@ -5,20 +5,20 @@
+     "xunit.performance.execution": "1.0.0-beta-build0003",
+     "xunit.performance.metrics": "1.0.0-beta-build0003",
+     "Microsoft.Diagnostics.Tracing.TraceEvent": "1.0.3-alpha-experimental",
+-    "Microsoft.NETCore.Platforms": "2.0.0-preview1-25227-04",
++    "Microsoft.NETCore.Platforms": "2.0.0-preview1-25229-02",
+     "System.Collections.NonGeneric": "4.4.0-beta-24913-02",
+     "System.Console": "4.4.0-beta-24913-02",
+     "System.IO.FileSystem": "4.4.0-beta-24913-02",
+     "System.Linq": "4.4.0-beta-24913-02",
+     "System.Linq.Parallel": "4.4.0-beta-24913-02",
+     "System.Linq.Expressions": "4.4.0-beta-24913-02",
+-    "System.Memory": "4.4.0-preview1-25227-04",
+-    "System.Numerics.Vectors": "4.4.0-preview1-25227-04",
++    "System.Memory": "4.4.0-preview1-25229-02",
++    "System.Numerics.Vectors": "4.4.0-preview1-25229-02",
+     "System.Reflection": "4.4.0-beta-24913-02",
+     "System.Reflection.Extensions": "4.4.0-beta-24913-02",
+-    "System.Reflection.TypeExtensions": "4.4.0-preview1-25227-04",
++    "System.Reflection.TypeExtensions": "4.4.0-preview1-25229-02",
+     "System.Runtime": "4.4.0-beta-24913-02",
+-    "System.Runtime.CompilerServices.Unsafe": "4.4.0-preview1-25227-04",
++    "System.Runtime.CompilerServices.Unsafe": "4.4.0-preview1-25229-02",
+     "System.Runtime.Extensions": "4.4.0-beta-24913-02",
+     "System.Runtime.Numerics": "4.4.0-beta-24913-02",
+     "System.Text.RegularExpressions": "4.4.0-beta-24913-02",
+diff --git a/tests/src/TestWrappersConfig/project.json b/tests/src/TestWrappersConfig/project.json
+index 9721b0d..471ebd3 100644
+--- a/tests/src/TestWrappersConfig/project.json
++++ b/tests/src/TestWrappersConfig/project.json
+@@ -1,6 +1,6 @@
+ {
+   "dependencies": {
+-    "Microsoft.NETCore.Platforms": "2.0.0-preview1-25227-04",
++    "Microsoft.NETCore.Platforms": "2.0.0-preview1-25229-02",
+     "xunit": "2.2.0-beta2-build3300",
+     "xunit.assert": "2.2.0-beta2-build3300",
+     "xunit.core": "2.2.0-beta2-build3300",
+diff --git a/tests/src/performance/project.json b/tests/src/performance/project.json
+index f6bf73a..3a81001 100644
+--- a/tests/src/performance/project.json
++++ b/tests/src/performance/project.json
+@@ -5,16 +5,16 @@
+     "xunit.performance.execution": "1.0.0-beta-build0003",
+     "xunit.performance.metrics": "1.0.0-beta-build0003",
+     "Microsoft.Diagnostics.Tracing.TraceEvent": "1.0.3-alpha-experimental",
+-    "Microsoft.NETCore.Platforms": "2.0.0-preview1-25227-04",
++    "Microsoft.NETCore.Platforms": "2.0.0-preview1-25229-02",
+     "System.Collections.NonGeneric": "4.4.0-beta-24913-02",
+     "System.Console": "4.4.0-beta-24913-02",
+     "System.IO.FileSystem": "4.4.0-beta-24913-02",
+     "System.Linq": "4.4.0-beta-24913-02",
+     "System.Linq.Expressions": "4.4.0-beta-24913-02",
+-    "System.Numerics.Vectors": "4.4.0-preview1-25227-04",
++    "System.Numerics.Vectors": "4.4.0-preview1-25229-02",
+     "System.Reflection": "4.4.0-beta-24913-02",
+     "System.Reflection.Extensions": "4.4.0-beta-24913-02",
+-    "System.Reflection.TypeExtensions": "4.4.0-preview1-25227-04",
++    "System.Reflection.TypeExtensions": "4.4.0-preview1-25229-02",
+     "System.Runtime": "4.4.0-beta-24913-02",
+     "System.Runtime.Extensions": "4.4.0-beta-24913-02",
+     "System.Runtime.Loader": "4.0.0",
+-- 
+2.7.4
+

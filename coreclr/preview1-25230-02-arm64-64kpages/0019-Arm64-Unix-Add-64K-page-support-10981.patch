@@ -1,0 +1,2477 @@
+From 15772c18614535447e9a2b6e90d9d5b2f7deb668 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 12 Jun 2017 17:14:12 -0400
+Subject: [PATCH] [Arm64/Unix] Add 64K page support (#10981)
+
+* [Arm64/Unix] Support 64K pages
+
+* GC move GCToOSInterface::Initialize() into InitializeGarbageCollector()
+---
+ src/ToolBox/SOS/Strike/gcroot.cpp                  |  4 +-
+ src/ToolBox/SOS/Strike/platformspecific.h          |  5 ++
+ src/debug/daccess/enummem.cpp                      |  4 +-
+ src/debug/daccess/nidump.cpp                       |  2 +-
+ src/debug/di/shimlocaldatatarget.cpp               |  2 +-
+ src/gc/env/gcenv.base.h                            |  2 -
+ src/gc/env/gcenv.os.h                              | 14 ++++
+ src/gc/env/gcenv.unix.inl                          | 19 +++++
+ src/gc/env/gcenv.windows.inl                       | 18 ++++
+ src/gc/gc.cpp                                      | 24 ++----
+ src/gc/gc.h                                        | 11 ---
+ src/gc/gccommon.cpp                                |  5 ++
+ src/gc/gcpriv.h                                    |  6 +-
+ src/gc/sample/gcenv.h                              |  6 ++
+ src/gc/unix/gcenv.unix.cpp                         | 20 ++++-
+ src/gc/windows/gcenv.windows.cpp                   |  3 +
+ src/inc/pedecoder.inl                              |  8 +-
+ src/inc/switches.h                                 |  6 --
+ src/inc/utilcode.h                                 |  3 +
+ src/jit/codegenarm.cpp                             |  8 +-
+ src/jit/codegenarm64.cpp                           |  4 +-
+ src/jit/codegenlegacy.cpp                          |  2 +-
+ src/jit/codegenxarch.cpp                           |  2 +-
+ src/pal/src/debug/debug.cpp                        |  3 +-
+ src/pal/src/exception/signal.cpp                   | 12 +--
+ src/pal/src/include/pal/virtual.h                  |  4 +-
+ src/pal/src/init/pal.cpp                           | 57 +++++--------
+ src/pal/src/loader/module.cpp                      |  2 +-
+ src/pal/src/map/map.cpp                            |  5 --
+ src/pal/src/map/virtual.cpp                        | 97 +++++++++++-----------
+ src/pal/src/misc/cgroup.cpp                        |  2 +-
+ src/pal/src/sharedmemory/sharedmemory.cpp          |  6 +-
+ src/pal/src/thread/process.cpp                     | 23 +++--
+ src/pal/src/thread/thread.cpp                      |  6 +-
+ .../miscellaneous/IsBadWritePtr/test2/test2.cpp    | 19 ++---
+ .../miscellaneous/IsBadWritePtr/test3/test3.cpp    |  6 +-
+ src/utilcode/clrhost_nodependencies.cpp            |  4 +-
+ src/utilcode/dacutil.cpp                           |  2 +-
+ src/utilcode/genericstackprobe.cpp                 |  6 +-
+ src/utilcode/lazycow.cpp                           | 16 ++--
+ src/utilcode/loaderheap.cpp                        |  4 +-
+ src/utilcode/pedecoder.cpp                         |  4 +-
+ src/utilcode/util.cpp                              | 35 +++++++-
+ src/vm/appdomain.hpp                               | 12 +--
+ src/vm/ceemain.cpp                                 |  4 +-
+ src/vm/codeman.h                                   |  8 +-
+ src/vm/corhost.cpp                                 |  4 +-
+ src/vm/debughelp.cpp                               |  6 +-
+ src/vm/dynamicmethod.cpp                           |  6 +-
+ src/vm/eetwain.cpp                                 |  8 +-
+ src/vm/excep.cpp                                   |  2 +-
+ src/vm/exceptionhandling.h                         |  2 +-
+ src/vm/frames.cpp                                  |  6 +-
+ src/vm/gcenv.h                                     |  6 ++
+ src/vm/gcenv.os.cpp                                | 12 ++-
+ src/vm/gcenv.unix.inl                              |  5 ++
+ src/vm/gcenv.windows.inl                           |  5 ++
+ src/vm/generics.cpp                                |  4 +-
+ src/vm/i386/jitinterfacex86.cpp                    |  4 +-
+ src/vm/jitinterface.cpp                            |  2 +-
+ src/vm/jitinterface.h                              |  2 +-
+ src/vm/loaderallocator.cpp                         | 16 ++--
+ src/vm/peimagelayout.cpp                           |  6 +-
+ src/vm/reflectioninvocation.cpp                    |  2 +-
+ src/vm/siginfo.cpp                                 |  8 +-
+ src/vm/stackprobe.cpp                              | 16 ++--
+ src/vm/syncblk.cpp                                 |  4 +-
+ src/vm/threads.cpp                                 | 38 ++++-----
+ src/vm/threads.h                                   |  6 +-
+ src/vm/virtualcallstub.cpp                         | 54 ++++++------
+ src/vm/win32threadpool.cpp                         |  2 +-
+ 71 files changed, 427 insertions(+), 314 deletions(-)
+ create mode 100644 src/gc/env/gcenv.unix.inl
+ create mode 100644 src/gc/env/gcenv.windows.inl
+ create mode 100644 src/vm/gcenv.unix.inl
+ create mode 100644 src/vm/gcenv.windows.inl
+
+diff --git a/src/ToolBox/SOS/Strike/gcroot.cpp b/src/ToolBox/SOS/Strike/gcroot.cpp
+index 8608098..d6d714a 100644
+--- a/src/ToolBox/SOS/Strike/gcroot.cpp
++++ b/src/ToolBox/SOS/Strike/gcroot.cpp
+@@ -1317,9 +1317,9 @@ void PrintNotReachableInRange(TADDR rngStart, TADDR rngEnd, BOOL bExcludeReadyFo
+ // In the code we also rely on the assumption that one card_table entry (DWORD) covers an entire os page
+ //
+ #if defined (_TARGET_WIN64_)
+-#define card_size ((size_t)(2*DT_OS_PAGE_SIZE/card_word_width))
++#define card_size ((size_t)(2*DT_GC_PAGE_SIZE/card_word_width))
+ #else
+-#define card_size ((size_t)(DT_OS_PAGE_SIZE/card_word_width))
++#define card_size ((size_t)(DT_GC_PAGE_SIZE/card_word_width))
+ #endif //_TARGET_WIN64_
+ 
+ // so card_size = 128 on x86, 256 on x64
+diff --git a/src/ToolBox/SOS/Strike/platformspecific.h b/src/ToolBox/SOS/Strike/platformspecific.h
+index fdbc5b5..ee416db 100644
+--- a/src/ToolBox/SOS/Strike/platformspecific.h
++++ b/src/ToolBox/SOS/Strike/platformspecific.h
+@@ -190,6 +190,11 @@ struct DT_RTL_USER_PROCESS_PARAMETERS
+ 
+ #endif // !FEATURE_PAL
+ 
++// TODO-ARM64-NYI Support for SOS on target with 64K pages
++//
++// This is probably as simple as redefining DT_OS_PAGE_SIZE to be a function
++// which returns the page size of the connected target
+ #define DT_OS_PAGE_SIZE   4096
++#define DT_GC_PAGE_SIZE   0x1000
+ 
+ #endif // !__PLATFORM_SPECIFIC_INCLUDED
+diff --git a/src/debug/daccess/enummem.cpp b/src/debug/daccess/enummem.cpp
+index 9305bba..4c81269 100644
+--- a/src/debug/daccess/enummem.cpp
++++ b/src/debug/daccess/enummem.cpp
+@@ -116,7 +116,7 @@ HRESULT ClrDataAccess::EnumMemCollectImages()
+                     ulSize = file->GetLoadedIL()->GetSize();
+                 }
+ 
+-                // memory are mapped in in OS_PAGE_SIZE size.
++                // memory are mapped in in GetOsPageSize() size.
+                 // Some memory are mapped in but some are not. You cannot
+                 // write all in one block. So iterating through page size
+                 //
+@@ -129,7 +129,7 @@ HRESULT ClrDataAccess::EnumMemCollectImages()
+                     // MethodHeader MethodDesc::GetILHeader. Without this RVA,
+                     // all locals are broken. In case, you are asked about this question again.
+                     //
+-                    ulSizeBlock = ulSize > OS_PAGE_SIZE ? OS_PAGE_SIZE : ulSize;
++                    ulSizeBlock = ulSize > GetOsPageSize() ? GetOsPageSize() : ulSize;
+                     ReportMem(pStartAddr, ulSizeBlock, false);
+                     pStartAddr += ulSizeBlock;
+                     ulSize -= ulSizeBlock;
+diff --git a/src/debug/daccess/nidump.cpp b/src/debug/daccess/nidump.cpp
+index 77c05b5..fd2a49f 100644
+--- a/src/debug/daccess/nidump.cpp
++++ b/src/debug/daccess/nidump.cpp
+@@ -685,7 +685,7 @@ NativeImageDumper::DumpNativeImage()
+          * I don't understand this.  Sections start on a two page boundary, but
+          * data ends on a one page boundary.  What's up with that?
+          */
+-        m_sectionAlignment = PAGE_SIZE; //ntHeaders->OptionalHeader.SectionAlignment;
++        m_sectionAlignment = GetOsPageSize(); //ntHeaders->OptionalHeader.SectionAlignment;
+         unsigned ntHeaderSize = sizeof(*ntHeaders)
+             - sizeof(ntHeaders->OptionalHeader)
+             + ntHeaders->FileHeader.SizeOfOptionalHeader;
+diff --git a/src/debug/di/shimlocaldatatarget.cpp b/src/debug/di/shimlocaldatatarget.cpp
+index c4a5263..36ea611 100644
+--- a/src/debug/di/shimlocaldatatarget.cpp
++++ b/src/debug/di/shimlocaldatatarget.cpp
+@@ -322,7 +322,7 @@ ShimLocalDataTarget::ReadVirtual(
+     {
+         // Calculate bytes to read and don't let read cross
+         // a page boundary.
+-        readSize = OS_PAGE_SIZE - (ULONG32)(address & (OS_PAGE_SIZE - 1));
++        readSize = GetOsPageSize() - (ULONG32)(address & (GetOsPageSize() - 1));
+         readSize = min(cbRequestSize, readSize);
+ 
+         if (!ReadProcessMemory(m_hProcess, (PVOID)(ULONG_PTR)address,
+diff --git a/src/gc/env/gcenv.base.h b/src/gc/env/gcenv.base.h
+index a4befca..af1a3cd 100644
+--- a/src/gc/env/gcenv.base.h
++++ b/src/gc/env/gcenv.base.h
+@@ -300,8 +300,6 @@ typedef DPTR(uint8_t)   PTR_uint8_t;
+ 
+ #define DECLSPEC_ALIGN(x)   __declspec(align(x))
+ 
+-#define OS_PAGE_SIZE 4096
+-
+ #ifndef _ASSERTE
+ #define _ASSERTE(_expr) ASSERT(_expr)
+ #endif
+diff --git a/src/gc/env/gcenv.os.h b/src/gc/env/gcenv.os.h
+index 08879bc..cef55c7 100644
+--- a/src/gc/env/gcenv.os.h
++++ b/src/gc/env/gcenv.os.h
+@@ -7,6 +7,17 @@
+ #ifndef __GCENV_OS_H__
+ #define __GCENV_OS_H__
+ 
++#ifdef Sleep
++// This is a funny workaround for the fact that "common.h" defines Sleep to be
++// Dont_Use_Sleep, with the hope of causing linker errors whenever someone tries to use sleep.
++//
++// However, GCToOSInterface defines a function called Sleep, which (due to this define) becomes
++// "Dont_Use_Sleep", which the GC in turn happily uses. The symbol that GCToOSInterface actually
++// exported was called "GCToOSInterface::Dont_Use_Sleep". While we progress in making the GC standalone,
++// we'll need to break the dependency on common.h (the VM header) and this problem will become moot.
++#undef Sleep
++#endif // Sleep
++
+ // Critical section used by the GC
+ class CLRCriticalSection
+ {
+@@ -333,6 +344,9 @@ public:
+     //  Any parameter can be null.
+     static void GetMemoryStatus(uint32_t* memory_load, uint64_t* available_physical, uint64_t* available_page_file);
+ 
++    // Get size of an OS memory page
++    static uint32_t GetPageSize();
++
+     //
+     // Misc
+     //
+diff --git a/src/gc/env/gcenv.unix.inl b/src/gc/env/gcenv.unix.inl
+new file mode 100644
+index 0000000..50683ae
+--- /dev/null
++++ b/src/gc/env/gcenv.unix.inl
+@@ -0,0 +1,19 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++#ifndef __GCENV_UNIX_INL__
++#define __GCENV_UNIX_INL__
++
++#include "gcenv.os.h"
++
++extern uint32_t g_pageSizeUnixInl;
++
++#define OS_PAGE_SIZE GCToOSInterface::GetPageSize()
++
++__forceinline uint32_t GCToOSInterface::GetPageSize()
++{
++    return g_pageSizeUnixInl;
++}
++
++#endif // __GCENV_UNIX_INL__
+diff --git a/src/gc/env/gcenv.windows.inl b/src/gc/env/gcenv.windows.inl
+new file mode 100644
+index 0000000..3b15dfd
+--- /dev/null
++++ b/src/gc/env/gcenv.windows.inl
+@@ -0,0 +1,18 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++#ifndef __GCENV_WINDOWS_INL__
++#define __GCENV_WINDOWS_INL__
++
++#include "gcenv.os.h"
++
++
++#define OS_PAGE_SIZE GCToOSInterface::GetPageSize()
++
++__forceinline uint32_t GCToOSInterface::GetPageSize()
++{
++    return 0x1000;
++}
++
++#endif // __GCENV_WINDOWS_INL__
+diff --git a/src/gc/gc.cpp b/src/gc/gc.cpp
+index 30cee50..125479f 100644
+--- a/src/gc/gc.cpp
++++ b/src/gc/gc.cpp
+@@ -2133,14 +2133,12 @@ const int max_snoop_level = 128;
+ #define MH_TH_CARD_BUNDLE  (180*1024*1024)
+ #endif //CARD_BUNDLE
+ 
+-#define page_size OS_PAGE_SIZE
+-
+ #define GC_EPHEMERAL_DECOMMIT_TIMEOUT 5000
+ 
+ inline
+ size_t align_on_page (size_t add)
+ {
+-    return ((add + page_size - 1) & ~(page_size - 1));
++    return ((add + OS_PAGE_SIZE - 1) & ~((size_t)OS_PAGE_SIZE - 1));
+ }
+ 
+ inline
+@@ -2152,7 +2150,7 @@ uint8_t* align_on_page (uint8_t* add)
+ inline
+ size_t align_lower_page (size_t add)
+ {
+-    return (add & ~(page_size - 1));
++    return (add & ~((size_t)OS_PAGE_SIZE - 1));
+ }
+ 
+ inline
+@@ -6305,7 +6303,7 @@ void gc_heap::make_c_mark_list (uint8_t** arr)
+ {
+     c_mark_list = arr;
+     c_mark_list_index = 0;
+-    c_mark_list_length = 1 + (page_size / MIN_OBJECT_SIZE);
++    c_mark_list_length = 1 + (OS_PAGE_SIZE / MIN_OBJECT_SIZE);
+ }
+ #endif //BACKGROUND_GC
+ 
+@@ -6316,7 +6314,7 @@ void gc_heap::make_c_mark_list (uint8_t** arr)
+ static const size_t card_bundle_word_width = 32;
+ 
+ // How do we express the fact that 32 bits (card_word_width) is one uint32_t?
+-static const size_t card_bundle_size = (size_t)(OS_PAGE_SIZE / (sizeof(uint32_t)*card_bundle_word_width));
++static const size_t card_bundle_size = (size_t)(GC_PAGE_SIZE / (sizeof(uint32_t)*card_bundle_word_width));
+ 
+ inline
+ size_t card_bundle_word (size_t cardb)
+@@ -7145,7 +7143,7 @@ int gc_heap::grow_brick_card_tables (uint8_t* start,
+             if (saved_g_lowest_address < g_gc_lowest_address)
+             {
+                 if (ps > (size_t)g_gc_lowest_address)
+-                    saved_g_lowest_address = (uint8_t*)OS_PAGE_SIZE;
++                    saved_g_lowest_address = (uint8_t*)(size_t)OS_PAGE_SIZE;
+                 else
+                 {
+                     assert (((size_t)g_gc_lowest_address - ps) >= OS_PAGE_SIZE);
+@@ -9212,7 +9210,7 @@ void gc_heap::delete_heap_segment (heap_segment* seg, BOOL consider_hoarding)
+ 
+     if (consider_hoarding)
+     {
+-        assert ((heap_segment_mem (seg) - (uint8_t*)seg) <= 2*OS_PAGE_SIZE);
++        assert ((heap_segment_mem (seg) - (uint8_t*)seg) <= ptrdiff_t(2*OS_PAGE_SIZE));
+         size_t ss = (size_t) (heap_segment_reserved (seg) - (uint8_t*)seg);
+         //Don't keep the big ones.
+         if (ss <= INITIAL_ALLOC)
+@@ -21832,7 +21830,7 @@ void gc_heap::plan_phase (int condemned_gen_number)
+             {
+                 if (allocate_in_condemned &&
+                     (settings.condemned_generation == max_generation) &&
+-                    (ps > (OS_PAGE_SIZE)))
++                    (ps > OS_PAGE_SIZE))
+                 {
+                     ptrdiff_t reloc = plug_start - generation_allocation_pointer (consing_gen);
+                     //reloc should >=0 except when we relocate
+@@ -26748,7 +26746,7 @@ BOOL gc_heap::create_bgc_thread_support()
+     }
+ 
+     //needs to have room for enough smallest objects fitting on a page
+-    parr = new (nothrow) (uint8_t* [1 + page_size / MIN_OBJECT_SIZE]);
++    parr = new (nothrow) uint8_t*[1 + OS_PAGE_SIZE / MIN_OBJECT_SIZE];
+     if (!parr)
+     {
+         goto cleanup;
+@@ -33497,12 +33495,6 @@ HRESULT GCHeap::Init(size_t hn)
+ HRESULT GCHeap::Initialize ()
+ {
+     HRESULT hr = S_OK;
+-
+-    if (!GCToOSInterface::Initialize())
+-    {
+-        return E_FAIL;
+-    }
+-
+     g_gc_pFreeObjectMethodTable = GCToEEInterface::GetFreeObjectMethodTable();
+     g_num_processors = GCToOSInterface::GetTotalProcessorCount();
+     assert(g_num_processors != 0);
+diff --git a/src/gc/gc.h b/src/gc/gc.h
+index 1ea268d..a55b7a2 100644
+--- a/src/gc/gc.h
++++ b/src/gc/gc.h
+@@ -14,17 +14,6 @@ Module Name:
+ #ifndef __GC_H
+ #define __GC_H
+ 
+-#ifdef Sleep
+-// This is a funny workaround for the fact that "common.h" defines Sleep to be
+-// Dont_Use_Sleep, with the hope of causing linker errors whenever someone tries to use sleep.
+-//
+-// However, GCToOSInterface defines a function called Sleep, which (due to this define) becomes
+-// "Dont_Use_Sleep", which the GC in turn happily uses. The symbol that GCToOSInterface actually
+-// exported was called "GCToOSInterface::Dont_Use_Sleep". While we progress in making the GC standalone,
+-// we'll need to break the dependency on common.h (the VM header) and this problem will become moot.
+-#undef Sleep
+-#endif // Sleep
+-
+ #include "gcinterface.h"
+ #include "env/gcenv.os.h"
+ #include "env/gcenv.ee.h"
+diff --git a/src/gc/gccommon.cpp b/src/gc/gccommon.cpp
+index aa1405a..144ba0d 100644
+--- a/src/gc/gccommon.cpp
++++ b/src/gc/gccommon.cpp
+@@ -154,6 +154,11 @@ bool InitializeGarbageCollector(IGCToCLR* clrToGC, IGCHeap** gcHeap, IGCHandleMa
+     assert(gcHeap != nullptr);
+     assert(gcHandleManager != nullptr);
+ 
++    if (!GCToOSInterface::Initialize())
++    {
++        return false;
++    }
++
+     IGCHandleManager* handleManager = CreateGCHandleManager();
+     if (handleManager == nullptr)
+     {
+diff --git a/src/gc/gcpriv.h b/src/gc/gcpriv.h
+index 9f098eb..cc24fec 100644
+--- a/src/gc/gcpriv.h
++++ b/src/gc/gcpriv.h
+@@ -4309,6 +4309,8 @@ dynamic_data* gc_heap::dynamic_data_of (int gen_number)
+     return &dynamic_data_table [ gen_number ];
+ }
+ 
++#define GC_PAGE_SIZE 0x1000
++
+ #define card_word_width ((size_t)32)
+ 
+ //
+@@ -4316,9 +4318,9 @@ dynamic_data* gc_heap::dynamic_data_of (int gen_number)
+ // In the code we also rely on the assumption that one card_table entry (uint32_t) covers an entire os page
+ //
+ #if defined (BIT64)
+-#define card_size ((size_t)(2*OS_PAGE_SIZE/card_word_width))
++#define card_size ((size_t)(2*GC_PAGE_SIZE/card_word_width))
+ #else
+-#define card_size ((size_t)(OS_PAGE_SIZE/card_word_width))
++#define card_size ((size_t)(GC_PAGE_SIZE/card_word_width))
+ #endif // BIT64
+ 
+ // Returns the index of the card word a card is in
+diff --git a/src/gc/sample/gcenv.h b/src/gc/sample/gcenv.h
+index 4505f1a..d2ee3f2 100644
+--- a/src/gc/sample/gcenv.h
++++ b/src/gc/sample/gcenv.h
+@@ -30,6 +30,12 @@
+ #include "gcenv.sync.h"
+ #include "gcenv.ee.h"
+ 
++#ifdef PLATFORM_UNIX
++#include "gcenv.unix.inl"
++#else
++#include "gcenv.windows.inl"
++#endif
++
+ #define MAX_LONGPATH 1024
+ 
+ #ifdef _MSC_VER
+diff --git a/src/gc/unix/gcenv.unix.cpp b/src/gc/unix/gcenv.unix.cpp
+index 3b26d2f..af656cf 100644
+--- a/src/gc/unix/gcenv.unix.cpp
++++ b/src/gc/unix/gcenv.unix.cpp
+@@ -31,6 +31,7 @@ static_assert(sizeof(uint64_t) == 8, "unsigned long isn't 8 bytes");
+ #include "gcenv.structs.h"
+ #include "gcenv.base.h"
+ #include "gcenv.os.h"
++#include "gcenv.unix.inl"
+ 
+ #ifndef FEATURE_STANDALONE_GC
+  #error "A GC-private implementation of GCToOSInterface should only be used with FEATURE_STANDALONE_GC"
+@@ -62,7 +63,7 @@ static_assert(sizeof(uint64_t) == 8, "unsigned long isn't 8 bytes");
+ static uint32_t g_logicalCpuCount = 0;
+ 
+ // Helper memory page used by the FlushProcessWriteBuffers
+-static uint8_t g_helperPage[OS_PAGE_SIZE] __attribute__((aligned(OS_PAGE_SIZE)));
++static uint8_t* g_helperPage = 0;
+ 
+ // Mutex to make the FlushProcessWriteBuffersMutex thread safe
+ static pthread_mutex_t g_flushProcessWriteBuffersMutex;
+@@ -72,11 +73,17 @@ bool GetWorkingSetSize(size_t* val);
+ 
+ static size_t g_RestrictedPhysicalMemoryLimit = 0;
+ 
++uint32_t g_pageSizeUnixInl = 0;
++
+ // Initialize the interface implementation
+ // Return:
+ //  true if it has succeeded, false if it has failed
+ bool GCToOSInterface::Initialize()
+ {
++    int pageSize = sysconf( _SC_PAGE_SIZE );
++
++    g_pageSizeUnixInl = uint32_t((pageSize > 0) pageSize : 0x1000);
++
+     // Calculate and cache the number of processors on this machine
+     int cpuCount = sysconf(_SC_NPROCESSORS_ONLN);
+     if (cpuCount == -1)
+@@ -86,6 +93,15 @@ bool GCToOSInterface::Initialize()
+ 
+     g_logicalCpuCount = cpuCount;
+ 
++    assert(g_helperPage == 0);
++
++    g_helperPage = static_cast<uint8_t*>(mmap(0, OS_PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0));
++
++    if(g_helperPage == MAP_FAILED)
++    {
++        return false;
++    }
++
+     // Verify that the s_helperPage is really aligned to the g_SystemInfo.dwPageSize
+     assert((((size_t)g_helperPage) & (OS_PAGE_SIZE - 1)) == 0);
+ 
+@@ -124,6 +140,8 @@ void GCToOSInterface::Shutdown()
+     assert(ret == 0);
+     ret = pthread_mutex_destroy(&g_flushProcessWriteBuffersMutex);
+     assert(ret == 0);
++
++    munmap(g_helperPage, OS_PAGE_SIZE);
+ }
+ 
+ // Get numeric id of the current thread if possible on the
+diff --git a/src/gc/windows/gcenv.windows.cpp b/src/gc/windows/gcenv.windows.cpp
+index 84a181c..5285f85 100644
+--- a/src/gc/windows/gcenv.windows.cpp
++++ b/src/gc/windows/gcenv.windows.cpp
+@@ -11,6 +11,7 @@
+ #include "env/gcenv.structs.h"
+ #include "env/gcenv.base.h"
+ #include "env/gcenv.os.h"
++#include "env/gcenv.windows.inl"
+ 
+ GCSystemInfo g_SystemInfo;
+ 
+@@ -139,6 +140,8 @@ bool GCToOSInterface::Initialize()
+     g_SystemInfo.dwPageSize = systemInfo.dwPageSize;
+     g_SystemInfo.dwAllocationGranularity = systemInfo.dwAllocationGranularity;
+ 
++    assert(systemInfo.dwPageSize == 0x1000);
++
+     return true;
+ }
+ 
+diff --git a/src/inc/pedecoder.inl b/src/inc/pedecoder.inl
+index b75c495..7f3c79b 100644
+--- a/src/inc/pedecoder.inl
++++ b/src/inc/pedecoder.inl
+@@ -103,7 +103,7 @@ inline PEDecoder::PEDecoder(PTR_VOID mappedBase, bool fixedUp /*= FALSE*/)
+     {
+         CONSTRUCTOR_CHECK;
+         PRECONDITION(CheckPointer(mappedBase));
+-        PRECONDITION(CheckAligned(mappedBase, OS_PAGE_SIZE));
++        PRECONDITION(CheckAligned(mappedBase, GetOsPageSize()));
+         PRECONDITION(PEDecoder(mappedBase,fixedUp).CheckNTHeaders());
+         THROWS;
+         GC_NOTRIGGER;
+@@ -113,7 +113,7 @@ inline PEDecoder::PEDecoder(PTR_VOID mappedBase, bool fixedUp /*= FALSE*/)
+     CONTRACTL_END;
+ 
+     // Temporarily set the size to 2 pages, so we can get the headers.
+-    m_size = OS_PAGE_SIZE*2;
++    m_size = GetOsPageSize()*2;
+ 
+     m_pNTHeaders = PTR_IMAGE_NT_HEADERS(FindNTHeaders());
+     if (!m_pNTHeaders)
+@@ -177,7 +177,7 @@ inline HRESULT PEDecoder::Init(void *mappedBase, bool fixedUp /*= FALSE*/)
+         NOTHROW;
+         GC_NOTRIGGER;
+         PRECONDITION(CheckPointer(mappedBase));
+-        PRECONDITION(CheckAligned(mappedBase, OS_PAGE_SIZE));
++        PRECONDITION(CheckAligned(mappedBase, GetOsPageSize()));
+         PRECONDITION(!HasContents());
+     }
+     CONTRACTL_END;
+@@ -188,7 +188,7 @@ inline HRESULT PEDecoder::Init(void *mappedBase, bool fixedUp /*= FALSE*/)
+         m_flags |= FLAG_RELOCATED;
+ 
+     // Temporarily set the size to 2 pages, so we can get the headers.
+-    m_size = OS_PAGE_SIZE*2;
++    m_size = GetOsPageSize()*2;
+ 
+     m_pNTHeaders = FindNTHeaders();
+     if (!m_pNTHeaders)
+diff --git a/src/inc/switches.h b/src/inc/switches.h
+index bb30387..1b22b57 100644
+--- a/src/inc/switches.h
++++ b/src/inc/switches.h
+@@ -72,11 +72,9 @@
+ #endif
+ 
+ #if defined(_TARGET_X86_) || defined(_TARGET_ARM_)
+-    #define PAGE_SIZE               0x1000
+     #define USE_UPPER_ADDRESS       0
+ 
+ #elif defined(_TARGET_AMD64_) || defined(_TARGET_ARM64_)
+-    #define PAGE_SIZE               0x1000
+     #define UPPER_ADDRESS_MAPPING_FACTOR 2
+     #define CLR_UPPER_ADDRESS_MIN   0x64400000000
+     #define CODEHEAP_START_ADDRESS  0x64480000000
+@@ -92,10 +90,6 @@
+     #error Please add a new #elif clause and define all portability macros for the new platform
+ #endif
+ 
+-#ifndef OS_PAGE_SIZE
+-#define OS_PAGE_SIZE PAGE_SIZE
+-#endif
+-
+ #if defined(_WIN64)
+ #define JIT_IS_ALIGNED
+ #endif
+diff --git a/src/inc/utilcode.h b/src/inc/utilcode.h
+index 78dbf69..db8465a 100644
+--- a/src/inc/utilcode.h
++++ b/src/inc/utilcode.h
+@@ -1490,6 +1490,9 @@ public:
+ int GetCurrentProcessCpuCount();
+ DWORD_PTR GetCurrentProcessCpuMask();
+ 
++uint32_t GetOsPageSize();
++
++
+ //*****************************************************************************
+ // Return != 0 if the bit at the specified index in the array is on and 0 if
+ // it is off.
+diff --git a/src/jit/codegenarm.cpp b/src/jit/codegenarm.cpp
+index bac24d5..e326eaa 100644
+--- a/src/jit/codegenarm.cpp
++++ b/src/jit/codegenarm.cpp
+@@ -1098,13 +1098,13 @@ void CodeGen::genLockedInstructions(GenTreeOp* treeNode)
+ //             which invoke push {tmpReg} N times.
+ //          2) Fore /o build  However, we tickle the pages to ensure that SP is always
+ //             valid and is in sync with the "stack guard page". Amount of iteration
+-//             is N/PAGE_SIZE.
++//             is N/eeGetPageSize().
+ //
+ // Comments:
+ //      There can be some optimization:
+ //          1) It's not needed to generate loop for zero size allocation
+ //          2) For small allocation (less than 4 store) we unroll loop
+-//          3) For allocation less than PAGE_SIZE and when it's not needed to initialize
++//          3) For allocation less than eeGetPageSize() and when it's not needed to initialize
+ //             memory to zero, we can just increment SP.
+ //
+ // Notes: Size N should be aligned to STACK_ALIGN before any allocation
+@@ -1294,7 +1294,7 @@ void CodeGen::genLclHeap(GenTreePtr tree)
+         //
+         //  Loop:
+         //       ldr   regTmp, [SP + 0]        // tickle the page - read from the page
+-        //       sub   regTmp, SP, PAGE_SIZE   // decrement SP by PAGE_SIZE
++        //       sub   regTmp, SP, PAGE_SIZE   // decrement SP by eeGetPageSize()
+         //       cmp   regTmp, regCnt
+         //       jb    Done
+         //       mov   SP, regTmp
+@@ -1323,7 +1323,7 @@ void CodeGen::genLclHeap(GenTreePtr tree)
+         // tickle the page - Read from the updated SP - this triggers a page fault when on the guard page
+         getEmitter()->emitIns_R_R_I(INS_ldr, EA_4BYTE, regTmp, REG_SPBASE, 0);
+ 
+-        // decrement SP by PAGE_SIZE
++        // decrement SP by eeGetPageSize()
+         getEmitter()->emitIns_R_R_I(INS_sub, EA_PTRSIZE, regTmp, REG_SPBASE, compiler->eeGetPageSize());
+ 
+         getEmitter()->emitIns_R_R(INS_cmp, EA_PTRSIZE, regTmp, regCnt);
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 286128c..a9b72be 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3073,7 +3073,7 @@ void CodeGen::genLclHeap(GenTreePtr tree)
+         //
+         //  Loop:
+         //       ldr   wzr, [SP + 0]           // tickle the page - read from the page
+-        //       sub   regTmp, SP, PAGE_SIZE   // decrement SP by PAGE_SIZE
++        //       sub   regTmp, SP, GetOsPageSize()   // decrement SP by GetOsPageSize()
+         //       cmp   regTmp, regCnt
+         //       jb    Done
+         //       mov   SP, regTmp
+@@ -3102,7 +3102,7 @@ void CodeGen::genLclHeap(GenTreePtr tree)
+         // tickle the page - Read from the updated SP - this triggers a page fault when on the guard page
+         getEmitter()->emitIns_R_R_I(INS_ldr, EA_4BYTE, REG_ZR, REG_SPBASE, 0);
+ 
+-        // decrement SP by PAGE_SIZE
++        // decrement SP by GetOsPageSize()
+         getEmitter()->emitIns_R_R_I(INS_sub, EA_PTRSIZE, regTmp, REG_SPBASE, compiler->eeGetPageSize());
+ 
+         getEmitter()->emitIns_R_R(INS_cmp, EA_PTRSIZE, regTmp, regCnt);
+diff --git a/src/jit/codegenlegacy.cpp b/src/jit/codegenlegacy.cpp
+index d653511..669f2fa 100644
+--- a/src/jit/codegenlegacy.cpp
++++ b/src/jit/codegenlegacy.cpp
+@@ -20429,7 +20429,7 @@ regNumber CodeGen::genLclHeap(GenTreePtr size)
+                   test  ESP, [ESP+0]     // X86 - tickle the page
+                   ldr   REGH,[ESP+0]     // ARM - tickle the page
+                   mov   REGH, ESP
+-                  sub   REGH, PAGE_SIZE
++                  sub   REGH, GetOsPageSize()
+                   mov   ESP, REGH
+                   cmp   ESP, REG
+                   jae   loop
+diff --git a/src/jit/codegenxarch.cpp b/src/jit/codegenxarch.cpp
+index 386a9f0..7078fba 100644
+--- a/src/jit/codegenxarch.cpp
++++ b/src/jit/codegenxarch.cpp
+@@ -2684,7 +2684,7 @@ void CodeGen::genLclHeap(GenTreePtr tree)
+         //  loop:
+         //       test  ESP, [ESP+0]     // tickle the page
+         //       mov   REGTMP, ESP
+-        //       sub   REGTMP, PAGE_SIZE
++        //       sub   REGTMP, GetOsPageSize()
+         //       mov   ESP, REGTMP
+         //       cmp   ESP, REGCNT
+         //       jae   loop
+diff --git a/src/pal/src/debug/debug.cpp b/src/pal/src/debug/debug.cpp
+index 2eaaec9..d31d66f 100644
+--- a/src/pal/src/debug/debug.cpp
++++ b/src/pal/src/debug/debug.cpp
+@@ -41,6 +41,7 @@ SET_DEFAULT_DEBUG_CHANNEL(DEBUG); // some headers have code with asserts, so do
+ #include "pal/module.h"
+ #include "pal/stackstring.hpp"
+ #include "pal/virtual.h"
++#include "pal/utils.h"
+ 
+ #include <signal.h>
+ #include <unistd.h>
+@@ -609,7 +610,7 @@ PAL_ProbeMemory(
+         }
+ 
+         // Round to the beginning of the next page
+-        pBuffer = (PVOID)(((SIZE_T)pBuffer & ~VIRTUAL_PAGE_MASK) + VIRTUAL_PAGE_SIZE);
++        pBuffer = PVOID(ALIGN_DOWN((SIZE_T)pBuffer, GetVirtualPageSize()) + GetVirtualPageSize());
+     }
+ 
+     close(fds[0]);
+diff --git a/src/pal/src/exception/signal.cpp b/src/pal/src/exception/signal.cpp
+index 57ae62e..b82daca 100644
+--- a/src/pal/src/exception/signal.cpp
++++ b/src/pal/src/exception/signal.cpp
+@@ -152,13 +152,13 @@ BOOL EnsureSignalAlternateStack()
+ 
+         // We include the size of the SignalHandlerWorkerReturnPoint in the alternate stack size since the 
+         // context contained in it is large and the SIGSTKSZ was not sufficient on ARM64 during testing.
+-        int altStackSize = SIGSTKSZ + ALIGN_UP(sizeof(SignalHandlerWorkerReturnPoint), 16) + VIRTUAL_PAGE_SIZE;
++        int altStackSize = SIGSTKSZ + ALIGN_UP(sizeof(SignalHandlerWorkerReturnPoint), 16) + GetVirtualPageSize();
+         void* altStack;
+-        int st = posix_memalign(&altStack, VIRTUAL_PAGE_SIZE, altStackSize);
++        int st = posix_memalign(&altStack, GetVirtualPageSize(), altStackSize);
+         if (st == 0)
+         {
+             // create a guard page for the alternate stack
+-            st = mprotect(altStack, VIRTUAL_PAGE_SIZE, PROT_NONE);
++            st = mprotect(altStack, GetVirtualPageSize(), PROT_NONE);
+             if (st == 0)
+             {
+                 stack_t ss;
+@@ -169,7 +169,7 @@ BOOL EnsureSignalAlternateStack()
+                 if (st != 0)
+                 {
+                     // Installation of the alternate stack failed, so revert the guard page protection
+-                    int st2 = mprotect(altStack, VIRTUAL_PAGE_SIZE, PROT_READ | PROT_WRITE);
++                    int st2 = mprotect(altStack, GetVirtualPageSize(), PROT_READ | PROT_WRITE);
+                     _ASSERTE(st2 == 0);
+                 }
+             }
+@@ -203,7 +203,7 @@ void FreeSignalAlternateStack()
+     int st = sigaltstack(&ss, &oss);
+     if ((st == 0) && (oss.ss_flags != SS_DISABLE))
+     {
+-        int st = mprotect(oss.ss_sp, VIRTUAL_PAGE_SIZE, PROT_READ | PROT_WRITE);
++        int st = mprotect(oss.ss_sp, GetVirtualPageSize(), PROT_READ | PROT_WRITE);
+         _ASSERTE(st == 0);
+         free(oss.ss_sp);
+     }
+@@ -436,7 +436,7 @@ static void sigsegv_handler(int code, siginfo_t *siginfo, void *context)
+ 
+         // If the failure address is at most one page above or below the stack pointer, 
+         // we have a stack overflow. 
+-        if ((failureAddress - (sp - VIRTUAL_PAGE_SIZE)) < 2 * VIRTUAL_PAGE_SIZE)
++        if ((failureAddress - (sp - GetVirtualPageSize())) < 2 * GetVirtualPageSize())
+         {
+             (void)write(STDERR_FILENO, StackOverflowMessage, sizeof(StackOverflowMessage) - 1);
+             PROCAbort();
+diff --git a/src/pal/src/include/pal/virtual.h b/src/pal/src/include/pal/virtual.h
+index 36eaf81..e269132 100644
+--- a/src/pal/src/include/pal/virtual.h
++++ b/src/pal/src/include/pal/virtual.h
+@@ -58,11 +58,11 @@ enum VIRTUAL_CONSTANTS
+     VIRTUAL_EXECUTE,
+     VIRTUAL_EXECUTE_READ,
+ 
+-    VIRTUAL_PAGE_SIZE       = 0x1000,
+-    VIRTUAL_PAGE_MASK       = VIRTUAL_PAGE_SIZE - 1,
+     VIRTUAL_64KB            = 0x10000
+ };
+ 
++size_t GetVirtualPageSize();
++
+ /*++
+ Function :
+     VIRTUALInitialize
+diff --git a/src/pal/src/init/pal.cpp b/src/pal/src/init/pal.cpp
+index 2fdafe4..fea00b5 100644
+--- a/src/pal/src/init/pal.cpp
++++ b/src/pal/src/init/pal.cpp
+@@ -265,17 +265,6 @@ Initialize(
+             goto CLEANUP0;
+         }
+ 
+-#if _DEBUG
+-        // Verify that our page size is what we think it is. If it's
+-        // different, we can't run.
+-        if (VIRTUAL_PAGE_SIZE != getpagesize())
+-        {
+-            ASSERT("VIRTUAL_PAGE_SIZE is incorrect for this system!\n"
+-                "Change include/pal/virtual.h and clr/src/inc/stdmacros.h "
+-                "to reflect the correct page size of %d.\n", getpagesize());
+-        }
+-#endif  // _DEBUG
+-
+         if (!INIT_IncreaseDescriptorLimit())
+         {
+             ERROR("Unable to increase the file descriptor limit!\n");
+@@ -465,28 +454,8 @@ Initialize(
+             goto CLEANUP2;
+         }
+ 
+-        if (flags & PAL_INITIALIZE_SYNC_THREAD)
+-        {
+-            //
+-            // Tell the synchronization manager to start its worker thread
+-            //
+-            palError = CPalSynchMgrController::StartWorker(pThread);
+-            if (NO_ERROR != palError)
+-            {
+-                ERROR("Synch manager failed to start worker thread\n");
+-                goto CLEANUP5;
+-            }
+-        }
+-
+         palError = ERROR_GEN_FAILURE;
+ 
+-        /* initialize structured exception handling stuff (signals, etc) */
+-        if (FALSE == SEHInitialize(pThread, flags))
+-        {
+-            ERROR("Unable to initialize SEH support\n");
+-            goto CLEANUP5;
+-        }
+-
+         if (FALSE == TIMEInitialize())
+         {
+             ERROR("Unable to initialize TIME support\n");
+@@ -508,13 +477,33 @@ Initialize(
+             goto CLEANUP10;
+         }
+ 
++        if (flags & PAL_INITIALIZE_SYNC_THREAD)
++        {
++            //
++            // Tell the synchronization manager to start its worker thread
++            //
++            palError = CPalSynchMgrController::StartWorker(pThread);
++            if (NO_ERROR != palError)
++            {
++                ERROR("Synch manager failed to start worker thread\n");
++                goto CLEANUP13;
++            }
++        }
++
++        /* initialize structured exception handling stuff (signals, etc) */
++        if (FALSE == SEHInitialize(pThread, flags))
++        {
++            ERROR("Unable to initialize SEH support\n");
++            goto CLEANUP13;
++        }
++
+         if (flags & PAL_INITIALIZE_STD_HANDLES)
+         {
+             /* create file objects for standard handles */
+             if (!FILEInitStdHandles())
+             {
+                 ERROR("Unable to initialize standard file handles\n");
+-                goto CLEANUP13;
++                goto CLEANUP14;
+             }
+         }
+ 
+@@ -559,13 +548,13 @@ Initialize(
+     /* No cleanup required for CRTInitStdStreams */ 
+ CLEANUP15:
+     FILECleanupStdHandles();
++CLEANUP14:
++    SEHCleanup();
+ CLEANUP13:
+     VIRTUALCleanup();
+ CLEANUP10:
+     MAPCleanup();
+ CLEANUP6:
+-    SEHCleanup();
+-CLEANUP5:
+     PROCCleanupInitialProcess();
+ CLEANUP2:
+     free(exe_path);
+diff --git a/src/pal/src/loader/module.cpp b/src/pal/src/loader/module.cpp
+index bbe8b9d..9e8f2ac 100644
+--- a/src/pal/src/loader/module.cpp
++++ b/src/pal/src/loader/module.cpp
+@@ -285,7 +285,7 @@ GetProcAddress(
+        because of the address range reserved for ordinals contain can
+        be a valid string address on non-Windows systems
+     */
+-    if ((DWORD_PTR)lpProcName < VIRTUAL_PAGE_SIZE)
++    if ((DWORD_PTR)lpProcName < GetVirtualPageSize())
+     {
+         ASSERT("Attempt to locate symbol by ordinal?!\n");
+     }
+diff --git a/src/pal/src/map/map.cpp b/src/pal/src/map/map.cpp
+index f3172c3..c89efba 100644
+--- a/src/pal/src/map/map.cpp
++++ b/src/pal/src/map/map.cpp
+@@ -46,11 +46,6 @@ SET_DEFAULT_DEBUG_CHANNEL(VIRTUAL);
+ 
+ #include "pal/utils.h"
+ 
+-// This is temporary until #10981 merges.
+-// There will be an equivalent but opposite temporary fix in #10981 which
+-// will trigger a merge conflict to be sure both of these workarounds are removed
+-#define GetVirtualPageSize() VIRTUAL_PAGE_SIZE
+-
+ //
+ // The mapping critical section guards access to the list
+ // of currently mapped views. If a thread needs to access
+diff --git a/src/pal/src/map/virtual.cpp b/src/pal/src/map/virtual.cpp
+index 41bd37c..a5610ef 100644
+--- a/src/pal/src/map/virtual.cpp
++++ b/src/pal/src/map/virtual.cpp
+@@ -52,6 +52,8 @@ CRITICAL_SECTION virtual_critsec;
+ // The first node in our list of allocated blocks.
+ static PCMI pVirtualMemory;
+ 
++static size_t s_virtualPageSize = 0;
++
+ /* We need MAP_ANON. However on some platforms like HP-UX, it is defined as MAP_ANONYMOUS */
+ #if !defined(MAP_ANON) && defined(MAP_ANONYMOUS)
+ #define MAP_ANON MAP_ANONYMOUS
+@@ -163,6 +165,8 @@ extern "C"
+ BOOL
+ VIRTUALInitialize(bool initializeExecutableMemoryAllocator)
+ {
++    s_virtualPageSize = getpagesize();
++
+     TRACE("Initializing the Virtual Critical Sections. \n");
+ 
+     InternalInitializeCriticalSection(&virtual_critsec);
+@@ -656,12 +660,12 @@ static void VIRTUALDisplayList( void  )
+         DBGOUT( "\t memSize %d \n", p->memSize );
+ 
+         DBGOUT( "\t pAllocState " );
+-        for ( index = 0; index < p->memSize / VIRTUAL_PAGE_SIZE; index++)
++        for ( index = 0; index < p->memSize / GetVirtualPageSize(); index++)
+         {
+             DBGOUT( "[%d] ", VIRTUALGetAllocationType( index, p ) );
+         }
+         DBGOUT( "\t pProtectionState " );
+-        for ( index = 0; index < p->memSize / VIRTUAL_PAGE_SIZE; index++ )
++        for ( index = 0; index < p->memSize / GetVirtualPageSize(); index++ )
+         {
+             DBGOUT( "[%d] ", (UINT)p->pProtectionState[ index ] );
+         }
+@@ -719,7 +723,7 @@ static BOOL VIRTUALStoreAllocationInfo(
+     PCMI pMemInfo        = nullptr;
+     SIZE_T nBufferSize   = 0;
+ 
+-    if ((memSize & VIRTUAL_PAGE_MASK) != 0)
++    if (!IS_ALIGNED(memSize, GetVirtualPageSize()))
+     {
+         ERROR("The memory size was not a multiple of the page size. \n");
+         return FALSE;
+@@ -736,14 +740,14 @@ static BOOL VIRTUALStoreAllocationInfo(
+     pNewEntry->allocationType   = flAllocationType;
+     pNewEntry->accessProtection = flProtection;
+ 
+-    nBufferSize = memSize / VIRTUAL_PAGE_SIZE / CHAR_BIT;
+-    if ((memSize / VIRTUAL_PAGE_SIZE) % CHAR_BIT != 0)
++    nBufferSize = memSize / GetVirtualPageSize() / CHAR_BIT;
++    if ((memSize / GetVirtualPageSize()) % CHAR_BIT != 0)
+     {
+         nBufferSize++;
+     }
+ 
+     pNewEntry->pAllocState      = (BYTE*)InternalMalloc(nBufferSize);
+-    pNewEntry->pProtectionState = (BYTE*)InternalMalloc((memSize / VIRTUAL_PAGE_SIZE));
++    pNewEntry->pProtectionState = (BYTE*)InternalMalloc((memSize / GetVirtualPageSize()));
+ 
+     if (pNewEntry->pAllocState && pNewEntry->pProtectionState)
+     {
+@@ -751,7 +755,7 @@ static BOOL VIRTUALStoreAllocationInfo(
+         VIRTUALSetAllocState(MEM_RESERVE, 0, nBufferSize * CHAR_BIT, pNewEntry);
+         memset(pNewEntry->pProtectionState,
+                VIRTUALConvertWinFlags(flProtection),
+-               memSize / VIRTUAL_PAGE_SIZE);
++               memSize / GetVirtualPageSize());
+     }
+     else
+     {
+@@ -829,10 +833,8 @@ static LPVOID VIRTUALResetMemory(
+ 
+     TRACE( "Resetting the memory now..\n");
+ 
+-    StartBoundary = (UINT_PTR)lpAddress & ~VIRTUAL_PAGE_MASK;
+-    // Add the sizes, and round down to the nearest page boundary. 
+-    MemSize = ( ((UINT_PTR)lpAddress + dwSize + VIRTUAL_PAGE_MASK) & ~VIRTUAL_PAGE_MASK ) - 
+-               StartBoundary;
++    StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, GetVirtualPageSize());
++    MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, GetVirtualPageSize()) - StartBoundary;
+ 
+     int st;
+ #if HAVE_MADV_FREE
+@@ -894,9 +896,7 @@ static LPVOID VIRTUALReserveMemory(
+     // components that rely on this alignment when providing a specific address
+     // (note that mmap itself does not make any such guarantees).
+     StartBoundary = (UINT_PTR)ALIGN_DOWN(lpAddress, VIRTUAL_64KB);
+-    /* Add the sizes, and round down to the nearest page boundary. */
+-    MemSize = ( ((UINT_PTR)lpAddress + dwSize + VIRTUAL_PAGE_MASK) & ~VIRTUAL_PAGE_MASK ) - 
+-               StartBoundary;
++    MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, GetVirtualPageSize()) - StartBoundary;
+ 
+     // If this is a request for special executable (JIT'ed) memory then, first of all,
+     // try to get memory from the executable memory allocator to satisfy the request.
+@@ -923,9 +923,8 @@ static LPVOID VIRTUALReserveMemory(
+         if ( !lpAddress )
+         {
+             /* Compute the real values instead of the null values. */
+-            StartBoundary = (UINT_PTR)pRetVal & ~VIRTUAL_PAGE_MASK;
+-            MemSize = ( ((UINT_PTR)pRetVal + dwSize + VIRTUAL_PAGE_MASK) & ~VIRTUAL_PAGE_MASK ) -
+-                      StartBoundary;
++            StartBoundary = (UINT_PTR) ALIGN_DOWN(pRetVal, GetVirtualPageSize());
++            MemSize = ALIGN_UP((UINT_PTR)pRetVal + dwSize, GetVirtualPageSize()) - StartBoundary;
+         }
+ 
+         if ( !VIRTUALStoreAllocationInfo( StartBoundary, MemSize,
+@@ -1063,14 +1062,12 @@ VIRTUALCommitMemory(
+ 
+     if ( lpAddress )
+     {
+-        StartBoundary = (UINT_PTR)lpAddress & ~VIRTUAL_PAGE_MASK;
+-        /* Add the sizes, and round down to the nearest page boundary. */
+-        MemSize = ( ((UINT_PTR)lpAddress + dwSize + VIRTUAL_PAGE_MASK) & ~VIRTUAL_PAGE_MASK ) - 
+-                  StartBoundary;
++        StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, GetVirtualPageSize());
++        MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, GetVirtualPageSize()) - StartBoundary;
+     }
+     else
+     {
+-        MemSize = ( dwSize + VIRTUAL_PAGE_MASK ) & ~VIRTUAL_PAGE_MASK;
++        MemSize = ALIGN_UP(dwSize, GetVirtualPageSize());
+     }
+ 
+     /* See if we have already reserved this memory. */
+@@ -1090,9 +1087,8 @@ VIRTUALCommitMemory(
+         if ( pReservedMemory )
+         {
+             /* Re-align the addresses and try again to find the memory. */
+-            StartBoundary = (UINT_PTR)pReservedMemory & ~VIRTUAL_PAGE_MASK;
+-            MemSize = ( ((UINT_PTR)pReservedMemory + dwSize + VIRTUAL_PAGE_MASK) 
+-                        & ~VIRTUAL_PAGE_MASK ) - StartBoundary;
++            StartBoundary = (UINT_PTR) ALIGN_DOWN(pReservedMemory, GetVirtualPageSize());
++            MemSize = ALIGN_UP((UINT_PTR)pReservedMemory + dwSize, GetVirtualPageSize()) - StartBoundary;
+             
+             pInformation = VIRTUALFindRegionInformation( StartBoundary );
+ 
+@@ -1126,9 +1122,9 @@ VIRTUALCommitMemory(
+     // if a run is already committed and has the right permissions, 
+     // we don't need to do anything to it.
+     
+-    totalPages = MemSize / VIRTUAL_PAGE_SIZE;
++    totalPages = MemSize / GetVirtualPageSize();
+     runStart = (StartBoundary - pInformation->startBoundary) /
+-                VIRTUAL_PAGE_SIZE;   // Page index
++                GetVirtualPageSize();   // Page index
+     initialRunStart = runStart;
+     allocationType = VIRTUALGetAllocationType(runStart, pInformation);
+     protectionState = pInformation->pProtectionState[runStart];
+@@ -1138,7 +1134,7 @@ VIRTUALCommitMemory(
+     nProtect = W32toUnixAccessControl(flProtect);
+     vProtect = VIRTUALConvertWinFlags(flProtect);
+ 
+-    if (totalPages > pInformation->memSize / VIRTUAL_PAGE_SIZE - runStart)
++    if (totalPages > pInformation->memSize / GetVirtualPageSize() - runStart)
+     {
+         ERROR("Trying to commit beyond the end of the region!\n");
+         goto error;
+@@ -1160,9 +1156,9 @@ VIRTUALCommitMemory(
+             runLength++;
+         }
+ 
+-        StartBoundary = pInformation->startBoundary + runStart * VIRTUAL_PAGE_SIZE;
++        StartBoundary = pInformation->startBoundary + runStart * GetVirtualPageSize();
+         pRetVal = (void *)StartBoundary;
+-        MemSize = runLength * VIRTUAL_PAGE_SIZE;
++        MemSize = runLength * GetVirtualPageSize();
+ 
+         if (allocationType != MEM_COMMIT)
+         {
+@@ -1208,7 +1204,7 @@ VIRTUALCommitMemory(
+         protectionState = curProtectionState;
+     }
+ 
+-    pRetVal = (void *) (pInformation->startBoundary + initialRunStart * VIRTUAL_PAGE_SIZE);
++    pRetVal = (void *) (pInformation->startBoundary + initialRunStart * GetVirtualPageSize());
+     goto done;
+ 
+ error:
+@@ -1278,7 +1274,7 @@ PAL_VirtualReserveFromExecutableMemoryAllocatorWithinRange(
+     void *address = g_executableMemoryAllocator.AllocateMemoryWithinRange(lpBeginAddress, lpEndAddress, reservationSize);
+     if (address != nullptr)
+     {
+-        _ASSERTE(IS_ALIGNED(address, VIRTUAL_PAGE_SIZE));
++        _ASSERTE(IS_ALIGNED(address, GetVirtualPageSize()));
+         if (!VIRTUALStoreAllocationInfo((UINT_PTR)address, reservationSize, MEM_RESERVE | MEM_RESERVE_EXECUTABLE, PAGE_NOACCESS))
+         {
+             ASSERT("Unable to store the structure in the list.\n");
+@@ -1497,10 +1493,8 @@ VirtualFree(
+          * released or decommitted. So round the dwSize up to the next page 
+          * boundary and round the lpAddress down to the next page boundary.
+          */
+-        MemSize = (((UINT_PTR)(dwSize) + ((UINT_PTR)(lpAddress) & VIRTUAL_PAGE_MASK) 
+-                    + VIRTUAL_PAGE_MASK) & ~VIRTUAL_PAGE_MASK);
+-
+-        StartBoundary = (UINT_PTR)lpAddress & ~VIRTUAL_PAGE_MASK;
++        StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, GetVirtualPageSize());
++        MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, GetVirtualPageSize()) - StartBoundary;
+ 
+         PCMI pUnCommittedMem;
+         pUnCommittedMem = VIRTUALFindRegionInformation( StartBoundary );
+@@ -1536,9 +1530,9 @@ VirtualFree(
+             SIZE_T nNumOfPagesToChange = 0;
+ 
+             /* We can now commit this memory by calling VirtualAlloc().*/
+-            index = (StartBoundary - pUnCommittedMem->startBoundary) / VIRTUAL_PAGE_SIZE;
++            index = (StartBoundary - pUnCommittedMem->startBoundary) / GetVirtualPageSize();
+             
+-            nNumOfPagesToChange = MemSize / VIRTUAL_PAGE_SIZE;
++            nNumOfPagesToChange = MemSize / GetVirtualPageSize();
+             VIRTUALSetAllocState( MEM_RESERVE, index, 
+                                   nNumOfPagesToChange, pUnCommittedMem );
+ 
+@@ -1647,9 +1641,8 @@ VirtualProtect(
+     pthrCurrent = InternalGetCurrentThread();
+     InternalEnterCriticalSection(pthrCurrent, &virtual_critsec);
+     
+-    StartBoundary = (UINT_PTR)lpAddress & ~VIRTUAL_PAGE_MASK;
+-    MemSize = (((UINT_PTR)(dwSize) + ((UINT_PTR)(lpAddress) & VIRTUAL_PAGE_MASK)
+-                + VIRTUAL_PAGE_MASK) & ~VIRTUAL_PAGE_MASK);
++    StartBoundary = (UINT_PTR) ALIGN_DOWN(lpAddress, GetVirtualPageSize());
++    MemSize = ALIGN_UP((UINT_PTR)lpAddress + dwSize, GetVirtualPageSize()) - StartBoundary;
+ 
+     if ( VIRTUALContainsInvalidProtectionFlags( flNewProtect ) )
+     {
+@@ -1672,8 +1665,8 @@ VirtualProtect(
+     {
+         /* See if the pages are committed. */
+         Index = OffSet = StartBoundary - pEntry->startBoundary == 0 ?
+-             0 : ( StartBoundary - pEntry->startBoundary ) / VIRTUAL_PAGE_SIZE;
+-        NumberOfPagesToChange = MemSize / VIRTUAL_PAGE_SIZE;
++             0 : ( StartBoundary - pEntry->startBoundary ) / GetVirtualPageSize();
++        NumberOfPagesToChange = MemSize / GetVirtualPageSize();
+ 
+         TRACE( "Number of pages to check %d, starting page %d \n", NumberOfPagesToChange, Index );
+ 
+@@ -1916,7 +1909,7 @@ VirtualQuery(
+         goto ExitVirtualQuery;
+     }
+ 
+-    StartBoundary = (UINT_PTR)lpAddress & ~VIRTUAL_PAGE_MASK;
++    StartBoundary = ALIGN_DOWN((SIZE_T)lpAddress, GetVirtualPageSize());
+ 
+ #if MMAP_IGNORES_HINT
+     // Make sure we have memory to map before we try to query it.
+@@ -1969,7 +1962,7 @@ VirtualQuery(
+     else
+     {
+         /* Starting page. */
+-        SIZE_T Index = ( StartBoundary - pEntry->startBoundary ) / VIRTUAL_PAGE_SIZE;
++        SIZE_T Index = ( StartBoundary - pEntry->startBoundary ) / GetVirtualPageSize();
+ 
+         /* Attributes to check for. */
+         BYTE AccessProtection = pEntry->pProtectionState[ Index ];
+@@ -1977,13 +1970,13 @@ VirtualQuery(
+         SIZE_T RegionSize = 0;
+ 
+         TRACE( "Index = %d, Number of Pages = %d. \n",
+-               Index, pEntry->memSize / VIRTUAL_PAGE_SIZE );
++               Index, pEntry->memSize / GetVirtualPageSize() );
+ 
+-        while ( Index < pEntry->memSize / VIRTUAL_PAGE_SIZE &&
++        while ( Index < pEntry->memSize / GetVirtualPageSize() &&
+                 VIRTUALGetAllocationType( Index, pEntry ) == AllocationType &&
+                 pEntry->pProtectionState[ Index ] == AccessProtection )
+         {
+-            RegionSize += VIRTUAL_PAGE_SIZE;
++            RegionSize += GetVirtualPageSize();
+             Index++;
+         }
+ 
+@@ -2011,6 +2004,12 @@ ExitVirtualQuery:
+     return sizeof( *lpBuffer );
+ }
+ 
++size_t GetVirtualPageSize()
++{
++    _ASSERTE(s_virtualPageSize);
++    return s_virtualPageSize;
++}
++
+ /*++
+ Function:
+   GetWriteWatch
+@@ -2299,5 +2298,5 @@ int32_t ExecutableMemoryAllocator::GenerateRandomStartOffset()
+     srandom(time(NULL));
+     pageCount = (int32_t)(MaxStartPageOffset * (int64_t)random() / RAND_MAX);
+ 
+-    return pageCount * VIRTUAL_PAGE_SIZE;
++    return pageCount * GetVirtualPageSize();
+ }
+diff --git a/src/pal/src/misc/cgroup.cpp b/src/pal/src/misc/cgroup.cpp
+index 4017803..5205930 100644
+--- a/src/pal/src/misc/cgroup.cpp
++++ b/src/pal/src/misc/cgroup.cpp
+@@ -323,7 +323,7 @@ PAL_GetWorkingSetSize(size_t* val)
+         *val = strtoull(strTok, nullptr, 0); 
+         if(errno == 0)
+         {
+-            *val = *val * VIRTUAL_PAGE_SIZE;
++            *val = *val * GetVirtualPageSize();
+             result = true;
+         }
+     }
+diff --git a/src/pal/src/sharedmemory/sharedmemory.cpp b/src/pal/src/sharedmemory/sharedmemory.cpp
+index 7f25cae..9db1998 100644
+--- a/src/pal/src/sharedmemory/sharedmemory.cpp
++++ b/src/pal/src/sharedmemory/sharedmemory.cpp
+@@ -304,7 +304,7 @@ void *SharedMemoryHelpers::MemoryMapFile(int fileDescriptor, SIZE_T byteCount)
+ {
+     _ASSERTE(fileDescriptor != -1);
+     _ASSERTE(byteCount > sizeof(SharedMemorySharedDataHeader));
+-    _ASSERTE(AlignDown(byteCount, VIRTUAL_PAGE_SIZE) == byteCount);
++    _ASSERTE(AlignDown(byteCount, GetVirtualPageSize()) == byteCount);
+ 
+     void *sharedMemoryBuffer = mmap(nullptr, byteCount, PROT_READ | PROT_WRITE, MAP_SHARED, fileDescriptor, 0);
+     if (sharedMemoryBuffer != MAP_FAILED)
+@@ -468,7 +468,7 @@ SIZE_T SharedMemoryId::AppendSessionDirectoryName(
+ 
+ SIZE_T SharedMemorySharedDataHeader::DetermineTotalByteCount(SIZE_T dataByteCount)
+ {
+-    return SharedMemoryHelpers::AlignUp(sizeof(SharedMemorySharedDataHeader) + dataByteCount, VIRTUAL_PAGE_SIZE);
++    return SharedMemoryHelpers::AlignUp(sizeof(SharedMemorySharedDataHeader) + dataByteCount, GetVirtualPageSize());
+ }
+ 
+ SharedMemorySharedDataHeader::SharedMemorySharedDataHeader(SharedMemoryType type, UINT8 version)
+@@ -777,7 +777,7 @@ SharedMemoryProcessDataHeader::SharedMemoryProcessDataHeader(
+     _ASSERTE(fileDescriptor != -1);
+     _ASSERTE(sharedDataHeader != nullptr);
+     _ASSERTE(sharedDataTotalByteCount > sizeof(SharedMemorySharedDataHeader));
+-    _ASSERTE(SharedMemoryHelpers::AlignDown(sharedDataTotalByteCount, VIRTUAL_PAGE_SIZE) == sharedDataTotalByteCount);
++    _ASSERTE(SharedMemoryHelpers::AlignDown(sharedDataTotalByteCount, GetVirtualPageSize()) == sharedDataTotalByteCount);
+ 
+     // Copy the name and initialize the ID
+     char *nameCopy = reinterpret_cast<char *>(this + 1);
+diff --git a/src/pal/src/thread/process.cpp b/src/pal/src/thread/process.cpp
+index e7a2d2f..735c403 100644
+--- a/src/pal/src/thread/process.cpp
++++ b/src/pal/src/thread/process.cpp
+@@ -97,7 +97,7 @@ CObjectType CorUnix::otProcess(
+ //
+ // Helper memory page used by the FlushProcessWriteBuffers
+ //
+-static int s_helperPage[VIRTUAL_PAGE_SIZE / sizeof(int)] __attribute__((aligned(VIRTUAL_PAGE_SIZE)));
++static int* s_helperPage = 0;
+ 
+ //
+ // Mutex to make the FlushProcessWriteBuffersMutex thread safe
+@@ -3035,13 +3035,22 @@ Return
+ BOOL 
+ InitializeFlushProcessWriteBuffers()
+ {
+-    // Verify that the s_helperPage is really aligned to the VIRTUAL_PAGE_SIZE
+-    _ASSERTE((((SIZE_T)s_helperPage) & (VIRTUAL_PAGE_SIZE - 1)) == 0);
++    _ASSERTE(s_helperPage == 0);
++
++    s_helperPage = static_cast<int*>(mmap(0, GetVirtualPageSize(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0));
++
++    if(s_helperPage == MAP_FAILED)
++    {
++        return false;
++    }
++
++    // Verify that the s_helperPage is really aligned to the GetVirtualPageSize()
++    _ASSERTE((((SIZE_T)s_helperPage) & (GetVirtualPageSize() - 1)) == 0);
+ 
+     // Locking the page ensures that it stays in memory during the two mprotect
+     // calls in the FlushProcessWriteBuffers below. If the page was unmapped between
+     // those calls, they would not have the expected effect of generating IPI.
+-    int status = mlock(s_helperPage, VIRTUAL_PAGE_SIZE);
++    int status = mlock(s_helperPage, GetVirtualPageSize());
+ 
+     if (status != 0)
+     {
+@@ -3051,7 +3060,7 @@ InitializeFlushProcessWriteBuffers()
+     status = pthread_mutex_init(&flushProcessWriteBuffersMutex, NULL);
+     if (status != 0)
+     {
+-        munlock(s_helperPage, VIRTUAL_PAGE_SIZE);
++        munlock(s_helperPage, GetVirtualPageSize());
+     }
+ 
+     return status == 0;
+@@ -3084,14 +3093,14 @@ FlushProcessWriteBuffers()
+     // Changing a helper memory page protection from read / write to no access 
+     // causes the OS to issue IPI to flush TLBs on all processors. This also
+     // results in flushing the processor buffers.
+-    status = mprotect(s_helperPage, VIRTUAL_PAGE_SIZE, PROT_READ | PROT_WRITE);
++    status = mprotect(s_helperPage, GetVirtualPageSize(), PROT_READ | PROT_WRITE);
+     FATAL_ASSERT(status == 0, "Failed to change helper page protection to read / write");
+ 
+     // Ensure that the page is dirty before we change the protection so that
+     // we prevent the OS from skipping the global TLB flush.
+     InterlockedIncrement(s_helperPage);
+ 
+-    status = mprotect(s_helperPage, VIRTUAL_PAGE_SIZE, PROT_NONE);
++    status = mprotect(s_helperPage, GetVirtualPageSize(), PROT_NONE);
+     FATAL_ASSERT(status == 0, "Failed to change helper page protection to no access");
+ 
+     status = pthread_mutex_unlock(&flushProcessWriteBuffersMutex);
+diff --git a/src/pal/src/thread/thread.cpp b/src/pal/src/thread/thread.cpp
+index df42ebc..e56761b 100644
+--- a/src/pal/src/thread/thread.cpp
++++ b/src/pal/src/thread/thread.cpp
+@@ -579,7 +579,7 @@ CorUnix::InternalCreateThread(
+     if (alignedStackSize != 0)
+     {
+         // Some systems require the stack size to be aligned to the page size
+-        if (sizeof(alignedStackSize) <= sizeof(dwStackSize) && alignedStackSize + (VIRTUAL_PAGE_SIZE - 1) < alignedStackSize)
++        if (sizeof(alignedStackSize) <= sizeof(dwStackSize) && alignedStackSize + (GetVirtualPageSize() - 1) < alignedStackSize)
+         {
+             // When coming here from the public API surface, the incoming value is originally a nonnegative signed int32, so
+             // this shouldn't happen
+@@ -589,7 +589,7 @@ CorUnix::InternalCreateThread(
+             palError = ERROR_INVALID_PARAMETER;
+             goto EXIT;
+         }
+-        alignedStackSize = ALIGN_UP(alignedStackSize, VIRTUAL_PAGE_SIZE);
++        alignedStackSize = ALIGN_UP(alignedStackSize, GetVirtualPageSize());
+     }
+ 
+     // Ignore the STACK_SIZE_PARAM_IS_A_RESERVATION flag
+@@ -641,7 +641,7 @@ CorUnix::InternalCreateThread(
+ #else // !PTHREAD_STACK_MIN
+         const size_t MinStackSize = 64 * 1024; // this value is typically accepted by pthread_attr_setstacksize()
+ #endif // PTHREAD_STACK_MIN
+-        _ASSERTE(IS_ALIGNED(MinStackSize, VIRTUAL_PAGE_SIZE));
++        _ASSERTE(IS_ALIGNED(MinStackSize, GetVirtualPageSize()));
+         if (alignedStackSize < MinStackSize)
+         {
+             // Adjust the stack size to a minimum value that is likely to be accepted by pthread_attr_setstacksize(). If this
+diff --git a/src/pal/tests/palsuite/miscellaneous/IsBadWritePtr/test2/test2.cpp b/src/pal/tests/palsuite/miscellaneous/IsBadWritePtr/test2/test2.cpp
+index 2d4d53e..b5e22ea 100644
+--- a/src/pal/tests/palsuite/miscellaneous/IsBadWritePtr/test2/test2.cpp
++++ b/src/pal/tests/palsuite/miscellaneous/IsBadWritePtr/test2/test2.cpp
+@@ -16,7 +16,6 @@
+ **=========================================================*/
+ 
+ #include <palsuite.h>
+-#define PAGE_SIZE 4096
+ 
+ int __cdecl main(int argc, char *argv[]) {
+     
+@@ -32,7 +31,7 @@ int __cdecl main(int argc, char *argv[]) {
+     */
+     
+     PageOne = VirtualAlloc(NULL, 
+-			   PAGE_SIZE*4, 
++			   GetOsPageSize()*4,
+ 			   MEM_RESERVE, 
+ 			   PAGE_NOACCESS);
+ 
+@@ -44,7 +43,7 @@ int __cdecl main(int argc, char *argv[]) {
+     /* Set the first Page to PAGE_NOACCESS */
+     
+     PageOne = VirtualAlloc(PageOne,
+-			   PAGE_SIZE,
++			   GetOsPageSize(),
+ 			   MEM_COMMIT,
+ 			   PAGE_NOACCESS);
+ 
+@@ -58,8 +57,8 @@ int __cdecl main(int argc, char *argv[]) {
+ 
+     /* Set the second Page to PAGE_READWRITE */
+ 
+-    PageTwo = VirtualAlloc(((BYTE*)PageOne)+PAGE_SIZE,
+-			   PAGE_SIZE,
++    PageTwo = VirtualAlloc(((BYTE*)PageOne)+GetOsPageSize(),
++			   GetOsPageSize(),
+ 			   MEM_COMMIT,
+ 			   PAGE_READWRITE);
+     if(PageTwo == NULL)
+@@ -72,8 +71,8 @@ int __cdecl main(int argc, char *argv[]) {
+     
+     /* Set the third Page to PAGE_NOACCESS */
+ 
+-    PageThree = VirtualAlloc(((BYTE*)PageTwo) + (2 * PAGE_SIZE),
+-			     PAGE_SIZE,
++    PageThree = VirtualAlloc(((BYTE*)PageTwo) + (2 * GetOsPageSize()),
++			     GetOsPageSize(),
+ 			     MEM_COMMIT,
+ 			     PAGE_NOACCESS);
+       
+@@ -88,7 +87,7 @@ int __cdecl main(int argc, char *argv[]) {
+     
+ /* Check that calling IsBadWritePtr on the first page returns non-zero */
+     
+-    if(IsBadWritePtr(PageThree,PAGE_SIZE) == 0)
++    if(IsBadWritePtr(PageThree,GetOsPageSize()) == 0)
+     {
+ 	VirtualFree(PageOne,0,MEM_RELEASE);
+ 
+@@ -99,7 +98,7 @@ int __cdecl main(int argc, char *argv[]) {
+ 
+     /* Check that calling IsBadWritePtr on the middle page returns 0 */
+ 
+-    if(IsBadWritePtr(PageTwo,PAGE_SIZE) != 0)
++    if(IsBadWritePtr(PageTwo,GetOsPageSize()) != 0)
+     {
+ 	VirtualFree(PageOne,0,MEM_RELEASE);
+ 
+@@ -109,7 +108,7 @@ int __cdecl main(int argc, char *argv[]) {
+ 
+     /* Check that calling IsBadWritePtr on the third page returns non-zero */
+     
+-    if(IsBadWritePtr(PageThree,PAGE_SIZE) == 0)
++    if(IsBadWritePtr(PageThree,GetOsPageSize()) == 0)
+     {
+ 	VirtualFree(PageOne,0,MEM_RELEASE);
+ 
+diff --git a/src/pal/tests/palsuite/miscellaneous/IsBadWritePtr/test3/test3.cpp b/src/pal/tests/palsuite/miscellaneous/IsBadWritePtr/test3/test3.cpp
+index 4c058a8..7b04c54 100644
+--- a/src/pal/tests/palsuite/miscellaneous/IsBadWritePtr/test3/test3.cpp
++++ b/src/pal/tests/palsuite/miscellaneous/IsBadWritePtr/test3/test3.cpp
+@@ -14,8 +14,6 @@
+ 
+ #include <palsuite.h>
+ 
+-#define PAGE_SIZE 4096
+-
+ int __cdecl main(int argc, char *argv[]) {
+     
+     LPVOID PageOne;
+@@ -30,7 +28,7 @@ int __cdecl main(int argc, char *argv[]) {
+     */
+     
+     PageOne = VirtualAlloc(NULL, 
+-			   PAGE_SIZE, 
++			   GetOsPageSize(), 
+ 			   MEM_COMMIT, 
+ 			   PAGE_READONLY);
+ 
+@@ -39,7 +37,7 @@ int __cdecl main(int argc, char *argv[]) {
+ 	Fail("ERROR: VirtualAlloc failed to commit the required memory.\n");
+     }
+ 
+-    if(IsBadWritePtr(PageOne,PAGE_SIZE) == 0)
++    if(IsBadWritePtr(PageOne,GetOsPageSize()) == 0)
+     {
+ 	VirtualFree(PageOne,0,MEM_RELEASE);
+ 
+diff --git a/src/utilcode/clrhost_nodependencies.cpp b/src/utilcode/clrhost_nodependencies.cpp
+index a069d24..d5aeb2a 100644
+--- a/src/utilcode/clrhost_nodependencies.cpp
++++ b/src/utilcode/clrhost_nodependencies.cpp
+@@ -616,8 +616,8 @@ BOOL DbgIsExecutable(LPVOID lpMem, SIZE_T length)
+     // No NX support on PAL or for crossgen compilations.
+     return TRUE;
+ #else // !(CROSSGEN_COMPILE || FEATURE_PAL) 
+-    BYTE *regionStart = (BYTE*) ALIGN_DOWN((BYTE*)lpMem, OS_PAGE_SIZE);
+-    BYTE *regionEnd = (BYTE*) ALIGN_UP((BYTE*)lpMem+length, OS_PAGE_SIZE);
++    BYTE *regionStart = (BYTE*) ALIGN_DOWN((BYTE*)lpMem, GetOsPageSize());
++    BYTE *regionEnd = (BYTE*) ALIGN_UP((BYTE*)lpMem+length, GetOsPageSize());
+     _ASSERTE(length > 0);
+     _ASSERTE(regionStart < regionEnd);
+ 
+diff --git a/src/utilcode/dacutil.cpp b/src/utilcode/dacutil.cpp
+index 1f56141..c26f802 100644
+--- a/src/utilcode/dacutil.cpp
++++ b/src/utilcode/dacutil.cpp
+@@ -151,7 +151,7 @@ LiveProcDataTarget::ReadVirtual(
+     {
+         // Calculate bytes to read and don't let read cross
+         // a page boundary.
+-        readSize = OS_PAGE_SIZE - (ULONG32)(address & (OS_PAGE_SIZE - 1));
++        readSize = GetOsPageSize() - (ULONG32)(address & (GetOsPageSize() - 1));
+         readSize = min(request, readSize);
+ 
+         if (!ReadProcessMemory(m_process, (PVOID)(ULONG_PTR)address,
+diff --git a/src/utilcode/genericstackprobe.cpp b/src/utilcode/genericstackprobe.cpp
+index 35bcf1d..aa7e198 100644
+--- a/src/utilcode/genericstackprobe.cpp
++++ b/src/utilcode/genericstackprobe.cpp
+@@ -43,7 +43,7 @@ void DontCallDirectlyForceStackOverflow()
+     sp = (UINT_PTR *)&sp;
+     while (TRUE)
+     {
+-        sp -= (OS_PAGE_SIZE / sizeof(UINT_PTR));
++        sp -= (GetOsPageSize() / sizeof(UINT_PTR));
+         *sp = NULL;
+     }
+ 
+@@ -312,11 +312,11 @@ void BaseStackMarker::SetMarker(float numPages)
+     // won't be the exact SP; however it will be close enough.
+     LPVOID pStack = &numPages;
+ 
+-    UINT_PTR *pMarker = (UINT_PTR*)pStack  - (int)(OS_PAGE_SIZE / sizeof(UINT_PTR) * m_numPages);
++    UINT_PTR *pMarker = (UINT_PTR*)pStack  - (int)(GetOsPageSize() / sizeof(UINT_PTR) * m_numPages);
+     
+     // We might not have committed our stack yet, so allocate the number of pages
+     // we need so that they will be commited and we won't AV when we try to set the mark.
+-    _alloca( (int)(OS_PAGE_SIZE * m_numPages) );
++    _alloca( (int)(GetOsPageSize() * m_numPages) );
+     m_pMarker = pMarker;
+     *m_pMarker = STACK_COOKIE_VALUE;
+ 
+diff --git a/src/utilcode/lazycow.cpp b/src/utilcode/lazycow.cpp
+index d76577a..f4ea267 100644
+--- a/src/utilcode/lazycow.cpp
++++ b/src/utilcode/lazycow.cpp
+@@ -43,8 +43,8 @@ LONG* EnsureCOWPageMapAllocated()
+         {
+             _ASSERTE(stats.ullTotalVirtual < 0x100000000ULL);
+ 
+-            SIZE_T mapSize = (SIZE_T)((stats.ullTotalVirtual / PAGE_SIZE) / 8);
+-            _ASSERTE(mapSize / PAGE_SIZE <= 32); // g_COWPageMapMap can only track 32 pages
++            SIZE_T mapSize = (SIZE_T)((stats.ullTotalVirtual / GetOsPageSize()) / 8);
++            _ASSERTE(mapSize / GetOsPageSize() <= 32); // g_COWPageMapMap can only track 32 pages
+ 
+             // Note that VirtualAlloc will zero-fill the pages for us.
+             LONG* pMap = (LONG*)VirtualAlloc(
+@@ -69,7 +69,7 @@ bool EnsureCOWPageMapElementAllocated(LONG* elem)
+     _ASSERTE(g_pCOWPageMap != NULL);
+ 
+     size_t offset = (size_t)elem - (size_t)g_pCOWPageMap;
+-    size_t page = offset / PAGE_SIZE;
++    size_t page = offset / GetOsPageSize();
+     
+     _ASSERTE(page < 32);
+     int bit = (int)(1 << page);
+@@ -91,7 +91,7 @@ bool IsCOWPageMapElementAllocated(LONG* elem)
+     _ASSERTE(g_pCOWPageMap != NULL);
+ 
+     size_t offset = (size_t)elem - (size_t)g_pCOWPageMap;
+-    size_t page = offset / PAGE_SIZE;
++    size_t page = offset / GetOsPageSize();
+     
+     _ASSERTE(page < 32);
+     int bit = (int)(1 << page);
+@@ -112,8 +112,8 @@ bool SetCOWPageBits(BYTE* pStart, size_t len, bool value)
+     //
+     // Write the bits in 32-bit chunks, to avoid doing one interlocked instruction for each bit.
+     //
+-    size_t page = (size_t)pStart / PAGE_SIZE;
+-    size_t lastPage = (size_t)(pStart+len-1) / PAGE_SIZE;
++    size_t page = (size_t)pStart / GetOsPageSize();
++    size_t lastPage = (size_t)(pStart+len-1) / GetOsPageSize();
+     size_t elem = page / 32;
+     LONG bits = 0;
+     do
+@@ -188,8 +188,8 @@ bool AreAnyCOWPageBitsSet(BYTE* pStart, size_t len)
+         return false;
+ 
+     _ASSERTE(len > 0);
+-    size_t page = (size_t)pStart / PAGE_SIZE;
+-    size_t lastPage = (size_t)(pStart+len-1) / PAGE_SIZE;
++    size_t page = (size_t)pStart / GetOsPageSize();
++    size_t lastPage = (size_t)(pStart+len-1) / GetOsPageSize();
+     do
+     {
+         LONG* pElem = &pCOWPageMap[page / 32];
+diff --git a/src/utilcode/loaderheap.cpp b/src/utilcode/loaderheap.cpp
+index a005ac8..3f1063c 100644
+--- a/src/utilcode/loaderheap.cpp
++++ b/src/utilcode/loaderheap.cpp
+@@ -1075,7 +1075,7 @@ BOOL UnlockedLoaderHeap::UnlockedReservePages(size_t dwSizeToCommit)
+     dwSizeToCommit += sizeof(LoaderHeapBlock);
+ 
+     // Round to page size again
+-    dwSizeToCommit = ALIGN_UP(dwSizeToCommit, PAGE_SIZE);
++    dwSizeToCommit = ALIGN_UP(dwSizeToCommit, GetOsPageSize());
+ 
+     void *pData = NULL;
+     BOOL fReleaseMemory = TRUE;
+@@ -1222,7 +1222,7 @@ BOOL UnlockedLoaderHeap::GetMoreCommittedPages(size_t dwMinSize)
+             dwSizeToCommit = min((SIZE_T)(m_pEndReservedRegion - m_pPtrToEndOfCommittedRegion), (SIZE_T)m_dwCommitBlockSize);
+ 
+         // Round to page size
+-        dwSizeToCommit = ALIGN_UP(dwSizeToCommit, PAGE_SIZE);
++        dwSizeToCommit = ALIGN_UP(dwSizeToCommit, GetOsPageSize());
+ 
+         // Yes, so commit the desired number of reserved pages
+         void *pData = ClrVirtualAlloc(m_pPtrToEndOfCommittedRegion, dwSizeToCommit, MEM_COMMIT, m_flProtect);
+diff --git a/src/utilcode/pedecoder.cpp b/src/utilcode/pedecoder.cpp
+index 3b3c937..32df945 100644
+--- a/src/utilcode/pedecoder.cpp
++++ b/src/utilcode/pedecoder.cpp
+@@ -297,7 +297,7 @@ CHECK PEDecoder::CheckNTHeaders() const
+         // Ideally we would require the layout address to honor the section alignment constraints.
+         // However, we do have 8K aligned IL only images which we load on 32 bit platforms. In this
+         // case, we can only guarantee OS page alignment (which after all, is good enough.)
+-        CHECK(CheckAligned(m_base, OS_PAGE_SIZE));
++        CHECK(CheckAligned(m_base, GetOsPageSize()));
+     }
+ 
+     // @todo: check NumberOfSections for overflow of SizeOfHeaders
+@@ -1719,7 +1719,7 @@ void PEDecoder::LayoutILOnly(void *base, BOOL allowFullPE) const
+         // Ideally we would require the layout address to honor the section alignment constraints.
+         // However, we do have 8K aligned IL only images which we load on 32 bit platforms. In this
+         // case, we can only guarantee OS page alignment (which after all, is good enough.)
+-        PRECONDITION(CheckAligned((SIZE_T)base, OS_PAGE_SIZE));
++        PRECONDITION(CheckAligned((SIZE_T)base, GetOsPageSize()));
+         THROWS;
+         GC_NOTRIGGER;
+     }
+diff --git a/src/utilcode/util.cpp b/src/utilcode/util.cpp
+index b7fca3e..90ac614 100644
+--- a/src/utilcode/util.cpp
++++ b/src/utilcode/util.cpp
+@@ -18,6 +18,7 @@
+ #include "sigparser.h"
+ #include "cor.h"
+ #include "corinfo.h"
++#include "volatile.h"
+ 
+ 
+ const char g_RTMVersion[]= "v1.0.3705";
+@@ -437,7 +438,7 @@ void InitCodeAllocHint(SIZE_T base, SIZE_T size, int randomPageOffset)
+     }
+ 
+     // Randomize the adddress space
+-    pStart += PAGE_SIZE * randomPageOffset;
++    pStart += GetOsPageSize() * randomPageOffset;
+ 
+     s_CodeAllocStart = pStart;
+     s_CodeAllocHint = pStart;
+@@ -551,6 +552,8 @@ LPVOID ClrVirtualAllocAligned(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocatio
+ 
+ #else // !FEATURE_PAL
+ 
++    if(alignment < GetOsPageSize()) alignment = GetOsPageSize();
++
+     // UNIXTODO: Add a specialized function to PAL so that we don't have to waste memory
+     dwSize += alignment;
+     SIZE_T addr = (SIZE_T)ClrVirtualAlloc(lpAddress, dwSize, flAllocationType, flProtect);
+@@ -1337,6 +1340,36 @@ DWORD_PTR GetCurrentProcessCpuMask()
+ #endif
+ }
+ 
++uint32_t GetOsPageSizeUncached()
++{
++    SYSTEM_INFO sysInfo;
++    ::GetSystemInfo(&sysInfo);
++    return sysInfo.dwAllocationGranularity ? sysInfo.dwAllocationGranularity : 0x1000;
++}
++
++namespace
++{
++    Volatile<uint32_t> g_pageSize = 0;
++}
++
++uint32_t GetOsPageSize()
++{
++#ifdef FEATURE_PAL
++    size_t result = g_pageSize.LoadWithoutBarrier();
++
++    if(!result)
++    {
++        result = GetOsPageSizeUncached();
++
++        g_pageSize.StoreWithoutBarrier(result);
++    }
++
++    return result;
++#else
++    return 0x1000;
++#endif
++}
++
+ /**************************************************************************/
+ 
+ /**************************************************************************/
+diff --git a/src/vm/appdomain.hpp b/src/vm/appdomain.hpp
+index 101524f..4149f12 100644
+--- a/src/vm/appdomain.hpp
++++ b/src/vm/appdomain.hpp
+@@ -812,14 +812,14 @@ private:
+ // set) and being able to specify specific versions.
+ //
+ 
+-#define LOW_FREQUENCY_HEAP_RESERVE_SIZE        (3 * PAGE_SIZE)
+-#define LOW_FREQUENCY_HEAP_COMMIT_SIZE         (1 * PAGE_SIZE)
++#define LOW_FREQUENCY_HEAP_RESERVE_SIZE        (3 * GetOsPageSize())
++#define LOW_FREQUENCY_HEAP_COMMIT_SIZE         (1 * GetOsPageSize())
+ 
+-#define HIGH_FREQUENCY_HEAP_RESERVE_SIZE       (10 * PAGE_SIZE)
+-#define HIGH_FREQUENCY_HEAP_COMMIT_SIZE        (1 * PAGE_SIZE)
++#define HIGH_FREQUENCY_HEAP_RESERVE_SIZE       (10 * GetOsPageSize())
++#define HIGH_FREQUENCY_HEAP_COMMIT_SIZE        (1 * GetOsPageSize())
+ 
+-#define STUB_HEAP_RESERVE_SIZE                 (3 * PAGE_SIZE)
+-#define STUB_HEAP_COMMIT_SIZE                  (1 * PAGE_SIZE)
++#define STUB_HEAP_RESERVE_SIZE                 (3 * GetOsPageSize())
++#define STUB_HEAP_COMMIT_SIZE                  (1 * GetOsPageSize())
+ 
+ // --------------------------------------------------------------------------------
+ // PE File List lock - for creating list locks on PE files
+diff --git a/src/vm/ceemain.cpp b/src/vm/ceemain.cpp
+index 9cce46d..e1ec25f 100644
+--- a/src/vm/ceemain.cpp
++++ b/src/vm/ceemain.cpp
+@@ -1090,8 +1090,8 @@ void EEStartupHelper(COINITIEE fFlags)
+ #ifdef FEATURE_MINIMETADATA_IN_TRIAGEDUMPS
+         // retrieve configured max size for the mini-metadata buffer (defaults to 64KB)
+         g_MiniMetaDataBuffMaxSize = CLRConfig::GetConfigValue(CLRConfig::INTERNAL_MiniMdBufferCapacity);
+-        // align up to OS_PAGE_SIZE, with a maximum of 1 MB
+-        g_MiniMetaDataBuffMaxSize = (DWORD) min(ALIGN_UP(g_MiniMetaDataBuffMaxSize, OS_PAGE_SIZE), 1024 * 1024);
++        // align up to GetOsPageSize(), with a maximum of 1 MB
++        g_MiniMetaDataBuffMaxSize = (DWORD) min(ALIGN_UP(g_MiniMetaDataBuffMaxSize, GetOsPageSize()), 1024 * 1024);
+         // allocate the buffer. this is never touched while the process is running, so it doesn't 
+         // contribute to the process' working set. it is needed only as a "shadow" for a mini-metadata
+         // buffer that will be set up and reported / updated in the Watson process (the 
+diff --git a/src/vm/codeman.h b/src/vm/codeman.h
+index 5fbddea..9b79988 100644
+--- a/src/vm/codeman.h
++++ b/src/vm/codeman.h
+@@ -91,10 +91,8 @@ typedef struct
+ } EH_CLAUSE_ENUMERATOR;
+ class EECodeInfo;
+ 
+-#define PAGE_MASK               (PAGE_SIZE-1)
+-#define PAGE_ALIGN              ~(PAGE_MASK)
+-#define ROUND_DOWN_TO_PAGE(x)   ( (size_t) (x)              & PAGE_ALIGN)
+-#define ROUND_UP_TO_PAGE(x)     (((size_t) (x) + PAGE_MASK) & PAGE_ALIGN)
++#define ROUND_DOWN_TO_PAGE(x)   ( (size_t) (x)                        & ~((size_t)GetOsPageSize()-1))
++#define ROUND_UP_TO_PAGE(x)     (((size_t) (x) + (GetOsPageSize()-1)) & ~((size_t)GetOsPageSize()-1))
+ 
+ enum StubCodeBlockKind : int
+ {
+@@ -463,7 +461,7 @@ typedef struct _HeapList
+     TADDR               startAddress;
+     TADDR               endAddress;     // the current end of the used portion of the Heap
+ 
+-    TADDR               mapBase;        // "startAddress" rounded down to PAGE_SIZE. pHdrMap is relative to this address
++    TADDR               mapBase;        // "startAddress" rounded down to GetOsPageSize(). pHdrMap is relative to this address
+     PTR_DWORD           pHdrMap;        // bit array used to find the start of methods
+ 
+     size_t              maxCodeHeapSize;// Size of the entire contiguous block of memory
+diff --git a/src/vm/corhost.cpp b/src/vm/corhost.cpp
+index fd27a7a..ed4dd4e 100644
+--- a/src/vm/corhost.cpp
++++ b/src/vm/corhost.cpp
+@@ -4276,9 +4276,9 @@ BOOL STDMETHODCALLTYPE CExecutionEngine::ClrVirtualProtect(LPVOID lpAddress,
+                 //
+                 // because the section following UEF will also be included in the region size
+                 // if it has the same protection as the UEF section.
+-                DWORD dwUEFSectionPageCount = ((pUEFSection->Misc.VirtualSize + OS_PAGE_SIZE - 1)/OS_PAGE_SIZE);
++                DWORD dwUEFSectionPageCount = ((pUEFSection->Misc.VirtualSize + GetOsPageSize() - 1)/GetOsPageSize());
+ 
+-                BYTE* pAddressOfFollowingSection = pStartOfUEFSection + (OS_PAGE_SIZE * dwUEFSectionPageCount);
++                BYTE* pAddressOfFollowingSection = pStartOfUEFSection + (GetOsPageSize() * dwUEFSectionPageCount);
+                 
+                 // Ensure that the section following us is having different memory protection
+                 MEMORY_BASIC_INFORMATION nextSectionInfo;
+diff --git a/src/vm/debughelp.cpp b/src/vm/debughelp.cpp
+index 3e66f14..376b88c 100644
+--- a/src/vm/debughelp.cpp
++++ b/src/vm/debughelp.cpp
+@@ -73,10 +73,10 @@ BOOL isMemoryReadable(const TADDR start, unsigned len)
+     // Now we have to loop thru each and every page in between and touch them.
+     //
+     location = start;
+-    while (len > PAGE_SIZE)
++    while (len > GetOsPageSize())
+     {
+-        location += PAGE_SIZE;
+-        len -= PAGE_SIZE;
++        location += GetOsPageSize();
++        len -= GetOsPageSize();
+ 
+ #ifdef DACCESS_COMPILE
+         if (DacReadAll(location, &buff, 1, false) != S_OK)
+diff --git a/src/vm/dynamicmethod.cpp b/src/vm/dynamicmethod.cpp
+index 3eec125..b3094bd 100644
+--- a/src/vm/dynamicmethod.cpp
++++ b/src/vm/dynamicmethod.cpp
+@@ -330,7 +330,7 @@ HeapList* HostCodeHeap::CreateCodeHeap(CodeHeapRequestInfo *pInfo, EEJitManager
+     size_t MaxCodeHeapSize  = pInfo->getRequestSize();
+     size_t ReserveBlockSize = MaxCodeHeapSize + sizeof(HeapList);
+ 
+-    ReserveBlockSize += sizeof(TrackAllocation) + PAGE_SIZE; // make sure we have enough for the allocation
++    ReserveBlockSize += sizeof(TrackAllocation) + GetOsPageSize(); // make sure we have enough for the allocation
+     // take a conservative size for the nibble map, we may change that later if appropriate
+     size_t nibbleMapSize = ROUND_UP_TO_PAGE(HEAP2MAPSIZE(ROUND_UP_TO_PAGE(ALIGN_UP(ReserveBlockSize, VIRTUAL_ALLOC_RESERVE_GRANULARITY))));
+     size_t heapListSize = (sizeof(HeapList) + CODE_SIZE_ALIGN - 1) & (~(CODE_SIZE_ALIGN - 1));
+@@ -343,7 +343,7 @@ HeapList* HostCodeHeap::CreateCodeHeap(CodeHeapRequestInfo *pInfo, EEJitManager
+                             (HostCodeHeap*)pCodeHeap, ReserveBlockSize, pCodeHeap->m_TotalBytesAvailable, reservedData, nibbleMapSize));
+ 
+     BYTE *pBuffer = pCodeHeap->InitCodeHeapPrivateData(ReserveBlockSize, reservedData, nibbleMapSize);
+-    _ASSERTE(((size_t)pBuffer & PAGE_MASK) == 0);
++    _ASSERTE(IS_ALIGNED(pBuffer, GetOsPageSize()));
+     LOG((LF_BCL, LL_INFO100, "Level2 - CodeHeap creation {0x%p} - base addr 0x%p, size available 0x%p, nibble map ptr 0x%p\n",
+                             (HostCodeHeap*)pCodeHeap, pCodeHeap->m_pBaseAddr, pCodeHeap->m_TotalBytesAvailable, pBuffer));
+ 
+@@ -754,7 +754,7 @@ void* HostCodeHeap::AllocMemory_NoThrow(size_t size, DWORD alignment)
+         }
+         _ASSERTE(size > availableInFreeList);
+         size_t sizeToCommit = size - availableInFreeList; 
+-        sizeToCommit = (size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1)); // round up to page
++        sizeToCommit = ROUND_UP_TO_PAGE(size); // round up to page
+ 
+         if (m_pLastAvailableCommittedAddr + sizeToCommit <= m_pBaseAddr + m_TotalBytesAvailable)
+         {
+diff --git a/src/vm/eetwain.cpp b/src/vm/eetwain.cpp
+index 2886daa..f558810 100644
+--- a/src/vm/eetwain.cpp
++++ b/src/vm/eetwain.cpp
+@@ -3019,12 +3019,12 @@ unsigned SKIP_ALLOC_FRAME(int size, PTR_CBYTE base, unsigned offset)
+         return (SKIP_PUSH_REG(base, offset));
+     }
+ 
+-    if (size >= OS_PAGE_SIZE)
++    if (size >= (int)GetOsPageSize())
+     {
+-        if (size < (3 * OS_PAGE_SIZE))
++        if (size < int(3 * GetOsPageSize()))
+         {
+-            // add 7 bytes for one or two TEST EAX, [ESP+OS_PAGE_SIZE]
+-            offset += (size / OS_PAGE_SIZE) * 7;
++            // add 7 bytes for one or two TEST EAX, [ESP+GetOsPageSize()]
++            offset += (size / GetOsPageSize()) * 7;
+         }
+         else
+         {
+diff --git a/src/vm/excep.cpp b/src/vm/excep.cpp
+index 630d3f5..40c554e 100644
+--- a/src/vm/excep.cpp
++++ b/src/vm/excep.cpp
+@@ -57,7 +57,7 @@
+ // Windows uses 64kB as the null-reference area
+ #define NULL_AREA_SIZE   (64 * 1024)
+ #else // !FEATURE_PAL
+-#define NULL_AREA_SIZE   OS_PAGE_SIZE
++#define NULL_AREA_SIZE   GetOsPageSize()
+ #endif // !FEATURE_PAL
+ 
+ #ifndef CROSSGEN_COMPILE
+diff --git a/src/vm/exceptionhandling.h b/src/vm/exceptionhandling.h
+index 6d1f2b4..a61aa53 100644
+--- a/src/vm/exceptionhandling.h
++++ b/src/vm/exceptionhandling.h
+@@ -810,7 +810,7 @@ private:
+     {
+         //
+         // Due to the unexpected growth of the ExceptionTracker struct, 
+-        // OS_PAGE_SIZE does not seem appropriate anymore on x64, and
++        // GetOsPageSize() does not seem appropriate anymore on x64, and
+         // we should behave the same on x64 as on ia64 regardless of
+         // the difference between the page sizes on the platforms.
+         //
+diff --git a/src/vm/frames.cpp b/src/vm/frames.cpp
+index fa5c787..6598357 100644
+--- a/src/vm/frames.cpp
++++ b/src/vm/frames.cpp
+@@ -417,13 +417,13 @@ VOID Frame::Push(Thread *pThread)
+     
+     m_Next = pThread->GetFrame();
+ 
+-    // PAGE_SIZE is used to relax the assert for cases where two Frames are
++    // GetOsPageSize() is used to relax the assert for cases where two Frames are
+     // declared in the same source function. We cannot predict the order
+     // in which the C compiler will lay them out in the stack frame.
+-    // So PAGE_SIZE is a guess of the maximum stack frame size of any method
++    // So GetOsPageSize() is a guess of the maximum stack frame size of any method
+     // with multiple Frames in mscorwks.dll
+     _ASSERTE(((m_Next == FRAME_TOP) ||
+-              (PBYTE(m_Next) + (2 * PAGE_SIZE)) > PBYTE(this)) &&
++              (PBYTE(m_Next) + (2 * GetOsPageSize())) > PBYTE(this)) &&
+              "Pushing a frame out of order ?");
+     
+     _ASSERTE(// If AssertOnFailFast is set, the test expects to do stack overrun 
+diff --git a/src/vm/gcenv.h b/src/vm/gcenv.h
+index 865eb28..767adb8 100644
+--- a/src/vm/gcenv.h
++++ b/src/vm/gcenv.h
+@@ -44,6 +44,12 @@
+ #include "gcenv.interlocked.h"
+ #include "gcenv.interlocked.inl"
+ 
++#ifdef PLATFORM_UNIX
++#include "gcenv.unix.inl"
++#else
++#include "gcenv.windows.inl"
++#endif
++
+ namespace ETW
+ {
+     typedef  enum _GC_ROOT_KIND {
+diff --git a/src/vm/gcenv.os.cpp b/src/vm/gcenv.os.cpp
+index 2f390b0..ad30905 100644
+--- a/src/vm/gcenv.os.cpp
++++ b/src/vm/gcenv.os.cpp
+@@ -26,12 +26,22 @@
+ 
+ #define MAX_PTR ((uint8_t*)(~(ptrdiff_t)0))
+ 
++#ifdef FEATURE_PAL
++uint32_t g_pageSizeUnixInl = 0;
++#endif
++
++
+ // Initialize the interface implementation
+ // Return:
+ //  true if it has succeeded, false if it has failed
+ bool GCToOSInterface::Initialize()
+ {
+     LIMITED_METHOD_CONTRACT;
++
++#ifdef FEATURE_PAL
++    g_pageSizeUnixInl = GetOsPageSize();
++#endif
++
+     return true;
+ }
+ 
+@@ -299,7 +309,7 @@ bool GCToOSInterface::GetWriteWatch(bool resetState, void* address, size_t size,
+     ULONG granularity;
+ 
+     bool success = ::GetWriteWatch(flags, address, size, pageAddresses, (ULONG_PTR*)pageAddressesCount, &granularity) == 0;
+-    _ASSERTE (granularity == OS_PAGE_SIZE);
++    _ASSERTE (granularity == GetOsPageSize());
+ 
+     return success;
+ }
+diff --git a/src/vm/gcenv.unix.inl b/src/vm/gcenv.unix.inl
+new file mode 100644
+index 0000000..7523864
+--- /dev/null
++++ b/src/vm/gcenv.unix.inl
+@@ -0,0 +1,5 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++#include "../gc/env/gcenv.unix.inl"
+diff --git a/src/vm/gcenv.windows.inl b/src/vm/gcenv.windows.inl
+new file mode 100644
+index 0000000..aeb35f6
+--- /dev/null
++++ b/src/vm/gcenv.windows.inl
+@@ -0,0 +1,5 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++#include "../gc/env/gcenv.windows.inl"
+diff --git a/src/vm/generics.cpp b/src/vm/generics.cpp
+index a04bde1..c567c32 100644
+--- a/src/vm/generics.cpp
++++ b/src/vm/generics.cpp
+@@ -146,9 +146,9 @@ TypeHandle ClassLoader::LoadCanonicalGenericInstantiation(TypeKey *pTypeKey,
+     TypeHandle ret = TypeHandle();
+     DECLARE_INTERIOR_STACK_PROBE;
+ #ifndef DACCESS_COMPILE
+-    if ((dwAllocSize/PAGE_SIZE+1) >= 2)
++    if ((dwAllocSize/GetOsPageSize()+1) >= 2)
+     {
+-        DO_INTERIOR_STACK_PROBE_FOR_NOTHROW_CHECK_THREAD((10+dwAllocSize/PAGE_SIZE+1), NO_FORBIDGC_LOADER_USE_ThrowSO(););
++        DO_INTERIOR_STACK_PROBE_FOR_NOTHROW_CHECK_THREAD((10+dwAllocSize/GetOsPageSize()+1), NO_FORBIDGC_LOADER_USE_ThrowSO(););
+     }
+ #endif // DACCESS_COMPILE
+     TypeHandle *repInst = (TypeHandle*) _alloca(dwAllocSize);
+diff --git a/src/vm/i386/jitinterfacex86.cpp b/src/vm/i386/jitinterfacex86.cpp
+index 18acbf0..4ffed2d 100644
+--- a/src/vm/i386/jitinterfacex86.cpp
++++ b/src/vm/i386/jitinterfacex86.cpp
+@@ -1530,8 +1530,8 @@ void InitJITHelpers1()
+ 
+     // All write barrier helpers should fit into one page.
+     // If you hit this assert on retail build, there is most likely problem with BBT script.
+-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (BYTE*)JIT_WriteBarrierGroup_End - (BYTE*)JIT_WriteBarrierGroup < PAGE_SIZE);
+-    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (BYTE*)JIT_PatchedWriteBarrierGroup_End - (BYTE*)JIT_PatchedWriteBarrierGroup < PAGE_SIZE);
++    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (BYTE*)JIT_WriteBarrierGroup_End - (BYTE*)JIT_WriteBarrierGroup < (ptrdiff_t)GetOsPageSize());
++    _ASSERTE_ALL_BUILDS("clr/src/VM/i386/JITinterfaceX86.cpp", (BYTE*)JIT_PatchedWriteBarrierGroup_End - (BYTE*)JIT_PatchedWriteBarrierGroup < (ptrdiff_t)GetOsPageSize());
+ 
+     // Copy the write barriers to their final resting place.
+     for (int iBarrier = 0; iBarrier < NUM_WRITE_BARRIERS; iBarrier++)
+diff --git a/src/vm/jitinterface.cpp b/src/vm/jitinterface.cpp
+index e789b67..03ecb59 100644
+--- a/src/vm/jitinterface.cpp
++++ b/src/vm/jitinterface.cpp
+@@ -9911,7 +9911,7 @@ void CEEInfo::getEEInfo(CORINFO_EE_INFO *pEEInfoOut)
+ 
+     pEEInfoOut->sizeOfReversePInvokeFrame  = (DWORD)-1;
+ 
+-    pEEInfoOut->osPageSize = OS_PAGE_SIZE;
++    pEEInfoOut->osPageSize = GetOsPageSize();
+     pEEInfoOut->maxUncheckedOffsetForNullObject = MAX_UNCHECKED_OFFSET_FOR_NULL_OBJECT;
+     pEEInfoOut->targetAbi = CORINFO_CORECLR_ABI;
+ 
+diff --git a/src/vm/jitinterface.h b/src/vm/jitinterface.h
+index d287248..2c6afa5 100644
+--- a/src/vm/jitinterface.h
++++ b/src/vm/jitinterface.h
+@@ -19,7 +19,7 @@
+ #ifndef FEATURE_PAL
+ #define MAX_UNCHECKED_OFFSET_FOR_NULL_OBJECT ((32*1024)-1)   // when generating JIT code
+ #else // !FEATURE_PAL
+-#define MAX_UNCHECKED_OFFSET_FOR_NULL_OBJECT ((OS_PAGE_SIZE / 2) - 1)
++#define MAX_UNCHECKED_OFFSET_FOR_NULL_OBJECT ((GetOsPageSize() / 2) - 1)
+ #endif // !FEATURE_PAL
+ 
+ class Stub;
+diff --git a/src/vm/loaderallocator.cpp b/src/vm/loaderallocator.cpp
+index 70c8cab..1a05bf2 100644
+--- a/src/vm/loaderallocator.cpp
++++ b/src/vm/loaderallocator.cpp
+@@ -887,11 +887,11 @@ void LoaderAllocator::ActivateManagedTracking()
+ 
+ 
+ // We don't actually allocate a low frequency heap for collectible types
+-#define COLLECTIBLE_LOW_FREQUENCY_HEAP_SIZE        (0 * PAGE_SIZE)
+-#define COLLECTIBLE_HIGH_FREQUENCY_HEAP_SIZE       (3 * PAGE_SIZE)
+-#define COLLECTIBLE_STUB_HEAP_SIZE                 PAGE_SIZE
+-#define COLLECTIBLE_CODEHEAP_SIZE                  (7 * PAGE_SIZE)
+-#define COLLECTIBLE_VIRTUALSTUBDISPATCH_HEAP_SPACE (5 * PAGE_SIZE)
++#define COLLECTIBLE_LOW_FREQUENCY_HEAP_SIZE        (0 * GetOsPageSize())
++#define COLLECTIBLE_HIGH_FREQUENCY_HEAP_SIZE       (3 * GetOsPageSize())
++#define COLLECTIBLE_STUB_HEAP_SIZE                 GetOsPageSize()
++#define COLLECTIBLE_CODEHEAP_SIZE                  (7 * GetOsPageSize())
++#define COLLECTIBLE_VIRTUALSTUBDISPATCH_HEAP_SPACE (5 * GetOsPageSize())
+ 
+ void LoaderAllocator::Init(BaseDomain *pDomain, BYTE *pExecutableHeapMemory)
+ {
+@@ -940,9 +940,9 @@ void LoaderAllocator::Init(BaseDomain *pDomain, BYTE *pExecutableHeapMemory)
+ #ifdef FEATURE_WINDOWSPHONE
+         // code:UMEntryThunk::CreateUMEntryThunk allocates memory on executable loader heap for phone.
+         // Reserve enough for a typical phone app to fit.
+-        dwExecutableHeapReserveSize = 3 * PAGE_SIZE;
++        dwExecutableHeapReserveSize = 3 * GetOsPageSize();
+ #else
+-        dwExecutableHeapReserveSize = PAGE_SIZE;
++        dwExecutableHeapReserveSize = GetOsPageSize();
+ #endif
+ 
+         _ASSERTE(dwExecutableHeapReserveSize < dwHighFrequencyHeapReserveSize);
+@@ -1038,7 +1038,7 @@ void LoaderAllocator::Init(BaseDomain *pDomain, BYTE *pExecutableHeapMemory)
+ #endif
+ 
+ #ifdef CROSSGEN_COMPILE
+-    m_pPrecodeHeap = new (&m_PrecodeHeapInstance) LoaderHeap(PAGE_SIZE, PAGE_SIZE);
++    m_pPrecodeHeap = new (&m_PrecodeHeapInstance) LoaderHeap(GetOsPageSize(), GetOsPageSize());
+ #else
+     m_pPrecodeHeap = new (&m_PrecodeHeapInstance) CodeFragmentHeap(this, STUB_CODE_BLOCK_PRECODE);
+ #endif
+diff --git a/src/vm/peimagelayout.cpp b/src/vm/peimagelayout.cpp
+index 2416681..81afe0c 100644
+--- a/src/vm/peimagelayout.cpp
++++ b/src/vm/peimagelayout.cpp
+@@ -626,7 +626,7 @@ bool PEImageLayout::ConvertILOnlyPE32ToPE64Worker()
+                             + VAL16(pHeader32->FileHeader.NumberOfSections));
+     
+     // On AMD64, used for a 12-byte jump thunk + the original entry point offset.
+-    if (((pEnd32 + IMAGE_HEADER_3264_SIZE_DIFF /* delta in headers to compute end of 64bit header */) - pImage) > OS_PAGE_SIZE ) {
++    if (((pEnd32 + IMAGE_HEADER_3264_SIZE_DIFF /* delta in headers to compute end of 64bit header */) - pImage) > GetOsPageSize() ) {
+         // This should never happen.  An IL_ONLY image should at most 3 sections.  
+         _ASSERTE(!"ConvertILOnlyPE32ToPE64Worker: Insufficient room to rewrite headers as PE64");
+         return false;
+@@ -682,7 +682,7 @@ bool PEImageLayout::ConvertILOnlyPE32ToPE64()
+     PBYTE pageBase = (PBYTE)GetBase();
+     DWORD oldProtect;
+ 
+-    if (!ClrVirtualProtect(pageBase, OS_PAGE_SIZE, PAGE_READWRITE, &oldProtect))
++    if (!ClrVirtualProtect(pageBase, GetOsPageSize(), PAGE_READWRITE, &oldProtect))
+     {
+         // We are not going to be able to update header.
+         return false;
+@@ -691,7 +691,7 @@ bool PEImageLayout::ConvertILOnlyPE32ToPE64()
+     fConvertedToPE64 = ConvertILOnlyPE32ToPE64Worker();
+     
+     DWORD ignore;
+-    if (!ClrVirtualProtect(pageBase, OS_PAGE_SIZE, oldProtect, &ignore))
++    if (!ClrVirtualProtect(pageBase, GetOsPageSize(), oldProtect, &ignore))
+     {
+         // This is not so bad; just ignore it
+     }
+diff --git a/src/vm/reflectioninvocation.cpp b/src/vm/reflectioninvocation.cpp
+index 626e872..5314549 100644
+--- a/src/vm/reflectioninvocation.cpp
++++ b/src/vm/reflectioninvocation.cpp
+@@ -1208,7 +1208,7 @@ FCIMPL4(Object*, RuntimeMethodHandle::InvokeMethod,
+ 
+     // Make sure we have enough room on the stack for this. Note that we will need the stack amount twice - once to build the stack
+     // and second time to actually make the call.
+-    INTERIOR_STACK_PROBE_FOR(pThread, 1 + static_cast<UINT>((2 * nAllocaSize) / OS_PAGE_SIZE) + static_cast<UINT>(HOLDER_CODE_NORMAL_STACK_LIMIT));
++    INTERIOR_STACK_PROBE_FOR(pThread, 1 + static_cast<UINT>((2 * nAllocaSize) / GetOsPageSize()) + static_cast<UINT>(HOLDER_CODE_NORMAL_STACK_LIMIT));
+ 
+     LPBYTE pAlloc = (LPBYTE)_alloca(nAllocaSize);
+ 
+diff --git a/src/vm/siginfo.cpp b/src/vm/siginfo.cpp
+index 82aef45..9f3a7f4 100644
+--- a/src/vm/siginfo.cpp
++++ b/src/vm/siginfo.cpp
+@@ -1348,9 +1348,9 @@ TypeHandle SigPointer::GetTypeHandleThrowing(
+             if (!ClrSafeInt<DWORD>::multiply(ntypars, sizeof(TypeHandle), dwAllocaSize))
+                 ThrowHR(COR_E_OVERFLOW);
+ 
+-            if ((dwAllocaSize/PAGE_SIZE+1) >= 2)
++            if ((dwAllocaSize/GetOsPageSize()+1) >= 2)
+             {
+-                DO_INTERIOR_STACK_PROBE_FOR_NOTHROW_CHECK_THREAD((10+dwAllocaSize/PAGE_SIZE+1), NO_FORBIDGC_LOADER_USE_ThrowSO(););
++                DO_INTERIOR_STACK_PROBE_FOR_NOTHROW_CHECK_THREAD((10+dwAllocaSize/GetOsPageSize()+1), NO_FORBIDGC_LOADER_USE_ThrowSO(););
+             }
+             TypeHandle *thisinst = (TypeHandle*) _alloca(dwAllocaSize);
+ 
+@@ -1634,9 +1634,9 @@ TypeHandle SigPointer::GetTypeHandleThrowing(
+                     ThrowHR(COR_E_OVERFLOW);
+                 }
+                 
+-                if ((cAllocaSize/PAGE_SIZE+1) >= 2)
++                if ((cAllocaSize/GetOsPageSize()+1) >= 2)
+                 {
+-                    DO_INTERIOR_STACK_PROBE_FOR_NOTHROW_CHECK_THREAD((10+cAllocaSize/PAGE_SIZE+1), NO_FORBIDGC_LOADER_USE_ThrowSO(););
++                    DO_INTERIOR_STACK_PROBE_FOR_NOTHROW_CHECK_THREAD((10+cAllocaSize/GetOsPageSize()+1), NO_FORBIDGC_LOADER_USE_ThrowSO(););
+                 }
+ 
+                 TypeHandle *retAndArgTypes = (TypeHandle*) _alloca(cAllocaSize);
+diff --git a/src/vm/stackprobe.cpp b/src/vm/stackprobe.cpp
+index 695f355..ef997ff 100644
+--- a/src/vm/stackprobe.cpp
++++ b/src/vm/stackprobe.cpp
+@@ -155,8 +155,8 @@ void ReportStackOverflow()
+ 
+         // We expect the stackGuarantee to be a multiple of the page size for
+         // the call to IsStackSpaceAvailable.
+-        _ASSERTE(stackGuarantee%OS_PAGE_SIZE == 0);
+-        if (pThread->IsStackSpaceAvailable(static_cast<float>(stackGuarantee)/OS_PAGE_SIZE))
++        _ASSERTE(stackGuarantee%GetOsPageSize() == 0);
++        if (pThread->IsStackSpaceAvailable(static_cast<float>(stackGuarantee)/GetOsPageSize()))
+         {
+             COMPlusThrowSO();
+         }
+@@ -296,7 +296,7 @@ FORCEINLINE BOOL RetailStackProbeHelper(unsigned int n, Thread *pThread)
+     {
+         probeLimit = pThread->GetProbeLimit();
+     }
+-    UINT_PTR probeAddress = (UINT_PTR)(&pThread) - (n * OS_PAGE_SIZE);
++    UINT_PTR probeAddress = (UINT_PTR)(&pThread) - (n * GetOsPageSize());
+ 
+     // If the address we want to probe to is beyond the precalculated limit we fail
+     // Note that we don't check for stack probing being disabled.  This is encoded in
+@@ -761,7 +761,7 @@ void BaseStackGuard::HandleOverwrittenPreviousStackGuard(int probeShortFall, __i
+               "The stack requested by the previous guard is at least %d pages (%d bytes) short.\n"
+               MORE_INFO_STRING, stackID ? stackID : "", m_szFunction, m_szFile, m_lineNum,
+               m_pPrevGuard->m_szFunction, m_pPrevGuard->m_szFile, m_pPrevGuard->m_lineNum, m_pPrevGuard->m_numPages,
+-              probeShortFall/OS_PAGE_SIZE + (probeShortFall%OS_PAGE_SIZE ? 1 : 0), probeShortFall);
++              probeShortFall/GetOsPageSize() + (probeShortFall%GetOsPageSize() ? 1 : 0), probeShortFall);
+ 
+     LOG((LF_EH, LL_INFO100000, "%s", buff));
+ 
+@@ -796,7 +796,7 @@ void BaseStackGuard::HandleOverwrittenCurrentStackGuard(int probeShortFall, __in
+               "The%s stack guard installed in %s at \"%s\" @ %d has been violated\n\n"
+               "The guard requested %d pages of stack and is at least %d pages (%d bytes) short.\n"
+               MORE_INFO_STRING, stackID ? stackID : "", m_szFunction, m_szFile, m_lineNum, m_numPages,
+-              probeShortFall/OS_PAGE_SIZE + (probeShortFall%OS_PAGE_SIZE ? 1 : 0), probeShortFall);
++              probeShortFall/GetOsPageSize() + (probeShortFall%GetOsPageSize() ? 1 : 0), probeShortFall);
+ 
+     LOG((LF_EH, LL_INFO100000, buff));
+ 
+@@ -1044,8 +1044,8 @@ BOOL BaseStackGuard::RequiresNStackPagesInternal(unsigned int n, BOOL fThrowOnSO
+ 
+     // Get the address of the last few bytes on the penultimate page we probed for.  This is slightly early than the probe point,
+     // but gives us more conservatism in our overrun checking.  ("Last" here means the bytes with the smallest address.)
+-    m_pMarker = ((UINT_PTR*)pStack) - (OS_PAGE_SIZE / sizeof(UINT_PTR) * (n-1));
+-    m_pMarker = (UINT_PTR*)((UINT_PTR)m_pMarker & ~(OS_PAGE_SIZE - 1));
++    m_pMarker = ((UINT_PTR*)pStack) - (GetOsPageSize() / sizeof(UINT_PTR) * (n-1));
++    m_pMarker = (UINT_PTR*)((UINT_PTR)m_pMarker & ~(GetOsPageSize() - 1));
+ 
+     // Grab the previous guard, if any, and update our depth.
+     m_pPrevGuard = GetCurrentGuard();
+@@ -1166,7 +1166,7 @@ BOOL BaseStackGuard::DoProbe(unsigned int n, BOOL fThrowOnSO)
+     UINT_PTR *sp = (UINT_PTR*)GetCurrentSP();
+     while (sp >= m_pMarker)
+     {
+-        sp -= (OS_PAGE_SIZE / sizeof(UINT_PTR));
++        sp -= (GetOsPageSize() / sizeof(UINT_PTR));
+         *sp = NULL;
+     }
+ 
+diff --git a/src/vm/syncblk.cpp b/src/vm/syncblk.cpp
+index 78e455a..50eec9b 100644
+--- a/src/vm/syncblk.cpp
++++ b/src/vm/syncblk.cpp
+@@ -35,8 +35,8 @@
+ #include "runtimecallablewrapper.h"
+ #endif // FEATURE_COMINTEROP
+ 
+-// Allocate 1 page worth. Typically enough
+-#define MAXSYNCBLOCK (PAGE_SIZE-sizeof(void*))/sizeof(SyncBlock)
++// Allocate 4K worth. Typically enough
++#define MAXSYNCBLOCK (0x1000-sizeof(void*))/sizeof(SyncBlock)
+ #define SYNC_TABLE_INITIAL_SIZE 250
+ 
+ //#define DUMP_SB
+diff --git a/src/vm/threads.cpp b/src/vm/threads.cpp
+index c36232e..91442de 100644
+--- a/src/vm/threads.cpp
++++ b/src/vm/threads.cpp
+@@ -1354,7 +1354,7 @@ void InitThreadManager()
+ 
+     // All patched helpers should fit into one page.
+     // If you hit this assert on retail build, there is most likely problem with BBT script.
+-    _ASSERTE_ALL_BUILDS("clr/src/VM/threads.cpp", (BYTE*)JIT_PatchedCodeLast - (BYTE*)JIT_PatchedCodeStart < PAGE_SIZE);
++    _ASSERTE_ALL_BUILDS("clr/src/VM/threads.cpp", (BYTE*)JIT_PatchedCodeLast - (BYTE*)JIT_PatchedCodeStart < (ptrdiff_t)GetOsPageSize());
+ 
+     // I am using virtual protect to cover the entire range that this code falls in.
+     // 
+@@ -2550,7 +2550,7 @@ DWORD WINAPI Thread::intermediateThreadProc(PVOID arg)
+     WRAPPER_NO_CONTRACT;
+ 
+     m_offset_counter++;
+-    if (m_offset_counter * offset_multiplier > PAGE_SIZE)
++    if (m_offset_counter * offset_multiplier > (int) GetOsPageSize())
+         m_offset_counter = 0;
+ 
+     (void)_alloca(m_offset_counter * offset_multiplier);
+@@ -2665,11 +2665,11 @@ BOOL Thread::CreateNewOSThread(SIZE_T sizeToCommitOrReserve, LPTHREAD_START_ROUT
+     dwCreationFlags |= STACK_SIZE_PARAM_IS_A_RESERVATION;
+ 
+ #ifndef FEATURE_PAL // the PAL does its own adjustments as necessary
+-    if (sizeToCommitOrReserve != 0 && sizeToCommitOrReserve <= OS_PAGE_SIZE)
++    if (sizeToCommitOrReserve != 0 && sizeToCommitOrReserve <= GetOsPageSize())
+     {
+         // On Windows, passing a value that is <= one page size bizarrely causes the OS to use the default stack size instead of
+         // a minimum, which is undesirable. This adjustment fixes that issue to use a minimum stack size (typically 64 KB).
+-        sizeToCommitOrReserve = OS_PAGE_SIZE + 1;
++        sizeToCommitOrReserve = GetOsPageSize() + 1;
+     }
+ #endif // !FEATURE_PAL
+ 
+@@ -6498,7 +6498,7 @@ void Thread::HandleThreadInterrupt (BOOL fWaitForADUnload)
+ }
+ 
+ #ifdef _DEBUG
+-#define MAXSTACKBYTES (2 * PAGE_SIZE)
++#define MAXSTACKBYTES (2 * GetOsPageSize())
+ void CleanStackForFastGCStress ()
+ {
+     CONTRACTL {
+@@ -7092,16 +7092,16 @@ HRESULT Thread::CLRSetThreadStackGuarantee(SetThreadStackGuaranteeScope fScope)
+         int ThreadGuardPages = CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_ThreadGuardPages);
+         if (ThreadGuardPages == 0)
+         {
+-            uGuardSize += (EXTRA_PAGES * PAGE_SIZE);
++            uGuardSize += (EXTRA_PAGES * GetOsPageSize());
+         }
+         else
+         {
+-            uGuardSize += (ThreadGuardPages * PAGE_SIZE);
++            uGuardSize += (ThreadGuardPages * GetOsPageSize());
+         }
+ 
+ #else // _WIN64
+ #ifdef _DEBUG
+-        uGuardSize += (1 * PAGE_SIZE);    // one extra page for debug infrastructure
++        uGuardSize += (1 * GetOsPageSize());    // one extra page for debug infrastructure
+ #endif // _DEBUG
+ #endif // _WIN64
+ 
+@@ -7145,14 +7145,14 @@ UINT_PTR Thread::GetLastNormalStackAddress(UINT_PTR StackLimit)
+     UINT_PTR cbStackGuarantee = GetStackGuarantee();
+ 
+     // Here we take the "hard guard region size", the "stack guarantee" and the "fault page" and add them
+-    // all together.  Note that the "fault page" is the reason for the extra OS_PAGE_SIZE below.  The OS
++    // all together.  Note that the "fault page" is the reason for the extra GetOsPageSize() below.  The OS
+     // will guarantee us a certain amount of stack remaining after a stack overflow.  This is called the
+     // "stack guarantee".  But to do this, it has to fault on the page before that region as the app is
+     // allowed to fault at the very end of that page.  So, as a result, the last normal stack address is
+     // one page sooner.
+     return StackLimit + (cbStackGuarantee 
+ #ifndef FEATURE_PAL
+-            + OS_PAGE_SIZE 
++            + GetOsPageSize()
+ #endif // !FEATURE_PAL
+             + HARD_GUARD_REGION_SIZE);
+ }
+@@ -7253,7 +7253,7 @@ static void DebugLogStackRegionMBIs(UINT_PTR uLowAddress, UINT_PTR uHighAddress)
+ 
+         UINT_PTR uRegionSize = uStartOfNextRegion - uStartOfThisRegion;
+ 
+-        LOG((LF_EH, LL_INFO1000, "0x%p -> 0x%p (%d pg)  ", uStartOfThisRegion, uStartOfNextRegion - 1, uRegionSize / OS_PAGE_SIZE));
++        LOG((LF_EH, LL_INFO1000, "0x%p -> 0x%p (%d pg)  ", uStartOfThisRegion, uStartOfNextRegion - 1, uRegionSize / GetOsPageSize()));
+         DebugLogMBIFlags(meminfo.State, meminfo.Protect);
+         LOG((LF_EH, LL_INFO1000, "\n"));
+ 
+@@ -7292,7 +7292,7 @@ void Thread::DebugLogStackMBIs()
+     UINT_PTR uStackSize         = uStackBase - uStackLimit;
+ 
+     LOG((LF_EH, LL_INFO1000, "----------------------------------------------------------------------\n"));
+-    LOG((LF_EH, LL_INFO1000, "Stack Snapshot 0x%p -> 0x%p (%d pg)\n", uStackLimit, uStackBase, uStackSize / OS_PAGE_SIZE));
++    LOG((LF_EH, LL_INFO1000, "Stack Snapshot 0x%p -> 0x%p (%d pg)\n", uStackLimit, uStackBase, uStackSize / GetOsPageSize()));
+     if (pThread)
+     {
+         LOG((LF_EH, LL_INFO1000, "Last normal addr: 0x%p\n", pThread->GetLastNormalStackAddress()));
+@@ -7514,7 +7514,7 @@ BOOL Thread::CanResetStackTo(LPCVOID stackPointer)
+     // We need to have enough space to call back into the EE from the handler, so we use the twice the entry point amount.
+     // We need enough to do work and enough that partway through that work we won't probe and COMPlusThrowSO.
+ 
+-    const INT_PTR iStackSizeThreshold        = (ADJUST_PROBE(DEFAULT_ENTRY_PROBE_AMOUNT * 2) * OS_PAGE_SIZE);
++    const INT_PTR iStackSizeThreshold        = (ADJUST_PROBE(DEFAULT_ENTRY_PROBE_AMOUNT * 2) * GetOsPageSize());
+ 
+     if (iStackSpaceLeft > iStackSizeThreshold)
+     {
+@@ -7557,7 +7557,7 @@ BOOL Thread::IsStackSpaceAvailable(float numPages)
+ 
+     // If we have access to the stack guarantee (either in the guard region or we've tripped the guard page), then
+     // use that.
+-    if ((iStackSpaceLeft/OS_PAGE_SIZE) < numPages && !DetermineIfGuardPagePresent()) 
++    if ((iStackSpaceLeft/GetOsPageSize()) < numPages && !DetermineIfGuardPagePresent())
+     {    
+         UINT_PTR stackGuarantee = GetStackGuarantee();
+         // GetLastNormalStackAddress actually returns the 2nd to last stack page on the stack. We'll add that to our available
+@@ -7565,9 +7565,9 @@ BOOL Thread::IsStackSpaceAvailable(float numPages)
+         //
+         // All these values are OS supplied, and will never overflow. (If they do, that means the stack is on the order
+         // over GB, which isn't possible.
+-        iStackSpaceLeft += stackGuarantee + OS_PAGE_SIZE;
++        iStackSpaceLeft += stackGuarantee + GetOsPageSize();
+     }
+-    if ((iStackSpaceLeft/OS_PAGE_SIZE) < numPages)
++    if ((iStackSpaceLeft/GetOsPageSize()) < numPages)
+     {
+         return FALSE;
+     }
+@@ -7703,13 +7703,13 @@ VOID Thread::RestoreGuardPage()
+     // to change the size of the guard region, we'll just go ahead and protect the next page down from where we are
+     // now. The guard page will get pushed forward again, just like normal, until the next stack overflow.
+         approxStackPointer   = (UINT_PTR)GetCurrentSP();
+-        guardPageBase        = (UINT_PTR)ALIGN_DOWN(approxStackPointer, OS_PAGE_SIZE) - OS_PAGE_SIZE;
++        guardPageBase        = (UINT_PTR)ALIGN_DOWN(approxStackPointer, GetOsPageSize()) - GetOsPageSize();
+ 
+         // OS uses soft guard page to update the stack info in TEB.  If our guard page is not beyond the current stack, the TEB
+         // will not be updated, and then OS's check of stack during exception will fail.
+         if (approxStackPointer >= guardPageBase)
+         {
+-            guardPageBase -= OS_PAGE_SIZE;
++            guardPageBase -= GetOsPageSize();
+         }
+     // If we're currently "too close" to the page we want to mark as a guard then the call to VirtualProtect to set
+     // PAGE_GUARD will fail, but it won't return an error. Therefore, we protect the page, then query it to make
+@@ -7739,7 +7739,7 @@ VOID Thread::RestoreGuardPage()
+             }
+             else
+             {
+-                guardPageBase -= OS_PAGE_SIZE;
++                guardPageBase -= GetOsPageSize();
+             }
+         }
+     }
+diff --git a/src/vm/threads.h b/src/vm/threads.h
+index 34fca24..7f1bbb6 100644
+--- a/src/vm/threads.h
++++ b/src/vm/threads.h
+@@ -3572,7 +3572,7 @@ private:
+     PTR_VOID    m_CacheStackLimit;
+     UINT_PTR    m_CacheStackSufficientExecutionLimit;
+ 
+-#define HARD_GUARD_REGION_SIZE OS_PAGE_SIZE
++#define HARD_GUARD_REGION_SIZE GetOsPageSize()
+ 
+ private:
+     //
+@@ -3586,8 +3586,8 @@ private:
+ 
+     // Every stack has a single reserved page at its limit that we call the 'hard guard page'. This page is never
+     // committed, and access to it after a stack overflow will terminate the thread.
+-#define HARD_GUARD_REGION_SIZE OS_PAGE_SIZE
+-#define SIZEOF_DEFAULT_STACK_GUARANTEE 1 * OS_PAGE_SIZE
++#define HARD_GUARD_REGION_SIZE GetOsPageSize()
++#define SIZEOF_DEFAULT_STACK_GUARANTEE 1 * GetOsPageSize()
+ 
+ public:
+     // This will return the last stack address that one could write to before a stack overflow.
+diff --git a/src/vm/virtualcallstub.cpp b/src/vm/virtualcallstub.cpp
+index 01b15c6..8239bf5 100644
+--- a/src/vm/virtualcallstub.cpp
++++ b/src/vm/virtualcallstub.cpp
+@@ -592,20 +592,20 @@ void VirtualCallStubManager::Init(BaseDomain *pDomain, LoaderAllocator *pLoaderA
+     //
+     // Align up all of the commit and reserve sizes
+     //
+-    indcell_heap_reserve_size        = (DWORD) ALIGN_UP(indcell_heap_reserve_size,     PAGE_SIZE);
+-    indcell_heap_commit_size         = (DWORD) ALIGN_UP(indcell_heap_commit_size,      PAGE_SIZE);
++    indcell_heap_reserve_size        = (DWORD) ALIGN_UP(indcell_heap_reserve_size,     GetOsPageSize());
++    indcell_heap_commit_size         = (DWORD) ALIGN_UP(indcell_heap_commit_size,      GetOsPageSize());
+ 
+-    cache_entry_heap_reserve_size    = (DWORD) ALIGN_UP(cache_entry_heap_reserve_size, PAGE_SIZE);
+-    cache_entry_heap_commit_size     = (DWORD) ALIGN_UP(cache_entry_heap_commit_size,  PAGE_SIZE);
++    cache_entry_heap_reserve_size    = (DWORD) ALIGN_UP(cache_entry_heap_reserve_size, GetOsPageSize());
++    cache_entry_heap_commit_size     = (DWORD) ALIGN_UP(cache_entry_heap_commit_size,  GetOsPageSize());
+ 
+-    lookup_heap_reserve_size         = (DWORD) ALIGN_UP(lookup_heap_reserve_size,      PAGE_SIZE);
+-    lookup_heap_commit_size          = (DWORD) ALIGN_UP(lookup_heap_commit_size,       PAGE_SIZE);
++    lookup_heap_reserve_size         = (DWORD) ALIGN_UP(lookup_heap_reserve_size,      GetOsPageSize());
++    lookup_heap_commit_size          = (DWORD) ALIGN_UP(lookup_heap_commit_size,       GetOsPageSize());
+ 
+-    dispatch_heap_reserve_size       = (DWORD) ALIGN_UP(dispatch_heap_reserve_size,    PAGE_SIZE);
+-    dispatch_heap_commit_size        = (DWORD) ALIGN_UP(dispatch_heap_commit_size,     PAGE_SIZE);
++    dispatch_heap_reserve_size       = (DWORD) ALIGN_UP(dispatch_heap_reserve_size,    GetOsPageSize());
++    dispatch_heap_commit_size        = (DWORD) ALIGN_UP(dispatch_heap_commit_size,     GetOsPageSize());
+ 
+-    resolve_heap_reserve_size        = (DWORD) ALIGN_UP(resolve_heap_reserve_size,     PAGE_SIZE);
+-    resolve_heap_commit_size         = (DWORD) ALIGN_UP(resolve_heap_commit_size,      PAGE_SIZE);
++    resolve_heap_reserve_size        = (DWORD) ALIGN_UP(resolve_heap_reserve_size,     GetOsPageSize());
++    resolve_heap_commit_size         = (DWORD) ALIGN_UP(resolve_heap_commit_size,      GetOsPageSize());
+ 
+     BYTE * initReservedMem = NULL;
+ 
+@@ -624,16 +624,16 @@ void VirtualCallStubManager::Init(BaseDomain *pDomain, LoaderAllocator *pLoaderA
+             DWORD dwWastedReserveMemSize = dwTotalReserveMemSize - dwTotalReserveMemSizeCalc;
+             if (dwWastedReserveMemSize != 0)
+             {
+-                DWORD cWastedPages = dwWastedReserveMemSize / PAGE_SIZE;
++                DWORD cWastedPages = dwWastedReserveMemSize / GetOsPageSize();
+                 DWORD cPagesPerHeap = cWastedPages / 5;
+                 DWORD cPagesRemainder = cWastedPages % 5; // We'll throw this at the resolve heap
+ 
+-                indcell_heap_reserve_size += cPagesPerHeap * PAGE_SIZE;
+-                cache_entry_heap_reserve_size += cPagesPerHeap * PAGE_SIZE;
+-                lookup_heap_reserve_size += cPagesPerHeap * PAGE_SIZE;
+-                dispatch_heap_reserve_size += cPagesPerHeap * PAGE_SIZE;
+-                resolve_heap_reserve_size += cPagesPerHeap * PAGE_SIZE;
+-                resolve_heap_reserve_size += cPagesRemainder * PAGE_SIZE;
++                indcell_heap_reserve_size += cPagesPerHeap * GetOsPageSize();
++                cache_entry_heap_reserve_size += cPagesPerHeap * GetOsPageSize();
++                lookup_heap_reserve_size += cPagesPerHeap * GetOsPageSize();
++                dispatch_heap_reserve_size += cPagesPerHeap * GetOsPageSize();
++                resolve_heap_reserve_size += cPagesPerHeap * GetOsPageSize();
++                resolve_heap_reserve_size += cPagesRemainder * GetOsPageSize();
+             }
+ 
+             CONSISTENCY_CHECK((indcell_heap_reserve_size     +
+@@ -653,20 +653,20 @@ void VirtualCallStubManager::Init(BaseDomain *pDomain, LoaderAllocator *pLoaderA
+     }
+     else
+     {
+-        indcell_heap_reserve_size        = PAGE_SIZE;
+-        indcell_heap_commit_size         = PAGE_SIZE;
++        indcell_heap_reserve_size        = GetOsPageSize();
++        indcell_heap_commit_size         = GetOsPageSize();
+ 
+-        cache_entry_heap_reserve_size    = PAGE_SIZE;
+-        cache_entry_heap_commit_size     = PAGE_SIZE;
++        cache_entry_heap_reserve_size    = GetOsPageSize();
++        cache_entry_heap_commit_size     = GetOsPageSize();
+ 
+-        lookup_heap_reserve_size         = PAGE_SIZE;
+-        lookup_heap_commit_size          = PAGE_SIZE;
++        lookup_heap_reserve_size         = GetOsPageSize();
++        lookup_heap_commit_size          = GetOsPageSize();
+ 
+-        dispatch_heap_reserve_size       = PAGE_SIZE;
+-        dispatch_heap_commit_size        = PAGE_SIZE;
++        dispatch_heap_reserve_size       = GetOsPageSize();
++        dispatch_heap_commit_size        = GetOsPageSize();
+ 
+-        resolve_heap_reserve_size        = PAGE_SIZE;
+-        resolve_heap_commit_size         = PAGE_SIZE;
++        resolve_heap_reserve_size        = GetOsPageSize();
++        resolve_heap_commit_size         = GetOsPageSize();
+ 
+ #ifdef _DEBUG
+         DWORD dwTotalReserveMemSizeCalc  = indcell_heap_reserve_size     +
+diff --git a/src/vm/win32threadpool.cpp b/src/vm/win32threadpool.cpp
+index bc84762..f73093d 100644
+--- a/src/vm/win32threadpool.cpp
++++ b/src/vm/win32threadpool.cpp
+@@ -1758,7 +1758,7 @@ DWORD WINAPI ThreadpoolMgr::intermediateThreadProc(PVOID arg)
+     STATIC_CONTRACT_SO_INTOLERANT;
+ 
+     offset_counter++;
+-    if (offset_counter * offset_multiplier > PAGE_SIZE)
++    if (offset_counter * offset_multiplier > (int)GetOsPageSize())
+         offset_counter = 0;
+ 
+     (void)_alloca(offset_counter * offset_multiplier);
+-- 
+2.7.4
+

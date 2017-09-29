@@ -1,0 +1,117 @@
+From 9db226d27e03253791d5e2a4e36adfb36ebd1f06 Mon Sep 17 00:00:00 2001
+From: Hyung-Kyu Choi <hqueue@users.noreply.github.com>
+Date: Wed, 26 Apr 2017 06:51:11 +0900
+Subject: [PATCH] [release/2.0.0][ARM32] clang 3.9 as a default for ARM cross
+ build (#11197)
+
+* [ARM32] clang 3.9 as a default for ARM cross build
+
+Use clang 3.9 as a default compiler for ARM cross build
+
+* Both arm and armel will be built using clang 3.9 as a default
+* ARM CI will use clang 3.9 as a default
+* ARM pipieline build will use clang 3.9 as a default
+
+Signed-off-by: Hyung-Kyu Choi <hk0110.choi@samsung.com>
+
+* [ARM32] Update docs describing clang-3.9 and ARM cross build
+
+Signed-off-by: Hyung-Kyu Choi <hk0110.choi@samsung.com>
+
+* [ARM] Check minimum version requirement of clang for ARM cross build
+
+Signed-off-by: Hyung-Kyu Choi <hk0110.choi@samsung.com>
+---
+ Documentation/building/linux-instructions.md | 14 ++++++++++++--
+ build.sh                                     | 13 +++++++++++++
+ tests/scripts/arm32_ci_script.sh             |  2 +-
+ 3 files changed, 26 insertions(+), 3 deletions(-)
+
+diff --git a/Documentation/building/linux-instructions.md b/Documentation/building/linux-instructions.md
+index b14ab28..bacbe6d 100644
+--- a/Documentation/building/linux-instructions.md
++++ b/Documentation/building/linux-instructions.md
+@@ -18,8 +18,8 @@ Toolchain Setup
+ Install the following packages for the toolchain: 
+ 
+ - cmake 
+-- llvm-3.5 
+-- clang-3.5 
++- llvm-3.5 (llvm-3.9 for ARM cross build)
++- clang-3.5 (clang-3.9 for ARM cross build)
+ - lldb-3.6
+ - lldb-3.6-dev 
+ - libunwind8 
+@@ -39,6 +39,14 @@ ellismg@linux:~$ wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key | sudo apt-
+ ellismg@linux:~$ sudo apt-get update
+ ```
+ 
++If you are going to cross build for ARM, you need llvm-3.9 and clang-3.9 and please add below package source instead for Ubuntu 14.04.
++```
++hqueue@linux:~$ echo "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-3.9 main" | sudo tee /etc/apt/sources.list.d/llvm.list
++hqueue@linux:~$ wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key | sudo apt-key add -
++hqueue@linux:~$ sudo apt-get update
++```
++For other version of Debian/Ubuntu, please visit http://apt.llvm.org/.
++
+ Then install the packages you need:
+ 
+ ```
+@@ -120,6 +128,8 @@ index 1ed3dbf..c643032 100644
+ How to enable -O3 optimization level for ARM/Linux
+ ==================================================
+ 
++If you are using clang-3.9, -O3 optimization is enabled as default and you can skip this section.
++If you are using older version of clang, please follow instructions in this section to enable -O3 optimization.
+ Currently, we can build coreclr with -O1 flag of clang in release build mode for Linux/ARM without any bugfix of llvm-3.6. This instruction is to enable -O3 optimization level of clang on Linux/ARM by fixing the bug of llvm.
+ 
+ First, download latest version from the clang-3.6/llvm-3.6 upstream: 
+diff --git a/build.sh b/build.sh
+index f5cab1e..8591ff5 100755
+--- a/build.sh
++++ b/build.sh
+@@ -118,6 +118,14 @@ check_prereqs()
+     # Check presence of CMake on the path
+     hash cmake 2>/dev/null || { echo >&2 "Please install cmake before running this script"; exit 1; }
+ 
++
++    # Minimum required version of clang is version 3.9 for arm/armel cross build
++    if [[ $__CrossBuild == 1 && ("$__BuildArch" == "arm" || "$__BuildArch" == "armel") ]]; then
++        if ! [[ "$__ClangMajorVersion" -gt "3" || ( $__ClangMajorVersion == 3 && $__ClangMinorVersion == 9 ) ]]; then
++            echo "Please install clang3.9 or latest for arm/armel cross build"; exit 1;
++        fi
++    fi
++
+     # Check for clang
+     hash clang-$__ClangMajorVersion.$__ClangMinorVersion 2>/dev/null ||  hash clang$__ClangMajorVersion$__ClangMinorVersion 2>/dev/null ||  hash clang 2>/dev/null || { echo >&2 "Please install clang-$__ClangMajorVersion.$__ClangMinorVersion before running this script"; exit 1; }
+ 
+@@ -780,8 +788,13 @@ fi
+ # Set default clang version
+ if [[ $__ClangMajorVersion == 0 && $__ClangMinorVersion == 0 ]]; then
+     if [ $__CrossBuild == 1 ]; then
++        if [[ "$__BuildArch" == "arm" || "$__BuildArch" == "armel" ]]; then
++            __ClangMajorVersion=3
++            __ClangMinorVersion=9
++        else
+             __ClangMajorVersion=3
+             __ClangMinorVersion=6
++        fi
+     else
+         __ClangMajorVersion=3
+         __ClangMinorVersion=5
+diff --git a/tests/scripts/arm32_ci_script.sh b/tests/scripts/arm32_ci_script.sh
+index 3124cc8..209ab39 100755
+--- a/tests/scripts/arm32_ci_script.sh
++++ b/tests/scripts/arm32_ci_script.sh
+@@ -289,7 +289,7 @@ function cross_build_coreclr_with_docker {
+ 
+     # Cross building coreclr with rootfs in Docker
+     (set +x; echo "Start cross build coreclr for $__buildArch $__linuxCodeName")
+-    __buildCmd="./build.sh $__buildArch cross $__verboseFlag $__skipMscorlib $__buildConfig -rebuild clang3.9"
++    __buildCmd="./build.sh $__buildArch cross $__verboseFlag $__skipMscorlib $__buildConfig -rebuild"
+     $__dockerCmd $__buildCmd
+     sudo chown -R $(id -u -n) ./bin
+ }
+-- 
+2.7.4
+

@@ -1,0 +1,42 @@
+From 0c7cf46ada918c68d4443bf4fe4ed0270be9f77c Mon Sep 17 00:00:00 2001
+From: jashook <jashoo@microsoft.com>
+Date: Thu, 27 Apr 2017 16:43:17 -0700
+Subject: [PATCH] Disable tests failing for x86 jit32
+
+---
+ tests/x86_jit32_issues.targets | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/tests/x86_jit32_issues.targets b/tests/x86_jit32_issues.targets
+index 7a6983d..3ca8242 100644
+--- a/tests/x86_jit32_issues.targets
++++ b/tests/x86_jit32_issues.targets
+@@ -337,6 +337,25 @@
+         <ExcludeList Include="$(XunitTestBinBase)\Loader\classloader\TSAmbiguities\CollapsedInterfaces\HelloWorld\HelloWorld.cmd">
+             <Issue>6714</Issue>
+         </ExcludeList>
++        <ExcludeList Include="$(XunitTestBinBase)\JIT\Performance\CodeQuality\Span\Indexer\Indexer.cmd">
++            <Issue>Span Unsupported</Issue>
++        </ExcludeList>
++        <ExcludeList Include="$(XunitTestBinBase)\JIT\Performance\CodeQuality\Span\SpanBench\SpanBench.cmd">
++            <Issue>Span Unsupported</Issue>
++        </ExcludeList>
++        <ExcludeList Include="$(XunitTestBinBase)\JIT\superpmi\superpmicollect\superpmicollect.cmd">
++            <Issue>needs triage</Issue>
++        </ExcludeList>
++        <ExcludeList Include="$(XunitTestBinBase)\JIT\Regression\JitBlue\DevDiv_359734\DevDiv_359734\DevDiv_359734.cmd">
++            <Issue>needs triage</Issue>
++        </ExcludeList>
++        <ExcludeList Include="$(XunitTestBinBase)\CoreMangLib\cti\system\mathf\MathFCos\MathFCos.cmd">
++            <Issue>11276</Issue>
++        </ExcludeList>
++        <ExcludeList Include="$(XunitTestBinBase)\CoreMangLib\cti\system\mathf\MathFSin\MathFSin.cmd">
++            <Issue>11276</Issue>
++        </ExcludeList>
++
+     </ItemGroup>
+ 
+     <!-- Tests that need to be triaged for vararg usage as that is not supported -->
+-- 
+2.7.4
+

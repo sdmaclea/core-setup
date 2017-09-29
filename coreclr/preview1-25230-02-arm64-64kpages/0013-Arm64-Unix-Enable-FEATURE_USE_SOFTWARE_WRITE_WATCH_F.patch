@@ -1,0 +1,144 @@
+From 50928303309501f35e8c273cc589c2be9445a3f7 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea@qti.qualcomm.com>
+Date: Fri, 5 May 2017 19:16:37 -0400
+Subject: [PATCH] [Arm64/Unix] Enable
+ FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP (#11375)
+
+* [Arm64/Unix] Enable FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+* [Arm64/Unix] Enable FEATURE_MANUALLY_MANAGED_CARD_BUNDLES
+---
+ clrdefinitions.cmake      |  4 ++--
+ src/jit/target.h          |  2 +-
+ src/vm/arm64/asmhelpers.S | 33 +++++++++++++++++++++++++++++++++
+ src/vm/arm64/stubs.cpp    | 13 +++++++++++++
+ 4 files changed, 49 insertions(+), 3 deletions(-)
+
+diff --git a/clrdefinitions.cmake b/clrdefinitions.cmake
+index 3f4122a..bcbf1f2 100644
+--- a/clrdefinitions.cmake
++++ b/clrdefinitions.cmake
+@@ -180,10 +180,10 @@ if(CLR_CMAKE_PLATFORM_UNIX_AMD64)
+   add_definitions(-DFEATURE_UNIX_AMD64_STRUCT_PASSING)
+ endif (CLR_CMAKE_PLATFORM_UNIX_AMD64)
+ add_definitions(-DFEATURE_USE_ASM_GC_WRITE_BARRIERS)
+-if(CLR_CMAKE_PLATFORM_ARCH_AMD64 AND NOT WIN32)
++if((CLR_CMAKE_PLATFORM_ARCH_AMD64 OR CLR_CMAKE_PLATFORM_ARCH_ARM64) AND NOT WIN32)
+   add_definitions(-DFEATURE_MANUALLY_MANAGED_CARD_BUNDLES)
+   add_definitions(-DFEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP)
+-endif(CLR_CMAKE_PLATFORM_ARCH_AMD64 AND NOT WIN32)
++endif((CLR_CMAKE_PLATFORM_ARCH_AMD64 OR CLR_CMAKE_PLATFORM_ARCH_ARM64) AND NOT WIN32)
+ if(WIN32)
+     add_definitions(-DFEATURE_VERSIONING_LOG)
+ endif(WIN32)
+diff --git a/src/jit/target.h b/src/jit/target.h
+index f62d905..d7cfed4 100644
+--- a/src/jit/target.h
++++ b/src/jit/target.h
+@@ -1573,7 +1573,7 @@ typedef unsigned short regPairNoSmall; // arm: need 12 bits
+ 
+   #define RBM_CALLEE_SAVED        (RBM_INT_CALLEE_SAVED | RBM_FLT_CALLEE_SAVED)
+   #define RBM_CALLEE_TRASH        (RBM_INT_CALLEE_TRASH | RBM_FLT_CALLEE_TRASH)
+-  #define RBM_CALLEE_TRASH_NOGC   (RBM_R12|RBM_R13|RBM_R14|RBM_R15)
++  #define RBM_CALLEE_TRASH_NOGC   (RBM_R12|RBM_R13|RBM_R14|RBM_R15|RBM_IP1)
+   #define REG_DEFAULT_HELPER_CALL_TARGET REG_R12
+ 
+   #define RBM_ALLINT              (RBM_INT_CALLEE_SAVED | RBM_INT_CALLEE_TRASH)
+diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
+index 15b8057..79e3989 100644
+--- a/src/vm/arm64/asmhelpers.S
++++ b/src/vm/arm64/asmhelpers.S
+@@ -217,6 +217,7 @@ LEAF_END ThePreStubPatch, _TEXT
+ //   x13  : incremented by 8
+ //   x14  : incremented by 8
+ //   x15  : trashed
++//   x17  : trashed (ip1) if FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ //
+ WRITE_BARRIER_ENTRY JIT_ByRefWriteBarrier
+ 
+@@ -236,6 +237,7 @@ WRITE_BARRIER_END JIT_ByRefWriteBarrier
+ //   x12  : trashed
+ //   x14  : incremented by 8
+ //   x15  : trashed
++//   x17  : trashed (ip1) if FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ //
+ WRITE_BARRIER_ENTRY JIT_CheckedWriteBarrier
+     PREPARE_EXTERNAL_VAR g_lowest_address, x12
+@@ -262,6 +264,7 @@ WRITE_BARRIER_END JIT_CheckedWriteBarrier
+ //   x12  : trashed
+ //   x14  : incremented by 8
+ //   x15  : trashed
++//   x17  : trashed (ip1) if FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+ //
+ WRITE_BARRIER_ENTRY JIT_WriteBarrier
+     dmb  ST
+@@ -310,6 +313,21 @@ LOCAL_LABEL(shadowupdateend):
+     ldp  x12, x13, [sp],#16
+ #endif
+ 
++#ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
++    // Update the write watch table if necessary
++    PREPARE_EXTERNAL_VAR g_sw_ww_enabled_for_gc_heap, x12
++    ldrb w12, [x12]
++    cbz  x12, LOCAL_LABEL(CheckCardTable)
++    PREPARE_EXTERNAL_VAR g_sw_ww_table, x12
++    ldr  x12, [x12]
++    add  x12, x12, x14, lsr #0xc  // SoftwareWriteWatch::AddressToTableByteIndexShift
++    ldrb w17, [x12]
++    cbnz x17, LOCAL_LABEL(CheckCardTable)
++    mov  w17, #0xFF
++    strb w17, [x12]
++#endif
++
++LOCAL_LABEL(CheckCardTable):
+     // Branch to Exit if the reference is not in the Gen0 heap
+     //
+     PREPARE_EXTERNAL_VAR g_ephemeral_low, x12
+@@ -333,6 +351,21 @@ LOCAL_LABEL(shadowupdateend):
+ LOCAL_LABEL(UpdateCardTable):
+     mov  x12, 0xFF 
+     strb w12, [x15]
++
++#ifdef FEATURE_MANUALLY_MANAGED_CARD_BUNDLES
++    // Check if we need to update the card table
++    PREPARE_EXTERNAL_VAR g_card_bundle_table, x12
++    ldr  x12, [x12]
++    add  x15,  x12, x14, lsr #21
++    ldrb w12, [x15]
++    cmp  x12, 0xFF
++    beq  LOCAL_LABEL(Exit)
++
++LOCAL_LABEL(UpdateCardBundle):
++    mov  x12, 0xFF
++    strb w12, [x15]
++#endif
++
+ LOCAL_LABEL(Exit):
+     add  x14, x14, 8
+     ret  lr  
+diff --git a/src/vm/arm64/stubs.cpp b/src/vm/arm64/stubs.cpp
+index 0c7eb4d..40d2749 100644
+--- a/src/vm/arm64/stubs.cpp
++++ b/src/vm/arm64/stubs.cpp
+@@ -1317,6 +1317,19 @@ void StompWriteBarrierResize(bool isRuntimeSuspended, bool bReqUpperBoundsCheck)
+     return;
+ }
+ 
++#ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
++void SwitchToWriteWatchBarrier(bool isRuntimeSuspended)
++{
++    return;
++}
++
++void SwitchToNonWriteWatchBarrier(bool isRuntimeSuspended)
++{
++    return;
++}
++#endif // FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
++
++
+ #ifdef DACCESS_COMPILE
+ BOOL GetAnyThunkTarget (T_CONTEXT *pctx, TADDR *pTarget, TADDR *pTargetMethodDesc)
+ {
+-- 
+2.7.4
+

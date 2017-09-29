@@ -1,0 +1,56 @@
+From ba86da4a6c821b0f042e105a72fd901c7f7b94c3 Mon Sep 17 00:00:00 2001
+From: Wes Haggard <Wes.Haggard@microsoft.com>
+Date: Mon, 24 Apr 2017 17:03:29 -0700
+Subject: [PATCH] Enable SourceBranch to be passed from the pipeline parameters
+
+sets SkipBranchAndVersionOverrides=false so SourceBranch and SourceVersion
+are correctly passed through the pipeline file.
+
+set SkipBranchAndVersionOverrides=true for the publish definitions as
+they don't build from the SourceBranch and instead use a different
+tools branch to do their work.
+---
+ buildpipeline/pipelines.json | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/buildpipeline/pipelines.json b/buildpipeline/pipelines.json
+index 41a2640..b4b4b23 100644
+--- a/buildpipeline/pipelines.json
++++ b/buildpipeline/pipelines.json
+@@ -3,7 +3,8 @@
+   "Definitions": {
+     "Path": ".",
+     "Type": "VSTS",
+-    "BaseUrl":  "https://devdiv.visualstudio.com/DefaultCollection"
++    "BaseUrl":  "https://devdiv.visualstudio.com/DefaultCollection",
++    "SkipBranchAndVersionOverrides": "false"
+   },
+   "DefinitionGroups": [
+     {
+@@ -396,6 +397,7 @@
+       "Definitions": [
+         {
+           "Name": "DotNet-Trusted-Publish",
++          "SkipBranchAndVersionOverrides": "true",
+           "Parameters": {
+             "VstsRepositoryName": "DotNet-CoreCLR-Trusted",
+             "GitHubRepositoryName": "coreclr",
+@@ -425,6 +427,7 @@
+       "Definitions": [
+         {
+           "Name": "DotNet-Trusted-Publish",
++          "SkipBranchAndVersionOverrides": "true",
+           "Parameters": {
+             "VstsRepositoryName": "DotNet-CoreCLR-Trusted",
+             "GitHubRepositoryName": "coreclr"
+@@ -452,6 +455,7 @@
+       "Definitions": [
+         {
+           "Name": "DotNet-Trusted-Publish",
++          "SkipBranchAndVersionOverrides": "true",
+           "Parameters": {
+             "VstsRepositoryName": "DotNet-CoreCLR-Trusted",
+             "GitHubRepositoryName": "coreclr"
+-- 
+2.7.4
+
