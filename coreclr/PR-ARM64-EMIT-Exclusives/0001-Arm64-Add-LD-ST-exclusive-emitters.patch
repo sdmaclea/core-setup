@@ -1,0 +1,220 @@
+From 375107fade072f81e011c16e8a7ac68b58ccdd03 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 2 Oct 2017 18:19:29 -0400
+Subject: [PATCH] [Arm64] Add LD/ST exclusive emitters
+
+---
+ src/jit/codegenarm64.cpp | 24 ++++++++++++++++++++++++
+ src/jit/emitarm64.cpp    | 44 ++++++++++++++++++++++++++++++++++++++++++++
+ src/jit/emitfmtsarm64.h  |  1 +
+ src/jit/instrsarm64.h    | 36 ++++++++++++++++++++++++++++++++++++
+ 4 files changed, 105 insertions(+)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 8d21ae3..95718c7 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -3684,6 +3684,30 @@ void CodeGen::genArm64EmitterUnitTests()
+     theEmitter->emitIns_R_R(INS_stlrb, EA_4BYTE, REG_R5, REG_R14);
+     theEmitter->emitIns_R_R(INS_stlrh, EA_4BYTE, REG_R3, REG_R15);
+ 
++    // ldaxr Rt, [reg]
++    theEmitter->emitIns_R_R(INS_ldaxr, EA_8BYTE, REG_R9, REG_R8);
++    theEmitter->emitIns_R_R(INS_ldaxr, EA_4BYTE, REG_R7, REG_R10);
++    theEmitter->emitIns_R_R(INS_ldaxrb, EA_4BYTE, REG_R5, REG_R11);
++    theEmitter->emitIns_R_R(INS_ldaxrh, EA_4BYTE, REG_R5, REG_R12);
++
++    // ldxr Rt, [reg]
++    theEmitter->emitIns_R_R(INS_ldxr, EA_8BYTE, REG_R9, REG_R8);
++    theEmitter->emitIns_R_R(INS_ldxr, EA_4BYTE, REG_R7, REG_R10);
++    theEmitter->emitIns_R_R(INS_ldxrb, EA_4BYTE, REG_R5, REG_R11);
++    theEmitter->emitIns_R_R(INS_ldxrh, EA_4BYTE, REG_R5, REG_R12);
++
++    // stxr Ws, Rt, [reg]
++    theEmitter->emitIns_R_R_R(INS_stxr, EA_8BYTE, REG_R1, REG_R9, REG_R8);
++    theEmitter->emitIns_R_R_R(INS_stxr, EA_4BYTE, REG_R3, REG_R7, REG_R13);
++    theEmitter->emitIns_R_R_R(INS_stxrb, EA_4BYTE, REG_R8, REG_R5, REG_R14);
++    theEmitter->emitIns_R_R_R(INS_stxrh, EA_4BYTE, REG_R12, REG_R3, REG_R15);
++
++    // stlxr Ws, Rt, [reg]
++    theEmitter->emitIns_R_R_R(INS_stlxr, EA_8BYTE, REG_R1, REG_R9, REG_R8);
++    theEmitter->emitIns_R_R_R(INS_stlxr, EA_4BYTE, REG_R3, REG_R7, REG_R13);
++    theEmitter->emitIns_R_R_R(INS_stlxrb, EA_4BYTE, REG_R8, REG_R5, REG_R14);
++    theEmitter->emitIns_R_R_R(INS_stlxrh, EA_4BYTE, REG_R12, REG_R3, REG_R15);
++
+ #endif // ALL_ARM64_EMITTER_UNIT_TESTS
+ 
+ #ifdef ALL_ARM64_EMITTER_UNIT_TESTS
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index d901f8a..374c160 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -269,6 +269,15 @@ void emitter::emitInsSanityCheck(instrDesc* id)
+             assert(insOptsNone(id->idInsOpt()) || insOptsIndexed(id->idInsOpt()));
+             break;
+ 
++        case IF_LS_3D: // LS_3D   .X.......X.mmmmm ......nnnnnttttt      Wm Rt Rn
++            assert(isIntegerRegister(id->idReg1()));
++            assert(isIntegerRegister(id->idReg2()));
++            assert(isIntegerRegister(id->idReg3()));
++            assert(emitGetInsSC(id) == 0);
++            assert(!id->idIsLclVar());
++            assert(insOptsNone(id->idInsOpt()));
++            break;
++
+         case IF_DI_1A: // DI_1A   X.......shiiiiii iiiiiinnnnn.....         Rn    imm(i12,sh)
+             assert(isValidGeneralDatasize(id->idOpSize()));
+             assert(isGeneralRegister(id->idReg1()));
+@@ -841,6 +850,7 @@ bool emitter::emitInsMayWriteToGCReg(instrDesc* id)
+         case IF_LS_3A: // LS_3A   .X.......X.mmmmm xxxS..nnnnnttttt      Rt Rn Rm ext(Rm) LSL {}
+         case IF_LS_3B: // LS_3B   X............... .aaaaannnnnttttt      Rt Ra Rn
+         case IF_LS_3C: // LS_3C   X.........iiiiii iaaaaannnnnttttt      Rt Ra Rn imm(im7,sh)
++        case IF_LS_3D: // LS_3D   .X.......X.mmmmm ......nnnnnttttt      Wm Rt Rn
+ 
+             // For the Store instructions the "target" register is actually a "source" value
+ 
+@@ -1860,6 +1870,7 @@ emitter::code_t emitter::emitInsCode(instruction ins, insFormat fmt)
+         case IF_LS_3A:
+         case IF_LS_3B:
+         case IF_LS_3C:
++        case IF_LS_3D:
+         case IF_DI_1A:
+         case IF_DI_1B:
+         case IF_DI_1C:
+@@ -3891,13 +3902,19 @@ void emitter::emitIns_R_R(
+             break;
+ 
+         case INS_ldar:
++        case INS_ldaxr:
++        case INS_ldxr:
+         case INS_stlr:
+             assert(isValidGeneralDatasize(size));
+ 
+             __fallthrough;
+ 
+         case INS_ldarb:
++        case INS_ldaxrb:
++        case INS_ldxrb:
+         case INS_ldarh:
++        case INS_ldaxrh:
++        case INS_ldxrh:
+         case INS_stlrb:
+         case INS_stlrh:
+             assert(isValidGeneralLSDatasize(size));
+@@ -5091,6 +5108,18 @@ void emitter::emitIns_R_R_R(
+             emitIns_R_R_R_I(ins, attr, reg1, reg2, reg3, 0);
+             return;
+ 
++        case INS_stxr:
++        case INS_stxrb:
++        case INS_stxrh:
++        case INS_stlxr:
++        case INS_stlxrb:
++        case INS_stlxrh:
++            assert(isGeneralRegisterOrZR(reg1));
++            assert(isGeneralRegisterOrZR(reg2));
++            assert(isGeneralRegisterOrSP(reg3));
++            fmt = IF_LS_3D;
++            break;
++
+         default:
+             // TODO-Cleanup: add unreached() here
+             break;
+@@ -8963,6 +8992,14 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
+             dst += emitOutput_Instr(dst, code);
+             break;
+ 
++        case IF_LS_3D: // LS_3D   .X.......X.mmmmm ......nnnnnttttt      Wm Rt Rn
++            code = emitInsCode(ins, fmt);
++            code |= insEncodeDatasize(id->idOpSize()); // X
++            code |= insEncodeReg_Rm(id->idReg1());     // mmmmm
++            code |= insEncodeReg_Rt(id->idReg2());     // ttttt
++            code |= insEncodeReg_Rn(id->idReg2());     // nnnnn
++            break;
++
+         case IF_DI_1A: // DI_1A   X.......shiiiiii iiiiiinnnnn.....         Rn    imm(i12,sh)
+             assert(insOptsNone(id->idInsOpt()) || insOptsLSL12(id->idInsOpt()));
+             imm = emitGetInsSC(id);
+@@ -10640,6 +10677,13 @@ void emitter::emitDispIns(
+             emitDispAddrRI(id->idReg3(), id->idInsOpt(), imm);
+             break;
+ 
++        case IF_LS_3D: // LS_3D   .X.......X.mmmmm ......nnnnnttttt      Wm Rt Rn
++            assert(insOptsNone(id->idInsOpt()));
++            emitDispReg(id->idReg1(), EA_4BYTE, true);
++            emitDispReg(id->idReg2(), emitInsTargetRegSize(id), true);
++            emitDispAddrRI(id->idReg3(), id->idInsOpt(), 0);
++            break;
++
+         case IF_DI_1A: // DI_1A   X.......shiiiiii iiiiiinnnnn.....      Rn       imm(i12,sh)
+             emitDispReg(id->idReg1(), size, true);
+             emitDispImmOptsLSL12(emitGetInsSC(id), id->idInsOpt());
+diff --git a/src/jit/emitfmtsarm64.h b/src/jit/emitfmtsarm64.h
+index c4be8ae..e4d11ee 100644
+--- a/src/jit/emitfmtsarm64.h
++++ b/src/jit/emitfmtsarm64.h
+@@ -130,6 +130,7 @@ IF_DEF(LS_2C, IS_NONE, NONE) // LS_2C   .X.......X.iiiii iiiiP.nnnnnttttt      R
+ IF_DEF(LS_3A, IS_NONE, NONE) // LS_3A   .X.......X.mmmmm xxxS..nnnnnttttt      Rt Rn Rm ext(Rm) LSL {}
+ IF_DEF(LS_3B, IS_NONE, NONE) // LS_3B   X............... .aaaaannnnnddddd      Rd Ra Rn
+ IF_DEF(LS_3C, IS_NONE, NONE) // LS_3C   X.........iiiiii iaaaaannnnnddddd      Rd Ra Rn imm(im7,sh)
++IF_DEF(LS_3D, IS_NONE, NONE) // LS_3D   .X.......X.mmmmm ......nnnnnttttt      Wm Rt Rn
+ 
+ IF_DEF(DI_1A, IS_NONE, NONE) // DI_1A   X.......shiiiiii iiiiiinnnnn.....         Rn    imm(i12,sh)
+ IF_DEF(DI_1B, IS_NONE, NONE) // DI_1B   X........hwiiiii iiiiiiiiiiiddddd      Rd       imm(i16,hw)
+diff --git a/src/jit/instrsarm64.h b/src/jit/instrsarm64.h
+index d8c66b3..0805303 100644
+--- a/src/jit/instrsarm64.h
++++ b/src/jit/instrsarm64.h
+@@ -564,6 +564,24 @@ INST1(ldarb,   "ldarb",  0,LD, IF_LS_2A,  0x08DFFC00)
+ INST1(ldarh,   "ldarh",  0,LD, IF_LS_2A,  0x48DFFC00)
+                                    //  ldarh   Rt,[Xn]              LS_2A  0100100011011111 111111nnnnnttttt   48DF FC00
+ 
++INST1(ldxr,    "ldxr",   0,LD, IF_LS_2A,  0x885F7C00)
++                                   //  ldxr    Rt,[Xn]              LS_2A  1X00100001011111 011111nnnnnttttt   885F 7C00
++
++INST1(ldxrb,   "ldxrb",  0,LD, IF_LS_2A,  0x085F7C00)
++                                   //  ldxrb   Rt,[Xn]              LS_2A  0000100001011111 011111nnnnnttttt   085F 7C00
++
++INST1(ldxrh,   "ldxrh",  0,LD, IF_LS_2A,  0x485F7C00)
++                                   //  ldxrh   Rt,[Xn]              LS_2A  0100100001011111 011111nnnnnttttt   485F 7C00
++
++INST1(ldaxr,   "ldaxr",   0,LD, IF_LS_2A,  0x885FFC00)
++                                   //  ldaxr   Rt,[Xn]              LS_2A  1X00100001011111 111111nnnnnttttt   885F FC00
++
++INST1(ldaxrb,  "ldaxrb",  0,LD, IF_LS_2A,  0x085FFC00)
++                                   //  ldaxrb  Rt,[Xn]              LS_2A  0000100001011111 111111nnnnnttttt   085F FC00
++
++INST1(ldaxrh,  "ldaxrh",  0,LD, IF_LS_2A,  0x485FFC00)
++                                   //  ldaxrh  Rt,[Xn]              LS_2A  0100100001011111 111111nnnnnttttt   485F FC00
++
+ INST1(ldur,    "ldur",   0,LD, IF_LS_2C,  0xB8400000)  
+                                    //  ldur    Rt,[Xn+simm9]        LS_2C  1X111000010iiiii iiii00nnnnnttttt   B840 0000   [Xn imm(-256..+255)]
+ 
+@@ -591,6 +609,24 @@ INST1(stlrb,   "stlrb",  0,ST, IF_LS_2A,  0x089FFC00)
+ INST1(stlrh,   "stlrh",  0,ST, IF_LS_2A,  0x489FFC00)
+                                    //  stlrh   Rt,[Xn]              LS_2A  0100100010011111 111111nnnnnttttt   489F FC00
+ 
++INST1(stxr,    "stxr",   0,ST, IF_LS_3D,  0x88007C00)
++                                   //  stxr    Ws, Rt,[Xn]          LS_3D  1X001000000sssss 011111nnnnnttttt   8800 7C00
++
++INST1(stxrb,   "stxrb",  0,ST, IF_LS_3D,  0x08007C00)
++                                   //  stxrb   Ws, Rt,[Xn]          LS_3D  00001000000sssss 011111nnnnnttttt   0800 7C00
++
++INST1(stxrh,   "stxrh",  0,ST, IF_LS_3D,  0x48007C00)
++                                   //  stxrh   Ws, Rt,[Xn]          LS_3D  01001000000sssss 011111nnnnnttttt   4800 7C00
++
++INST1(stlxr,   "stlxr",   0,ST, IF_LS_3D,  0x8800FC00)
++                                   //  stlxr   Ws, Rt,[Xn]          LS_3D  1X001000000sssss 111111nnnnnttttt   8800 FC00
++
++INST1(stlxrb,  "stlxrb",  0,ST, IF_LS_3D,  0x0800FC00)
++                                   //  stlxrb  Ws, Rt,[Xn]          LS_3D  00001000000sssss 111111nnnnnttttt   0800 FC00
++
++INST1(stlxrh,  "stlxrh",  0,ST, IF_LS_3D,  0x4800FC00)
++                                   //  stlxrh  Ws, Rt,[Xn]          LS_3D  01001000000sssss 111111nnnnnttttt   4800 FC00
++
+ INST1(stur,    "stur",   0,ST, IF_LS_2C,  0xB8000000)  
+                                    //  stur    Rt,[Xn+simm9]        LS_2C  1X111000000iiiii iiii00nnnnnttttt   B800 0000   [Xn imm(-256..+255)]
+ 
+-- 
+2.7.4
+
