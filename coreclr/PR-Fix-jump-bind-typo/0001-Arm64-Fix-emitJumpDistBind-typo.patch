@@ -1,0 +1,25 @@
+From 406d2d6924e3df776ec4a57da0115d3514d81ff7 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Sat, 23 Sep 2017 01:10:20 -0400
+Subject: [PATCH] [Arm64] Fix emitJumpDistBind typo
+
+---
+ src/jit/emit.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/jit/emit.cpp b/src/jit/emit.cpp
+index 4fc97bb..432d16d 100644
+--- a/src/jit/emit.cpp
++++ b/src/jit/emit.cpp
+@@ -3649,7 +3649,7 @@ AGAIN:
+             ssz         = JCC_SIZE_SMALL;
+             bool isTest = (jmp->idIns() == INS_tbz) || (jmp->idIns() == INS_tbnz);
+ 
+-            nsd = (isTest) ? TB_DIST_SMALL_MAX_NEG : JCC_DIST_SMALL_MAX_POS;
++            nsd = (isTest) ? TB_DIST_SMALL_MAX_NEG : JCC_DIST_SMALL_MAX_NEG;
+             psd = (isTest) ? TB_DIST_SMALL_MAX_POS : JCC_DIST_SMALL_MAX_POS;
+         }
+         else if (emitIsUncondJump(jmp))
+-- 
+2.7.4
+
