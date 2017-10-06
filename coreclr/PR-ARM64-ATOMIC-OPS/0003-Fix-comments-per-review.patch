@@ -1,0 +1,62 @@
+From f6c7baa1a34a2542c7d9c4946a486f2cef78c49b Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 6 Oct 2017 11:25:14 -0400
+Subject: [PATCH] Fix comments per review
+
+---
+ src/jit/codegenarm64.cpp | 9 +++++++--
+ src/jit/importer.cpp     | 4 ++--
+ 2 files changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 6e35f6b..ca0c39f 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -2675,8 +2675,10 @@ void CodeGen::genLockedInstructions(GenTreeOp* treeNode)
+     regNumber storeDataReg = (treeNode->OperGet() == GT_XCHG) ? dataReg : treeNode->ExtractTempReg(RBM_ALLINT);
+     regNumber loadReg      = (targetReg != REG_NA) ? targetReg : storeDataReg;
+ 
+-    // The register allocator should have extended the lifetime of the address
+-    // so that it is not used as the target.
++    // Check allocator assumptions
++    //
++    // The register allocator should have extended the lifetimes of all input and internal registers so that
++    // none interfere with the target.
+     noway_assert(addrReg != targetReg);
+ 
+     noway_assert(addrReg != loadReg);
+@@ -2783,6 +2785,9 @@ void CodeGen::genCodeForCmpXchg(GenTreeCmpXchg* treeNode)
+     regNumber exResultReg  = treeNode->ExtractTempReg(RBM_ALLINT);
+ 
+     // Check allocator assumptions
++    //
++    // The register allocator should have extended the lifetimes of all input and internal registers so that
++    // none interfere with the target.
+     noway_assert(addrReg != targetReg);
+     noway_assert(dataReg != targetReg);
+     noway_assert(comparandReg != targetReg);
+diff --git a/src/jit/importer.cpp b/src/jit/importer.cpp
+index e0c08e4..3c837b3 100644
+--- a/src/jit/importer.cpp
++++ b/src/jit/importer.cpp
+@@ -3410,7 +3410,7 @@ GenTreePtr Compiler::impIntrinsic(GenTreePtr            newobjThis,
+             op1->gtFlags |= GTF_GLOB_REF | GTF_ASG;
+             retNode = op1;
+             break;
+-#endif // _TARGET_XARCH_
++#endif // defined(_TARGET_XARCH_) || defined(_TARGET_ARM64_)
+ 
+         case CORINFO_INTRINSIC_MemoryBarrier:
+ 
+@@ -3442,7 +3442,7 @@ GenTreePtr Compiler::impIntrinsic(GenTreePtr            newobjThis,
+             retNode = node;
+             break;
+         }
+-#endif
++#endif // defined(_TARGET_XARCH_) || defined(_TARGET_ARM64_)
+ 
+         case CORINFO_INTRINSIC_StringLength:
+             op1 = impPopStack().val;
+-- 
+2.7.4
+
