@@ -1,0 +1,40 @@
+From a064ed148e6670238a806f763516e740cb37eaeb Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 12 Oct 2017 17:31:40 -0400
+Subject: [PATCH] Fix JIT/HardwareIntrinsics/IsSupported.cs
+
+---
+ tests/src/JIT/HardwareIntrinsics/IsSupported.cs | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/tests/src/JIT/HardwareIntrinsics/IsSupported.cs b/tests/src/JIT/HardwareIntrinsics/IsSupported.cs
+index 7e92f18..e828a44 100644
+--- a/tests/src/JIT/HardwareIntrinsics/IsSupported.cs
++++ b/tests/src/JIT/HardwareIntrinsics/IsSupported.cs
+@@ -54,6 +54,9 @@ namespace IntelHardwareIntrinsicTest
+                 }
+             }
+ 
++            if (Sse.IsSupported)
++            {
++                // X86 platforms
+                 if (Vector<byte>.Count == 32 && !Avx2.IsSupported)
+                 {
+                     result = false;
+@@ -63,10 +66,10 @@ namespace IntelHardwareIntrinsicTest
+                 {
+                     result = false;
+                 }
+-
+-            // Non-X86 platforms
+-            if (!(Sse.IsSupported))
++            }
++            else
+             {
++                // Non-X86 platforms
+                 if (Sse2.IsSupported  ||
+                     Sse3.IsSupported  ||
+                     Ssse3.IsSupported ||
+-- 
+2.7.4
+
