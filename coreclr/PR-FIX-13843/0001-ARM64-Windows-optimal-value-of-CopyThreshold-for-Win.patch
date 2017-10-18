@@ -1,0 +1,26 @@
+From bb3fec98f9760303ebf2e3f3b7b183a10983853a Mon Sep 17 00:00:00 2001
+From: pgodeq <pgode.qdt@qualcommdatacenter.com>
+Date: Wed, 18 Oct 2017 23:21:56 +0530
+Subject: [PATCH] [ARM64/Windows] optimal value of CopyThreshold for Windows
+ after performance analysis
+
+---
+ src/mscorlib/src/System/Buffer.cs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/mscorlib/src/System/Buffer.cs b/src/mscorlib/src/System/Buffer.cs
+index 71859ec58..5176dba6c 100644
+--- a/src/mscorlib/src/System/Buffer.cs
++++ b/src/mscorlib/src/System/Buffer.cs
+@@ -266,7 +266,7 @@ namespace System
+ #if PLATFORM_WINDOWS
+             // TODO-ARM64-WINDOWS-OPT determine optimal value for Windows
+             // https://github.com/dotnet/coreclr/issues/13843
+-            const nuint CopyThreshold = 2048;
++            const nuint CopyThreshold = UInt64.MaxValue;
+ #else // PLATFORM_WINDOWS
+             // Managed code is currently faster than glibc unoptimized memmove
+             // TODO-ARM64-UNIX-OPT revisit when glibc optimized memmove is in Linux distros
+-- 
+2.14.1.windows.1
+
