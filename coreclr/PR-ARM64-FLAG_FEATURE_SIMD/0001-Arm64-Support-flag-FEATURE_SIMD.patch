@@ -1,0 +1,83 @@
+From 41834590937e8afa52ec906d17856ebafcd92608 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 18 Oct 2017 14:02:19 -0400
+Subject: [PATCH] [Arm64] Support flag FEATURE_SIMD
+
+---
+ src/inc/corjit.h |  8 ++++++--
+ src/jit/jitee.h  | 13 +++++++++++--
+ 2 files changed, 17 insertions(+), 4 deletions(-)
+
+diff --git a/src/inc/corjit.h b/src/inc/corjit.h
+index 6149859..0d926ca 100644
+--- a/src/inc/corjit.h
++++ b/src/inc/corjit.h
+@@ -113,7 +113,6 @@ public:
+         CORJIT_FLAG_USE_AVX                 = 14,
+         CORJIT_FLAG_USE_AVX2                = 15,
+         CORJIT_FLAG_USE_AVX_512             = 16,
+-        CORJIT_FLAG_FEATURE_SIMD            = 17,
+ 
+     #else // !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
+ 
+@@ -121,10 +120,15 @@ public:
+         CORJIT_FLAG_UNUSED7                 = 14,
+         CORJIT_FLAG_UNUSED8                 = 15,
+         CORJIT_FLAG_UNUSED9                 = 16,
+-        CORJIT_FLAG_UNUSED10                = 17,
+ 
+     #endif // !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
+ 
++    #if defined(_TARGET_XARCH_) || defined(_TARGET_ARM64_)
++        CORJIT_FLAG_FEATURE_SIMD            = 17,
++    #else
++        CORJIT_FLAG_UNUSED10                = 17,
++    #endif // !defined(_TARGET_XARCH_) && !defined(_TARGET_AMD64_)
++
+         CORJIT_FLAG_MAKEFINALCODE           = 18, // Use the final code generator, i.e., not the interpreter.
+         CORJIT_FLAG_READYTORUN              = 19, // Use version-resilient code generation
+         CORJIT_FLAG_PROF_ENTERLEAVE         = 20, // Instrument prologues/epilogues
+diff --git a/src/jit/jitee.h b/src/jit/jitee.h
+index 4c2359a..0f54e12 100644
+--- a/src/jit/jitee.h
++++ b/src/jit/jitee.h
+@@ -45,7 +45,6 @@ public:
+         JIT_FLAG_USE_AVX                 = 14,
+         JIT_FLAG_USE_AVX2                = 15,
+         JIT_FLAG_USE_AVX_512             = 16,
+-        JIT_FLAG_FEATURE_SIMD            = 17,
+ 
+     #else // !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
+ 
+@@ -53,10 +52,15 @@ public:
+         JIT_FLAG_UNUSED7                 = 14,
+         JIT_FLAG_UNUSED8                 = 15,
+         JIT_FLAG_UNUSED9                 = 16,
+-        JIT_FLAG_UNUSED10                = 17,
+ 
+     #endif // !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
+ 
++    #if defined(_TARGET_XARCH_) || defined(_TARGET_ARM64_)
++        JIT_FLAG_FEATURE_SIMD            = 17,
++    #else
++        JIT_FLAG_UNUSED10                = 17,
++    #endif // !defined(_TARGET_XARCH_) && !defined(_TARGET_AMD64_)
++
+         JIT_FLAG_MAKEFINALCODE           = 18, // Use the final code generator, i.e., not the interpreter.
+         JIT_FLAG_READYTORUN              = 19, // Use version-resilient code generation
+         JIT_FLAG_PROF_ENTERLEAVE         = 20, // Instrument prologues/epilogues
+@@ -203,6 +207,11 @@ public:
+         FLAGS_EQUAL(CORJIT_FLAGS::CORJIT_FLAG_USE_AVX, JIT_FLAG_USE_AVX);
+         FLAGS_EQUAL(CORJIT_FLAGS::CORJIT_FLAG_USE_AVX2, JIT_FLAG_USE_AVX2);
+         FLAGS_EQUAL(CORJIT_FLAGS::CORJIT_FLAG_USE_AVX_512, JIT_FLAG_USE_AVX_512);
++
++#endif
++
++#if defined(_TARGET_XARCH_) || defined(_TARGET_ARM64_)
++
+         FLAGS_EQUAL(CORJIT_FLAGS::CORJIT_FLAG_FEATURE_SIMD, JIT_FLAG_FEATURE_SIMD);
+ 
+ #endif
+-- 
+2.7.4
+
