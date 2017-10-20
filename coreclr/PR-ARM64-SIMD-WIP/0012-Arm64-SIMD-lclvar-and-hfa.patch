@@ -1,0 +1,109 @@
+From e8c1d023313c36df20e0e3cee699dc9554dd2b15 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 20 Oct 2017 16:56:56 -0400
+Subject: [PATCH] [Arm64] SIMD lclvar and hfa
+
+---
+ src/jit/codegenarmarch.cpp | 6 +++---
+ src/jit/compiler.h         | 4 ++++
+ src/jit/gentree.cpp        | 2 +-
+ src/jit/lclvars.cpp        | 5 +++++
+ src/jit/morph.cpp          | 6 ++++--
+ 5 files changed, 17 insertions(+), 6 deletions(-)
+
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index 6caba67..5b66ce3 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -3632,9 +3632,9 @@ void CodeGen::genStructReturn(GenTreePtr treeNode)
+         LclVarDsc*           varDsc  = &(compiler->lvaTable[lclVar->gtLclNum]);
+         var_types            lclType = genActualType(varDsc->TypeGet());
+ 
+-        // Currently only multireg TYP_STRUCT types such as HFA's(ARM32, ARM64) and 16-byte structs(ARM64) are supported
+-        // In the future we could have FEATURE_SIMD types like TYP_SIMD16
+-        assert(lclType == TYP_STRUCT);
++        // Currently only multireg TYP_STRUCT types such as HFA's(ARM32, ARM64), 16-byte structs(ARM64),
++        // and FEATURE_SIMD types like TYP_SIMD16 are supported
++        assert(varTypeIsSIMD(lclType) || varTypeIsStruct(lclType));
+         assert(varDsc->lvIsMultiRegRet);
+ 
+         ReturnTypeDesc retTypeDesc;
+diff --git a/src/jit/compiler.h b/src/jit/compiler.h
+index 3ff6375..705298b 100644
+--- a/src/jit/compiler.h
++++ b/src/jit/compiler.h
+@@ -425,7 +425,11 @@ public:
+     unsigned lvHfaSlots() const
+     {
+         assert(lvIsHfa());
++#ifdef FEATURE_SIMD
++        assert((lvType == TYP_STRUCT) || lvSIMDType);
++#else
+         assert(lvType == TYP_STRUCT);
++#endif
+ #ifdef _TARGET_ARM_
+         return lvExactSize / sizeof(float);
+ #else  //  _TARGET_ARM64_
+diff --git a/src/jit/gentree.cpp b/src/jit/gentree.cpp
+index c199a29..f100ae7 100644
+--- a/src/jit/gentree.cpp
++++ b/src/jit/gentree.cpp
+@@ -6445,7 +6445,7 @@ GenTreePtr Compiler::gtNewLclvNode(unsigned lnum, var_types type, IL_OFFSETX ILo
+         // Make an exception for implicit by-ref parameters during global morph, since
+         // their lvType has been updated to byref but their appearances have not yet all
+         // been rewritten and so may have struct type still.
+-        assert(type == lvaTable[lnum].lvType ||
++        assert(type == lvaTable[lnum].lvType || varTypeIsSIMD(lvaTable[lnum].lvType) ||
+                (lvaIsImplicitByRefLocal(lnum) && fgGlobalMorph && (lvaTable[lnum].lvType == TYP_BYREF)));
+     }
+     GenTreePtr node = new (this, GT_LCL_VAR) GenTreeLclVar(type, lnum, ILoffs);
+diff --git a/src/jit/lclvars.cpp b/src/jit/lclvars.cpp
+index e6f5937..ab84f1e 100644
+--- a/src/jit/lclvars.cpp
++++ b/src/jit/lclvars.cpp
+@@ -3809,6 +3809,11 @@ void Compiler::lvaMarkLclRefs(GenTreePtr tree)
+     allowStructs = varTypeIsStruct(varDsc);
+ #endif // FEATURE_UNIX_AMD64_STRUCT_PASSING
+ 
++#if defined(FEATURE_SIMD) && defined(_TARGET_ARM64_)
++    allowStructs = (varTypeIsSIMD(varDsc) && varTypeIsStruct(tree->gtType)) ||
++                   (varTypeIsStruct(varDsc) && varTypeIsSIMD(tree->gtType));
++#endif
++
+     /* Variables must be used as the same type throughout the method */
+     noway_assert(tiVerificationNeeded || varDsc->lvType == TYP_UNDEF || tree->gtType == TYP_UNKNOWN || allowStructs ||
+                  genActualType(varDsc->TypeGet()) == genActualType(tree->gtType) ||
+diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
+index 42c5a2a..917b7c5 100644
+--- a/src/jit/morph.cpp
++++ b/src/jit/morph.cpp
+@@ -3575,6 +3575,8 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+                     structBaseType = getArgTypeForStruct(objClass, &howToPassStruct, originalSize);
+ 
+ #ifdef _TARGET_ARM64_
++                    isHfaArg = IsHfa(objClass);
++
+                     if ((howToPassStruct == SPK_PrimitiveType) && // Passed in a single register
+                         !isPow2(originalSize))                    // size is 3,5,6 or 7 bytes
+                     {
+@@ -3620,7 +3622,7 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+ #else                                                                         // !_TARGET_ARM_
+                     if ((originalSize > TARGET_POINTER_SIZE) || // it is struct that is larger than a pointer
+                         !isPow2(originalSize) ||                // it is not a power of two (1, 2, 4 or 8)
+-                        (isHfaArg && (hfaSlots != 1)))          // it is a one element HFA struct
++                        (isHfaArg && (howToPassStruct != SPK_PrimitiveType))) // it is a one element HFA struct
+ #endif                                                                        // !_TARGET_ARM_
+ #endif                                                                        // FEATURE_UNIX_AMD64_STRUCT_PASSING
+                     {
+@@ -3695,7 +3697,7 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+ 
+ #endif // FEATURE_UNIX_AMD64_STRUCT_PASSING
+ #elif defined(_TARGET_ARM64_)
+-                        if ((size > 2) && !isHfaArg)
++                        if (varTypeIsSIMD(argx) || ((size > 2) && !isHfaArg))
+                         {
+                             size            = 1; // This must be copied to a temp and passed by address
+                             passStructByRef = true;
+-- 
+2.7.4
+

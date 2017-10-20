@@ -1,0 +1,130 @@
+From 55ce0f7fc78f9c55854155a89de79cee014b3589 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 20 Oct 2017 16:44:50 -0400
+Subject: [PATCH] [Arm64] SIMD simple defines
+
+---
+ src/jit/compiler.h    | 10 +++++++++-
+ src/jit/ee_il_dll.cpp |  7 +++----
+ src/jit/lclvars.cpp   |  6 +++++-
+ src/jit/simd.cpp      |  2 ++
+ src/jit/target.h      |  5 +++++
+ 5 files changed, 24 insertions(+), 6 deletions(-)
+
+diff --git a/src/jit/compiler.h b/src/jit/compiler.h
+index d05b894..3ff6375 100644
+--- a/src/jit/compiler.h
++++ b/src/jit/compiler.h
+@@ -137,8 +137,12 @@ unsigned ReinterpretHexAsDecimal(unsigned);
+ 
+ /*****************************************************************************/
+ 
+-#ifdef FEATURE_SIMD
++#if defined(FEATURE_SIMD)
++#if defined(_TARGET_XARCH_)
+ const unsigned TEMP_MAX_SIZE = YMM_REGSIZE_BYTES;
++#elif defined(_TARGET_ARM64_)
++const unsigned TEMP_MAX_SIZE = FP_REGSIZE_BYTES;
++#endif // defined(_TARGET_XARCH_) || defined(_TARGET_ARM64_)
+ #else  // !FEATURE_SIMD
+ const unsigned TEMP_MAX_SIZE = sizeof(double);
+ #endif // !FEATURE_SIMD
+@@ -7669,6 +7673,8 @@ private:
+             assert(canUseSSE2());
+             return TYP_SIMD16;
+         }
++#elif defined(_TARGET_ARM64_)
++        return TYP_SIMD16;
+ #else
+         assert(!"getSIMDVectorType() unimplemented on target arch");
+         unreached();
+@@ -7705,6 +7711,8 @@ private:
+             assert(canUseSSE2());
+             return XMM_REGSIZE_BYTES;
+         }
++#elif defined(_TARGET_ARM64_)
++        return FP_REGSIZE_BYTES;
+ #else
+         assert(!"getSIMDVectorRegisterByteLength() unimplemented on target arch");
+         unreached();
+diff --git a/src/jit/ee_il_dll.cpp b/src/jit/ee_il_dll.cpp
+index 0cfc565..6ace0af 100644
+--- a/src/jit/ee_il_dll.cpp
++++ b/src/jit/ee_il_dll.cpp
+@@ -384,8 +384,7 @@ unsigned CILJit::getMaxIntrinsicSIMDVectorLength(CORJIT_FLAGS cpuCompileFlags)
+     jitFlags.SetFromFlags(cpuCompileFlags);
+ 
+ #ifdef FEATURE_SIMD
+-#ifdef _TARGET_XARCH_
+-#ifndef LEGACY_BACKEND
++#if defined(_TARGET_XARCH_) && !defined(LEGACY_BACKEND)
+     if (!jitFlags.IsSet(JitFlags::JIT_FLAG_PREJIT) && jitFlags.IsSet(JitFlags::JIT_FLAG_FEATURE_SIMD) &&
+         jitFlags.IsSet(JitFlags::JIT_FLAG_USE_AVX2))
+     {
+@@ -398,13 +397,13 @@ unsigned CILJit::getMaxIntrinsicSIMDVectorLength(CORJIT_FLAGS cpuCompileFlags)
+             return 32;
+         }
+     }
+-#endif // !LEGACY_BACKEND
++#else  // !(defined(_TARGET_XARCH_) && !defined(LEGACY_BACKEND))
+     if (GetJitTls() != nullptr && JitTls::GetCompiler() != nullptr)
+     {
+         JITDUMP("getMaxIntrinsicSIMDVectorLength: returning 16\n");
+     }
+     return 16;
+-#endif // _TARGET_XARCH_
++#endif // !(defined(_TARGET_XARCH_) && !defined(LEGACY_BACKEND))
+ #else  // !FEATURE_SIMD
+     if (GetJitTls() != nullptr && JitTls::GetCompiler() != nullptr)
+     {
+diff --git a/src/jit/lclvars.cpp b/src/jit/lclvars.cpp
+index e5302ed..e6f5937 100644
+--- a/src/jit/lclvars.cpp
++++ b/src/jit/lclvars.cpp
+@@ -1460,9 +1460,13 @@ void Compiler::lvaCanPromoteStructType(CORINFO_CLASS_HANDLE    typeHnd,
+         // In the future this may be changing to XMM_REGSIZE_BYTES.
+         // Note: MaxOffset is used below to declare a local array, and therefore must be a compile-time constant.
+         CLANG_FORMAT_COMMENT_ANCHOR;
+-#ifdef FEATURE_SIMD
++#if defined(FEATURE_SIMD)
++#if defined(_TARGET_XARCH_)
+         // This will allow promotion of 2 Vector<T> fields on AVX2, or 4 Vector<T> fields on SSE2.
+         const int MaxOffset = MAX_NumOfFieldsInPromotableStruct * XMM_REGSIZE_BYTES;
++#elif defined(_TARGET_ARM64_)
++        const int MaxOffset = MAX_NumOfFieldsInPromotableStruct * FP_REGSIZE_BYTES;
++#endif // defined(_TARGET_XARCH_) || defined(_TARGET_ARM64_)
+ #else  // !FEATURE_SIMD
+         const int MaxOffset = MAX_NumOfFieldsInPromotableStruct * sizeof(double);
+ #endif // !FEATURE_SIMD
+diff --git a/src/jit/simd.cpp b/src/jit/simd.cpp
+index 329a1d2..d93c72b 100644
+--- a/src/jit/simd.cpp
++++ b/src/jit/simd.cpp
+@@ -98,6 +98,8 @@ int Compiler::getSIMDTypeAlignment(var_types simdType)
+         assert(size == 32);
+         return 32;
+     }
++#elif defined(_TARGET_ARM64_)
++    return 16;
+ #else
+     assert(!"getSIMDTypeAlignment() unimplemented on target arch");
+     unreached();
+diff --git a/src/jit/target.h b/src/jit/target.h
+index 1c352d0..37919e2 100644
+--- a/src/jit/target.h
++++ b/src/jit/target.h
+@@ -1529,6 +1529,11 @@ typedef unsigned short regPairNoSmall; // arm: need 12 bits
+   #define CPBLK_UNROLL_LIMIT       64      // Upper bound to let the code generator to loop unroll CpBlk.
+   #define INITBLK_UNROLL_LIMIT     64      // Upper bound to let the code generator to loop unroll InitBlk.
+ 
++#ifdef FEATURE_SIMD
++  #define ALIGN_SIMD_TYPES         1       // whether SIMD type locals are to be aligned
++  #define FEATURE_PARTIAL_SIMD_CALLEE_SAVE 1 // Whether SIMD registers are partially saved at calls
++#endif // FEATURE_SIMD
++
+   #define FEATURE_WRITE_BARRIER    1       // Generate the proper WriteBarrier calls for GC    
+   #define FEATURE_FIXED_OUT_ARGS   1       // Preallocate the outgoing arg area in the prolog
+   #define FEATURE_STRUCTPROMOTE    1       // JIT Optimization to promote fields of structs into registers
+-- 
+2.7.4
+

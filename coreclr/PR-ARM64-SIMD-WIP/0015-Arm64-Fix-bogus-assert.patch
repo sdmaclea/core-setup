@@ -1,0 +1,30 @@
+From b8b9274e92de464f517ad9076bdbf836552cfa4e Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 20 Oct 2017 16:58:00 -0400
+Subject: [PATCH] [Arm64] Fix bogus assert
+
+---
+ src/jit/lclvars.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/jit/lclvars.cpp b/src/jit/lclvars.cpp
+index ab84f1e..6028248 100644
+--- a/src/jit/lclvars.cpp
++++ b/src/jit/lclvars.cpp
+@@ -6159,8 +6159,13 @@ int Compiler::lvaAllocLocalAndSetVirtualOffset(unsigned lclNum, unsigned size, i
+ #endif
+                             ))
+     {
++#ifdef _TARGET_ARM64_
++        // Note that stack offsets are negative or equal to zero
++        assert(stkOffs <= 0);
++#else
+         // Note that stack offsets are negative
+         assert(stkOffs < 0);
++#endif
+ 
+         // alignment padding
+         unsigned pad = 0;
+-- 
+2.7.4
+

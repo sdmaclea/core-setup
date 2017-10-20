@@ -1,0 +1,36 @@
+From fadd1103c25378b02f3199acb1c1e99fed50e0d8 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 20 Oct 2017 16:31:07 -0400
+Subject: [PATCH] [Arm64] Enable genSetRegToConst for SIMD nodes
+
+---
+ src/jit/codegenarm64.cpp | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 37c0d4e..3355c27 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -1454,9 +1454,19 @@ void CodeGen::genSetRegToConst(regNumber targetReg, var_types targetType, GenTre
+             }
+             else
+             {
++                if (varTypeIsSIMD(targetType))
++                {
++                    // A constant value of zero will easily replicate into SIMD type
++                    // Other constants require baseType size which is missing
++                    assert(cnsVal == 0);
++                    getEmitter()->emitIns_R_I(INS_movi, EA_16BYTE, targetReg, 0x00, INS_OPTS_16B);
++                }
++                else
++                {
+                     genSetRegToIcon(targetReg, cnsVal, targetType);
+                 }
+             }
++        }
+         break;
+ 
+         case GT_CNS_DBL:
+-- 
+2.7.4
+

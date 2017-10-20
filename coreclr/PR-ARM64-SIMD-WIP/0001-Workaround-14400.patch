@@ -1,0 +1,39 @@
+From f7cbd4ea9871b6cfb68890d68c148ccee32dc6f9 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 11 Oct 2017 18:12:12 -0400
+Subject: [PATCH] Workaround #14400
+
+---
+ src/classlibnative/bcltype/number.cpp | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/src/classlibnative/bcltype/number.cpp b/src/classlibnative/bcltype/number.cpp
+index c45260d..75e2739 100644
+--- a/src/classlibnative/bcltype/number.cpp
++++ b/src/classlibnative/bcltype/number.cpp
+@@ -2421,6 +2421,11 @@ FCIMPL3_VII(Object*, COMNumber::FormatDouble, double value, StringObject* format
+         }
+         break;
+ 
++    case 'X':
++    case 'x':
++        fmt = 'G';
++        __fallthrough;
++
+     case 'G':
+         // Here we round values less than G15 to 15 digits, G16 and G17 will not be touched
+         if (digits > 15) {
+@@ -2543,6 +2548,10 @@ FCIMPL3_VII(Object*, COMNumber::FormatSingle, float value, StringObject* formatU
+         }
+         break;
+ 
++    case 'X':
++    case 'x':
++        fmt = 'G';
++        __fallthrough;
+ 
+     case 'G':
+         // Here we round values less than G15 to 15 digits, G16 and G17 will not be touched
+-- 
+2.7.4
+
