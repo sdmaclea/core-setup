@@ -1,4 +1,4 @@
-From 85b200ec3c455d0cc99647181634ee6dd9ab7df0 Mon Sep 17 00:00:00 2001
+From c58826193981681f7951623a3e3d4c4578484646 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 20 Oct 2017 12:02:06 -0400
 Subject: [PATCH] [Arm64] Implement simdintrinsiclist.h
@@ -8,7 +8,7 @@ Subject: [PATCH] [Arm64] Implement simdintrinsiclist.h
  1 file changed, 125 insertions(+), 8 deletions(-)
 
 diff --git a/src/jit/simdintrinsiclist.h b/src/jit/simdintrinsiclist.h
-index 2eb4df3..90eaceb 100644
+index 2eb4df3..9945f28 100644
 --- a/src/jit/simdintrinsiclist.h
 +++ b/src/jit/simdintrinsiclist.h
 @@ -20,19 +20,20 @@
