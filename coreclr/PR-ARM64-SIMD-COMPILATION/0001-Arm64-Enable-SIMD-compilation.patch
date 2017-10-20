@@ -1,0 +1,35 @@
+From d8ecc74adcbf2c646461b7e1e17368057b9c54a6 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 20 Oct 2017 16:30:22 -0400
+Subject: [PATCH] [Arm64] Enable SIMD compilation
+
+---
+ src/jit/CMakeLists.txt | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/jit/CMakeLists.txt b/src/jit/CMakeLists.txt
+index 5b92329..76d38da 100644
+--- a/src/jit/CMakeLists.txt
++++ b/src/jit/CMakeLists.txt
+@@ -8,6 +8,10 @@ if (CLR_CMAKE_TARGET_ARCH_AMD64 OR (CLR_CMAKE_TARGET_ARCH_I386 AND NOT CLR_CMAKE
+   add_definitions(-DFEATURE_SIMD)
+ endif ()
+ 
++if (CLR_CMAKE_TARGET_ARCH_ARM64)
++  add_definitions(-DFEATURE_SIMD)
++endif ()
++
+ # JIT_BUILD disables certain PAL_TRY debugging features
+ add_definitions(-DJIT_BUILD=1)
+ 
+@@ -138,6 +142,7 @@ set( JIT_ARM64_SOURCES
+   lowerarm64.cpp
+   lsraarmarch.cpp
+   lsraarm64.cpp
++  simd.cpp
+   targetarm64.cpp
+   unwindarm.cpp
+   unwindarm64.cpp
+-- 
+2.7.4
+
