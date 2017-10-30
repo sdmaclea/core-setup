@@ -1,18 +1,19 @@
-From ac871d46ca21007262ba7fb20caa406b2b84901e Mon Sep 17 00:00:00 2001
+From 2b9b75cbc5eecaaa3e70ca8b19f2e0ada4ac1b71 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 20 Oct 2017 16:38:18 -0400
 Subject: [PATCH] [Arm64] Add SIMD codegen
 
 ---
- src/jit/codegenarm64.cpp | 990 +++++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 990 insertions(+)
+ src/jit/codegenarm64.cpp | 994 +++++++++++++++++++++++++++++++++++++++++++++++
+ src/jit/codegenlinear.h  |   1 +
+ 2 files changed, 995 insertions(+)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index a200e20..beadac3 100644
+index 4aa7415..428e70f 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
-@@ -3692,6 +3692,996 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize,
-     regTracker.rsTrashRegsForGCInterruptability();
+@@ -3691,6 +3691,1000 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize,
+     regTracker.rsTrashRegSet(killMask);
  }
  
 +#ifdef FEATURE_SIMD
@@ -31,6 +32,7 @@ index a200e20..beadac3 100644
 +//    Currently, we only recognize SIMDVector<float> and SIMDVector<int>, and
 +//    a limited set of methods.
 +//
++// TODO-CLEANUP Merge all versions of this function nad move to new file simdcommon.cpp.
 +void CodeGen::genSIMDIntrinsic(GenTreeSIMD* simdNode)
 +{
 +    // NYI for unsupported base types
@@ -130,7 +132,7 @@ index a200e20..beadac3 100644
 +    }
 +}
 +
-+insOpts genGetSimdInsOpt(bool is16B, var_types elementType)
++insOpts CodeGen::genGetSimdInsOpt(bool is16B, var_types elementType)
 +{
 +    insOpts result = INS_OPTS_NONE;
 +
@@ -203,8 +205,8 @@ index a200e20..beadac3 100644
 +                break;
 +            case SIMDIntrinsicConvertToDouble:
 +            case SIMDIntrinsicConvertToSingle:
-+                unreached(); // Not supported for floating source type
 +                result = INS_invalid;
++                unreached(); // Not supported for floating source type
 +                break;
 +            case SIMDIntrinsicConvertToInt32:
 +            case SIMDIntrinsicConvertToInt64:
@@ -242,7 +244,9 @@ index a200e20..beadac3 100644
 +                result = INS_fmul;
 +                break;
 +            case SIMDIntrinsicNarrow:
-+                result = INS_fcvtn; // INS_fcvtn2;
++                // Use INS_fcvtn lower bytes of result followed by INS_fcvtn2 for upper bytes
++                // Return lower bytes instruction here
++                result = INS_fcvtn;
 +                break;
 +            case SIMDIntrinsicSelect:
 +                result = INS_bsl;
@@ -333,7 +337,9 @@ index a200e20..beadac3 100644
 +                result = INS_mul;
 +                break;
 +            case SIMDIntrinsicNarrow:
-+                result = INS_xtn; // INS_xtn2 for high bytes
++                // Use INS_xtn lower bytes of result followed by INS_xtn2 for upper bytes
++                // Return lower bytes instruction here
++                result = INS_xtn;
 +                break;
 +            case SIMDIntrinsicSelect:
 +                result = INS_bsl;
@@ -585,9 +591,8 @@ index a200e20..beadac3 100644
 +    var_types baseType  = simdNode->gtSIMDBaseType;
 +    regNumber targetReg = simdNode->gtRegNum;
 +    assert(targetReg != REG_NA);
-+    var_types      simdType = simdNode->TypeGet();
-+    emitAttr       emitSize = emitTypeSize(simdType);
-+    InstructionSet iset     = compiler->getSIMDInstructionSet();
++    var_types simdType = simdNode->TypeGet();
++    emitAttr  emitSize = emitTypeSize(simdType);
 +
 +    genConsumeOperands(simdNode);
 +    regNumber op1Reg = op1->gtRegNum;
@@ -929,7 +934,7 @@ index a200e20..beadac3 100644
 +}
 +
 +//-----------------------------------------------------------------------------
-+// genSIMDIntrinsicUpperSave: save the upper half of a TYP_SIMD32 vector to
++// genSIMDIntrinsicUpperSave: save the upper half of a TYP_SIMD16 vector to
 +//                            the given register, if any, or to memory.
 +//
 +// Arguments:
@@ -963,7 +968,7 @@ index a200e20..beadac3 100644
 +}
 +
 +//-----------------------------------------------------------------------------
-+// genSIMDIntrinsicUpperRestore: Restore the upper half of a TYP_SIMD32 vector to
++// genSIMDIntrinsicUpperRestore: Restore the upper half of a TYP_SIMD16 vector to
 +//                               the given register, if any, or to memory.
 +//
 +// Arguments:
@@ -1008,6 +1013,18 @@ index a200e20..beadac3 100644
  /*****************************************************************************
   * Unit testing of the ARM64 emitter: generate a bunch of instructions into the prolog
   * (it's as good a place as any), then use COMPlus_JitLateDisasm=* to see if the late
+diff --git a/src/jit/codegenlinear.h b/src/jit/codegenlinear.h
+index ec87fca..98171a0 100644
+--- a/src/jit/codegenlinear.h
++++ b/src/jit/codegenlinear.h
+@@ -66,6 +66,7 @@ enum SIMDScalarMoveType
+     SMT_PreserveUpper                   // preserve target upper bits
+ };
+ 
++insOpts genGetSimdInsOpt(bool is16B, var_types elementType);
+ instruction getOpForSIMDIntrinsic(SIMDIntrinsicID intrinsicId, var_types baseType, unsigned* ival = nullptr);
+ void genSIMDScalarMove(
+     var_types targetType, var_types type, regNumber target, regNumber src, SIMDScalarMoveType moveType);
 -- 
 2.7.4
 
