@@ -1,18 +1,18 @@
-From 2b9b75cbc5eecaaa3e70ca8b19f2e0ada4ac1b71 Mon Sep 17 00:00:00 2001
+From 5ae7e48e490606d8e16c1531ae01944b9282b96d Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 20 Oct 2017 16:38:18 -0400
 Subject: [PATCH] [Arm64] Add SIMD codegen
 
 ---
- src/jit/codegenarm64.cpp | 994 +++++++++++++++++++++++++++++++++++++++++++++++
+ src/jit/codegenarm64.cpp | 975 +++++++++++++++++++++++++++++++++++++++++++++++
  src/jit/codegenlinear.h  |   1 +
- 2 files changed, 995 insertions(+)
+ 2 files changed, 976 insertions(+)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index 4aa7415..428e70f 100644
+index 4aa7415..89fe0c9 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
-@@ -3691,6 +3691,1000 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize,
+@@ -3691,6 +3691,981 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize,
      regTracker.rsTrashRegSet(killMask);
  }
  
@@ -32,7 +32,7 @@ index 4aa7415..428e70f 100644
 +//    Currently, we only recognize SIMDVector<float> and SIMDVector<int>, and
 +//    a limited set of methods.
 +//
-+// TODO-CLEANUP Merge all versions of this function nad move to new file simdcommon.cpp.
++// TODO-CLEANUP Merge all versions of this function and move to new file simdcodegencommon.cpp.
 +void CodeGen::genSIMDIntrinsic(GenTreeSIMD* simdNode)
 +{
 +    // NYI for unsupported base types
@@ -203,11 +203,6 @@ index 4aa7415..428e70f 100644
 +            case SIMDIntrinsicCast:
 +                result = INS_mov;
 +                break;
-+            case SIMDIntrinsicConvertToDouble:
-+            case SIMDIntrinsicConvertToSingle:
-+                result = INS_invalid;
-+                unreached(); // Not supported for floating source type
-+                break;
 +            case SIMDIntrinsicConvertToInt32:
 +            case SIMDIntrinsicConvertToInt64:
 +                result = INS_fcvtns;
@@ -300,16 +295,6 @@ index 4aa7415..428e70f 100644
 +            case SIMDIntrinsicConvertToSingle:
 +                result = isUnsigned ? INS_ucvtf : INS_scvtf;
 +                break;
-+            case SIMDIntrinsicConvertToInt32:
-+            case SIMDIntrinsicConvertToInt64:
-+            case SIMDIntrinsicConvertToUInt32:
-+            case SIMDIntrinsicConvertToUInt64:
-+                unreached(); // Not supported for source type
-+                break;
-+            case SIMDIntrinsicDiv:
-+                assert(!"Unsupported SIMD intrinsic");
-+                unreached(); // Not supported for source type
-+                break;
 +            case SIMDIntrinsicEqual:
 +                result = INS_cmeq;
 +                break;
@@ -343,10 +328,6 @@ index 4aa7415..428e70f 100644
 +                break;
 +            case SIMDIntrinsicSelect:
 +                result = INS_bsl;
-+                break;
-+            case SIMDIntrinsicSqrt:
-+                assert(!"Unsupported SIMD intrinsic");
-+                unreached(); // Not supported for source type
 +                break;
 +            case SIMDIntrinsicSub:
 +                result = INS_sub;
