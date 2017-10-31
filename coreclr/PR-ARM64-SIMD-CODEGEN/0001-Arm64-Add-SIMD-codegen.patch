@@ -1,12 +1,12 @@
-From 5ae7e48e490606d8e16c1531ae01944b9282b96d Mon Sep 17 00:00:00 2001
+From 2a0db82210cc738f45f104fe824651553369742d Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 20 Oct 2017 16:38:18 -0400
 Subject: [PATCH] [Arm64] Add SIMD codegen
 
 ---
  src/jit/codegenarm64.cpp | 975 +++++++++++++++++++++++++++++++++++++++++++++++
- src/jit/codegenlinear.h  |   1 +
- 2 files changed, 976 insertions(+)
+ src/jit/codegenlinear.h  |   3 +
+ 2 files changed, 978 insertions(+)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
 index 4aa7415..89fe0c9 100644
@@ -995,14 +995,16 @@ index 4aa7415..89fe0c9 100644
   * Unit testing of the ARM64 emitter: generate a bunch of instructions into the prolog
   * (it's as good a place as any), then use COMPlus_JitLateDisasm=* to see if the late
 diff --git a/src/jit/codegenlinear.h b/src/jit/codegenlinear.h
-index ec87fca..98171a0 100644
+index ec87fca..ec3252f 100644
 --- a/src/jit/codegenlinear.h
 +++ b/src/jit/codegenlinear.h
-@@ -66,6 +66,7 @@ enum SIMDScalarMoveType
+@@ -66,6 +66,9 @@ enum SIMDScalarMoveType
      SMT_PreserveUpper                   // preserve target upper bits
  };
  
++#ifdef _TARGET_ARM64_
 +insOpts genGetSimdInsOpt(bool is16B, var_types elementType);
++#endif
  instruction getOpForSIMDIntrinsic(SIMDIntrinsicID intrinsicId, var_types baseType, unsigned* ival = nullptr);
  void genSIMDScalarMove(
      var_types targetType, var_types type, regNumber target, regNumber src, SIMDScalarMoveType moveType);
