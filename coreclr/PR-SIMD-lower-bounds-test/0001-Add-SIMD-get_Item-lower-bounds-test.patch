@@ -1,0 +1,44 @@
+From 3095a4df03a5711da6b848a773359238990d8369 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 1 Nov 2017 13:53:08 -0400
+Subject: [PATCH] Add SIMD get_Item lower bounds test
+
+---
+ tests/src/JIT/SIMD/VectorGet.cs | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/tests/src/JIT/SIMD/VectorGet.cs b/tests/src/JIT/SIMD/VectorGet.cs
+index a61ce81..9974e10 100644
+--- a/tests/src/JIT/SIMD/VectorGet.cs
++++ b/tests/src/JIT/SIMD/VectorGet.cs
+@@ -142,6 +142,27 @@ internal partial class VectorTest
+                 Console.WriteLine("Failed to throw IndexOutOfRangeException for index == Count of " + Vector<T>.Count);
+                 returnVal = Fail;
+             }
++
++            // Check lower bounds
++            caught = false;
++            try
++            {
++                check = A[-1];
++            }
++            catch (IndexOutOfRangeException)
++            {
++                caught = true;
++            }
++            catch (Exception e)
++            {
++                Console.WriteLine("Caught exception: " + e.GetType());
++            }
++            if (!caught)
++            {
++                Console.WriteLine("Failed to throw IndexOutOfRangeException for index == -1");
++                returnVal = Fail;
++            }
++
+             return returnVal;
+         }
+     }
+-- 
+2.7.4
+
