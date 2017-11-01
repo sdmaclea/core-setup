@@ -1,0 +1,30 @@
+From 9a1fbf6ef984286f44510fe1c1aaa5eee77cb99f Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 1 Nov 2017 10:59:54 -0400
+Subject: [PATCH] [Arm64] Fix impSIMDSelect
+
+---
+ src/jit/simd.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/jit/simd.cpp b/src/jit/simd.cpp
+index bb33fcd..3892ba2 100644
+--- a/src/jit/simd.cpp
++++ b/src/jit/simd.cpp
+@@ -1364,7 +1364,13 @@ GenTreePtr Compiler::impSIMDSelect(
+     GenTree* andExpr = gtNewSIMDNode(simdType, op2, tmp, SIMDIntrinsicBitwiseAnd, baseType, size);
+     GenTree* dupOp1  = gtCloneExpr(tmp);
+     assert(dupOp1 != nullptr);
++#ifdef _TARGET_ARM64_
++    // ARM64 implements SIMDIntrinsicBitwiseAndNot as Left & ~Right
++    GenTree* andNotExpr = gtNewSIMDNode(simdType, op3, dupOp1, SIMDIntrinsicBitwiseAndNot, baseType, size);
++#else
++    // XARCH implements SIMDIntrinsicBitwiseAndNot as ~Left & Right
+     GenTree* andNotExpr = gtNewSIMDNode(simdType, dupOp1, op3, SIMDIntrinsicBitwiseAndNot, baseType, size);
++#endif
+     GenTree* simdTree   = gtNewSIMDNode(simdType, andExpr, andNotExpr, SIMDIntrinsicBitwiseOr, baseType, size);
+ 
+     // If asg not null, create a GT_COMMA tree.
+-- 
+2.7.4
+
