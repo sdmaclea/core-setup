@@ -1,0 +1,38 @@
+From e0c2eb475df0fb9b4d2567bb3463cf174a507731 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 31 Oct 2017 14:20:35 -0400
+Subject: [PATCH] [Arm64] Revise insEncodeDatasizeLS
+
+---
+ src/jit/emitarm64.cpp | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index 3f11cc4..56df042 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -7674,10 +7674,9 @@ void emitter::emitIns_Call(EmitCallType          callType,
+ 
+     if ((code & 0x00800000) && !exclusive) // Is this a sign-extending opcode? (i.e. ldrsw, ldrsh, ldrsb)
+     {
+-        assert((size == EA_4BYTE) || (size == EA_8BYTE));
+         if ((code & 0x80000000) == 0) // Is it a ldrsh or ldrsb and not ldrsw ?
+         {
+-            if (size == EA_4BYTE) // Do we need to encode the 32-bit Rt size bit?
++            if (EA_SIZE(size) != EA_8BYTE) // Do we need to encode the 32-bit Rt size bit?
+             {
+                 return 0x00400000; // set the bit at location 22
+             }
+@@ -7685,8 +7684,7 @@ void emitter::emitIns_Call(EmitCallType          callType,
+     }
+     else if (code & 0x80000000) // Is this a ldr/str/ldur/stur opcode?
+     {
+-        assert((size == EA_4BYTE) || (size == EA_8BYTE));
+-        if (size == EA_8BYTE) // Do we need to encode the 64-bit size bit?
++        if (EA_SIZE(size) == EA_8BYTE) // Do we need to encode the 64-bit size bit?
+         {
+             return 0x40000000; // set the bit at location 30
+         }
+-- 
+2.7.4
+
