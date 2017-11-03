@@ -1,0 +1,193 @@
+From 4b71cab152cb966a9a0e450dee329fa145862e49 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 3 Nov 2017 15:33:55 -0400
+Subject: [PATCH] [Arm64] SIMD12 Indirect Load/Store
+
+---
+ src/jit/codegenarm64.cpp   | 92 ++++++++++++++++++++++++++++++++++++++++++++++
+ src/jit/codegenarmarch.cpp |  9 +++++
+ src/jit/lowerarmarch.cpp   | 14 +++++++
+ src/jit/lsraarmarch.cpp    | 12 ++++++
+ 4 files changed, 127 insertions(+)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 74ef06d..1e98a95 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -2997,6 +2997,15 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
+     emitAttr    attr       = emitTypeSize(tree);
+     instruction ins        = ins_Store(targetType);
+ 
++#ifdef FEATURE_SIMD
++    // Storing Vector3 of size 12 bytes through indirection
++    if (tree->TypeGet() == TYP_SIMD12)
++    {
++        genStoreIndTypeSIMD12(tree);
++        return;
++    }
++#endif // FEATURE_SIMD
++
+     GCInfo::WriteBarrierForm writeBarrierForm = gcInfo.gcIsWriteBarrierCandidate(tree, data);
+     if (writeBarrierForm != GCInfo::WBF_NoBarrier)
+     {
+@@ -4703,6 +4712,89 @@ void CodeGen::genSIMDIntrinsicUpperRestore(GenTreeSIMD* simdNode)
+     getEmitter()->emitIns_R_R_I_I(INS_mov, EA_8BYTE, lclVarReg, srcReg, 1, 0);
+ }
+ 
++//-----------------------------------------------------------------------------
++// genStoreIndTypeSIMD12: store indirect a TYP_SIMD12 (i.e. Vector3) to memory.
++// Since Vector3 is not a hardware supported write size, it is performed
++// as two writes: 8 byte followed by 4-byte.
++//
++// Arguments:
++//    treeNode - tree node that is attempting to store indirect
++//
++//
++// Return Value:
++//    None.
++//
++void CodeGen::genStoreIndTypeSIMD12(GenTree* treeNode)
++{
++    assert(treeNode->OperGet() == GT_STOREIND);
++
++    GenTree* addr = treeNode->gtOp.gtOp1;
++    GenTree* data = treeNode->gtOp.gtOp2;
++
++    // addr and data should not be contained.
++    assert(!data->isContained());
++    assert(!addr->isContained());
++
++#ifdef DEBUG
++    // Should not require a write barrier
++    GCInfo::WriteBarrierForm writeBarrierForm = gcInfo.gcIsWriteBarrierCandidate(treeNode, data);
++    assert(writeBarrierForm == GCInfo::WBF_NoBarrier);
++#endif
++
++    genConsumeOperands(treeNode->AsOp());
++
++    // Need an addtional integer register to extract upper 4 bytes from data.
++    regNumber tmpReg = treeNode->GetSingleTempReg();
++    assert(tmpReg != addr->gtRegNum);
++
++    // 8-byte write
++    getEmitter()->emitIns_R_R(ins_Store(TYP_DOUBLE), EA_8BYTE, data->gtRegNum, addr->gtRegNum);
++
++    // Extract upper 4-bytes from data
++    getEmitter()->emitIns_R_R_I(INS_mov, EA_4BYTE, tmpReg, data->gtRegNum, 2);
++
++    // 4-byte write
++    getEmitter()->emitIns_R_R_I(INS_str, EA_4BYTE, tmpReg, addr->gtRegNum, 8);
++}
++
++//-----------------------------------------------------------------------------
++// genLoadIndTypeSIMD12: load indirect a TYP_SIMD12 (i.e. Vector3) value.
++// Since Vector3 is not a hardware supported write size, it is performed
++// as two loads: 8 byte followed by 4-byte.
++//
++// Arguments:
++//    treeNode - tree node of GT_IND
++//
++//
++// Return Value:
++//    None.
++//
++void CodeGen::genLoadIndTypeSIMD12(GenTree* treeNode)
++{
++    assert(treeNode->OperGet() == GT_IND);
++
++    GenTree*  addr      = treeNode->gtOp.gtOp1;
++    regNumber targetReg = treeNode->gtRegNum;
++
++    assert(!addr->isContained());
++
++    regNumber operandReg = genConsumeReg(addr);
++
++    // Need an addtional int register to read upper 4 bytes, which is different from targetReg
++    regNumber tmpReg = treeNode->GetSingleTempReg();
++
++    // 8-byte read
++    getEmitter()->emitIns_R_R(ins_Load(TYP_DOUBLE), EA_8BYTE, targetReg, addr->gtRegNum);
++
++    // 4-byte read
++    getEmitter()->emitIns_R_R_I(INS_ldr, EA_4BYTE, tmpReg, addr->gtRegNum, 8);
++
++    // Insert upper 4-bytes into data
++    getEmitter()->emitIns_R_R_I(INS_mov, EA_4BYTE, targetReg, tmpReg, 2);
++
++    genProduceReg(treeNode);
++}
++
+ #endif // FEATURE_SIMD
+ 
+ /*****************************************************************************
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index ba0e872..031977f 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -1716,6 +1716,15 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
+     emitAttr    attr       = emitTypeSize(tree);
+     instruction ins        = ins_Load(targetType);
+ 
++#ifdef FEATURE_SIMD
++    // Handling of Vector3 type values loaded through indirection.
++    if (tree->TypeGet() == TYP_SIMD12)
++    {
++        genLoadIndTypeSIMD12(tree);
++        return;
++    }
++#endif // FEATURE_SIMD
++
+     genConsumeAddress(tree->Addr());
+     if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
+     {
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index 2213960..a96d19a 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -563,6 +563,20 @@ void Lowering::ContainCheckIndir(GenTreeIndir* indirNode)
+         return;
+     }
+ 
++#ifdef FEATURE_SIMD
++    // If indirTree is of TYP_SIMD12, don't mark addr as contained
++    // so that it always get computed to a register.  This would
++    // mean codegen side logic doesn't need to handle all possible
++    // addr expressions that could be contained.
++    //
++    // TODO-ARM64-CQ: handle other addr mode expressions that could be marked
++    // as contained.
++    if (indirNode->TypeGet() == TYP_SIMD12)
++    {
++        return;
++    }
++#endif // FEATURE_SIMD
++
+     GenTree* addr          = indirNode->Addr();
+     bool     makeContained = true;
+     if ((addr->OperGet() == GT_LEA) && IsSafeToContainMem(indirNode, addr))
+diff --git a/src/jit/lsraarmarch.cpp b/src/jit/lsraarmarch.cpp
+index b13362d..74f063c 100644
+--- a/src/jit/lsraarmarch.cpp
++++ b/src/jit/lsraarmarch.cpp
+@@ -216,6 +216,18 @@ void LinearScan::TreeNodeInfoInitIndir(GenTreeIndir* indirTree)
+             info->internalIntCount++;
+         }
+     }
++
++#ifdef FEATURE_SIMD
++    if (indirTree->TypeGet() == TYP_SIMD12)
++    {
++        // If indirTree is of TYP_SIMD12, addr is not contained. See comment in LowerIndir().
++        assert(!indirTree->Addr()->isContained());
++
++        // Vector3 is read/written as two reads/writes: 8 byte and 4 byte.
++        // To assemble the vector properly we would need an additional int register
++        info->internalIntCount = 1;
++    }
++#endif // FEATURE_SIMD
+ }
+ 
+ //------------------------------------------------------------------------
+-- 
+2.7.4
+
