@@ -1,14 +1,14 @@
-From ef7a4344594a0a91af811c57f6eba1369c7db17a Mon Sep 17 00:00:00 2001
+From e66076f48dd2ddd295485cc5fa4f1c89aa9ae8b6 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 3 Nov 2017 13:08:48 -0400
 Subject: [PATCH] [Arm64] SIMD genFnPrologCalleeRegArgs
 
 ---
- src/jit/codegencommon.cpp | 25 +++++++++++++++++++++++--
- 1 file changed, 23 insertions(+), 2 deletions(-)
+ src/jit/codegencommon.cpp | 24 ++++++++++++++++++++++--
+ 1 file changed, 22 insertions(+), 2 deletions(-)
 
 diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
-index ac8c667..911ce9c 100644
+index ac8c667..2addb6f 100644
 --- a/src/jit/codegencommon.cpp
 +++ b/src/jit/codegencommon.cpp
 @@ -4574,7 +4574,7 @@ void CodeGen::genFnPrologCalleeRegArgs(regNumber xtraReg, bool* pXtraRegClobbere
@@ -43,7 +43,7 @@ index ac8c667..911ce9c 100644
                  getEmitter()->emitIns_R_R(ins_Copy(destMemType), size, destRegNum, regNum);
  
                  psiMoveToReg(varNum);
-@@ -5261,6 +5268,20 @@ void CodeGen::genFnPrologCalleeRegArgs(regNumber xtraReg, bool* pXtraRegClobbere
+@@ -5261,6 +5268,19 @@ void CodeGen::genFnPrologCalleeRegArgs(regNumber xtraReg, bool* pXtraRegClobbere
                  destRegNum = regNum;
              }
  #endif // defined(FEATURE_UNIX_AMD64_STRUCT_PASSING) && defined(FEATURE_SIMD)
@@ -56,8 +56,7 @@ index ac8c667..911ce9c 100644
 +                noway_assert(regArgTab[nextArgNum].varNum == varNum);
 +                noway_assert(genIsValidIntReg(nextRegNum));
 +                noway_assert(genIsValidFloatReg(destRegNum));
-+                // Insert second second integer argument register into upper 8 bytes of simd floating point register
-+                // and moves the 0th element of the src reg into the 1st element of the dest reg.
++                // Insert second integer argument register into upper 8 bytes of simd floating point register
 +                getEmitter()->emitIns_R_R_I(INS_mov, EA_8BYTE, destRegNum, nextRegNum, 1);
 +            }
 +#endif // defined(_TARGET_ARM64_) && defined(FEATURE_SIMD)
