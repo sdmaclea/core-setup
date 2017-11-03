@@ -1,0 +1,25 @@
+From 27a0b184a7ffbbbf181901a22b1c5737fc58939e Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 3 Nov 2017 11:39:07 -0400
+Subject: [PATCH] [Arm64/Arm] genRangeCheck gtThrowKind
+
+---
+ src/jit/codegenarmarch.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index ba0e872..cbc3e4b 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -1287,7 +1287,7 @@ void CodeGen::genRangeCheck(GenTreePtr oper)
+ #endif // DEBUG
+ 
+     getEmitter()->emitInsBinary(INS_cmp, emitActualTypeSize(bndsChkType), src1, src2);
+-    genJumpToThrowHlpBlk(jmpKind, SCK_RNGCHK_FAIL, bndsChk->gtIndRngFailBB);
++    genJumpToThrowHlpBlk(jmpKind, bndsChk->gtThrowKind, bndsChk->gtIndRngFailBB);
+ }
+ 
+ //---------------------------------------------------------------------
+-- 
+2.7.4
+
