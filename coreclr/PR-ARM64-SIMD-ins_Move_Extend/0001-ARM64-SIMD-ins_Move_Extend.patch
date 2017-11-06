@@ -1,0 +1,30 @@
+From 8427022b76828a47bb6564d201b6e059c7704c0a Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 3 Nov 2017 13:22:36 -0400
+Subject: [PATCH] [ARM64] SIMD ins_Move_Extend
+
+---
+ src/jit/instr.cpp | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/src/jit/instr.cpp b/src/jit/instr.cpp
+index f83bd45..2ed581c 100644
+--- a/src/jit/instr.cpp
++++ b/src/jit/instr.cpp
+@@ -3122,9 +3122,11 @@ instruction CodeGen::ins_Move_Extend(var_types srcType, bool srcInReg)
+         // TODO-CQ: based on whether src type is aligned use movaps instead
+ 
+         return (srcInReg) ? INS_movaps : INS_movups;
+-#else  // !defined(_TARGET_XARCH_) || defined(LEGACY_BACKEND)
++#elif defined(_TARGET_ARM64_)
++        return (srcInReg) ? INS_mov : ins_Load(srcType);
++#else  // !defined(_TARGET_ARM64_) && !(defined(_TARGET_XARCH_) && !defined(LEGACY_BACKEND))
+         assert(!"unhandled SIMD type");
+-#endif // !defined(_TARGET_XARCH_) || defined(LEGACY_BACKEND)
++#endif // !defined(_TARGET_ARM64_) && !(defined(_TARGET_XARCH_) && !defined(LEGACY_BACKEND))
+     }
+ 
+ #if defined(_TARGET_XARCH_) && !defined(LEGACY_BACKEND)
+-- 
+2.7.4
+
