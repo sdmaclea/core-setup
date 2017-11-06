@@ -1,4 +1,4 @@
-From 2cfbf512545821dc590358e38ebc8cc41a7c22b3 Mon Sep 17 00:00:00 2001
+From bd4cd61755ea391fe8362fcbf18464dd3f3edd63 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Thu, 2 Nov 2017 14:49:39 -0400
 Subject: [PATCH] [Arm64] SIMD GetHfaType()
