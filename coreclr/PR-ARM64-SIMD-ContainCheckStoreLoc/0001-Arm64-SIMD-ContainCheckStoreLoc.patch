@@ -1,0 +1,29 @@
+From 0cf6eaf7731d8c3c8ebf031b667d6cd010f4ca6d Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 31 Oct 2017 18:37:44 -0400
+Subject: [PATCH] [Arm64] SIMD ContainCheckStoreLoc
+
+---
+ src/jit/lowerarmarch.cpp | 6 ------
+ 1 file changed, 6 deletions(-)
+
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index 2213960..e4b00a0 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -665,12 +665,6 @@ void Lowering::ContainCheckStoreLoc(GenTreeLclVarCommon* storeLoc)
+ #ifdef FEATURE_SIMD
+     if (varTypeIsSIMD(storeLoc))
+     {
+-        if (op1->IsCnsIntOrI())
+-        {
+-            // For an InitBlk we want op1 to be contained; otherwise we want it to
+-            // be evaluated into an xmm register.
+-            MakeSrcContained(storeLoc, op1);
+-        }
+         return;
+     }
+ #endif // FEATURE_SIMD
+-- 
+2.7.4
+
