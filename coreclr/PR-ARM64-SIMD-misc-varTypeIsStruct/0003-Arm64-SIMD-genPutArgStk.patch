@@ -1,0 +1,25 @@
+From ccb387892b7bd065ca9ea606830058049908ce22 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 2 Nov 2017 12:12:31 -0400
+Subject: [PATCH] [Arm64] SIMD genPutArgStk
+
+---
+ src/jit/codegenarmarch.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index cbc3e4b..ce96e07 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -585,7 +585,7 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
+         argOffsetMax = compiler->lvaOutgoingArgSpaceSize;
+     }
+ 
+-    bool isStruct = (targetType == TYP_STRUCT) || (source->OperGet() == GT_FIELD_LIST);
++    bool isStruct = varTypeIsStruct(targetType) || (source->OperGet() == GT_FIELD_LIST);
+ 
+     if (!isStruct) // a normal non-Struct argument
+     {
+-- 
+2.7.4
+

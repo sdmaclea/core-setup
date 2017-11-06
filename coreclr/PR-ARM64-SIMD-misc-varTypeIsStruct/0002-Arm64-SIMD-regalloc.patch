@@ -1,0 +1,38 @@
+From 8d387658d9caaf5730e08fb516c90ff71238366e Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 1 Nov 2017 20:18:22 -0400
+Subject: [PATCH] [Arm64] SIMD regalloc
+
+---
+ src/jit/regalloc.cpp | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/jit/regalloc.cpp b/src/jit/regalloc.cpp
+index a911994..61522c4 100644
+--- a/src/jit/regalloc.cpp
++++ b/src/jit/regalloc.cpp
+@@ -360,7 +360,7 @@ inline regMaskTP Compiler::genReturnRegForTree(GenTreePtr tree)
+ {
+     var_types type = tree->TypeGet();
+ 
+-    if (type == TYP_STRUCT && IsHfa(tree))
++    if (varTypeIsStruct(type) && IsHfa(tree))
+     {
+         int retSlots = GetHfaCount(tree);
+         return ((1 << retSlots) - 1) << REG_FLOATRET;
+@@ -751,7 +751,11 @@ regNumber Compiler::raUpdateRegStateForArg(RegState* regState, LclVarDsc* argDsc
+ #endif // _TARGET_ARM_
+ 
+ #if FEATURE_MULTIREG_ARGS
+-    if (argDsc->lvType == TYP_STRUCT)
++#ifdef _TARGET_ARM64_
++    if (varTypeIsStruct(argDsc->lvType))
++#else
++    if((argDsc->lvType == TYP_STRUCT)
++#endif
+     {
+         if (argDsc->lvIsHfaRegArg())
+         {
+-- 
+2.7.4
+

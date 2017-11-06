@@ -1,0 +1,27 @@
+From 2cfbf512545821dc590358e38ebc8cc41a7c22b3 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 2 Nov 2017 14:49:39 -0400
+Subject: [PATCH] [Arm64] SIMD GetHfaType()
+
+---
+ src/jit/codegencommon.cpp | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
+index ac8c667..5336c79 100644
+--- a/src/jit/codegencommon.cpp
++++ b/src/jit/codegencommon.cpp
+@@ -11221,10 +11221,7 @@ bool Compiler::IsHfa(GenTreePtr tree)
+ var_types Compiler::GetHfaType(GenTreePtr tree)
+ {
+ #ifdef FEATURE_HFA
+-    if (tree->TypeGet() == TYP_STRUCT)
+-    {
+     return GetHfaType(gtGetStructHandleIfPresent(tree));
+-    }
+ #endif
+     return TYP_UNDEF;
+ }
+-- 
+2.7.4
+

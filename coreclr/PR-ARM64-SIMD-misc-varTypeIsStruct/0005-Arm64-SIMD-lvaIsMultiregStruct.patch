@@ -1,0 +1,25 @@
+From b3d5d2a4c57a190bc3f69f70add04ddad1b92f4b Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 2 Nov 2017 17:47:30 -0400
+Subject: [PATCH] [Arm64] SIMD lvaIsMultiregStruct
+
+---
+ src/jit/lclvars.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/jit/lclvars.cpp b/src/jit/lclvars.cpp
+index c7f15d8..4a48219 100644
+--- a/src/jit/lclvars.cpp
++++ b/src/jit/lclvars.cpp
+@@ -2215,7 +2215,7 @@ void Compiler::lvaSetVarDoNotEnregister(unsigned varNum DEBUGARG(DoNotEnregister
+ // Returns true if this local var is a multireg struct
+ bool Compiler::lvaIsMultiregStruct(LclVarDsc* varDsc)
+ {
+-    if (varDsc->TypeGet() == TYP_STRUCT)
++    if (varTypeIsStruct(varDsc->TypeGet()))
+     {
+         CORINFO_CLASS_HANDLE clsHnd = varDsc->lvVerTypeInfo.GetClassHandleForValueClass();
+         structPassingKind    howToPassStruct;
+-- 
+2.7.4
+
