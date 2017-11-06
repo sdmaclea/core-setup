@@ -1,4 +1,4 @@
-From e66076f48dd2ddd295485cc5fa4f1c89aa9ae8b6 Mon Sep 17 00:00:00 2001
+From e4500bd8c79747059ed137ab9842b3e5fd179a93 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 3 Nov 2017 13:08:48 -0400
 Subject: [PATCH] [Arm64] SIMD genFnPrologCalleeRegArgs
@@ -8,7 +8,7 @@ Subject: [PATCH] [Arm64] SIMD genFnPrologCalleeRegArgs
  1 file changed, 22 insertions(+), 2 deletions(-)
 
 diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
-index ac8c667..2addb6f 100644
+index ac8c667..4f77379 100644
 --- a/src/jit/codegencommon.cpp
 +++ b/src/jit/codegencommon.cpp
 @@ -4574,7 +4574,7 @@ void CodeGen::genFnPrologCalleeRegArgs(regNumber xtraReg, bool* pXtraRegClobbere
@@ -33,7 +33,7 @@ index ac8c667..2addb6f 100644
  
                  emitAttr size = emitActualTypeSize(destMemType);
  
-+#if defined(_TARGET_ARM64_) && FEATURE_SIMD
++#if defined(_TARGET_ARM64_)
 +                if (EA_SIZE(size) > 8)
 +                {
 +                    size = EA_8BYTE;
