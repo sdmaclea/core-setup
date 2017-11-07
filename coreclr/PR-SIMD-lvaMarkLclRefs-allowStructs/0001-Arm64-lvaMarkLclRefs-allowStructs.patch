@@ -1,0 +1,28 @@
+From 185d1e9a990bbbcd42410461684c94855fa2fd60 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 7 Nov 2017 16:22:18 -0500
+Subject: [PATCH] [Arm64] lvaMarkLclRefs allowStructs
+
+---
+ src/jit/lclvars.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/jit/lclvars.cpp b/src/jit/lclvars.cpp
+index 87a37f9..d242129 100644
+--- a/src/jit/lclvars.cpp
++++ b/src/jit/lclvars.cpp
+@@ -3809,6 +3809,11 @@ void Compiler::lvaMarkLclRefs(GenTreePtr tree)
+     allowStructs = varTypeIsStruct(varDsc);
+ #endif // FEATURE_UNIX_AMD64_STRUCT_PASSING
+ 
++#if defined(FEATURE_SIMD) && defined(_TARGET_ARM64_)
++    // Allow mismatched TYP_STRUCT and TYP_SIMD* (since all TYP_SIMD* are Structs)
++    allowStructs = varTypeIsStruct(varDsc) && varTypeIsStruct(tree->gtType);
++#endif
++
+     /* Variables must be used as the same type throughout the method */
+     noway_assert(tiVerificationNeeded || varDsc->lvType == TYP_UNDEF || tree->gtType == TYP_UNKNOWN || allowStructs ||
+                  genActualType(varDsc->TypeGet()) == genActualType(tree->gtType) ||
+-- 
+2.7.4
+
