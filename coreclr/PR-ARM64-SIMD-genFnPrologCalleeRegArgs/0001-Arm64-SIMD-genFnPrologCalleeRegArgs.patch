@@ -1,14 +1,14 @@
-From e4500bd8c79747059ed137ab9842b3e5fd179a93 Mon Sep 17 00:00:00 2001
+From c83edc9af0b91770ce007eecb492d79d4bda94ee Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 3 Nov 2017 13:08:48 -0400
 Subject: [PATCH] [Arm64] SIMD genFnPrologCalleeRegArgs
 
 ---
- src/jit/codegencommon.cpp | 24 ++++++++++++++++++++++--
- 1 file changed, 22 insertions(+), 2 deletions(-)
+ src/jit/codegencommon.cpp | 34 +++++++++++++++++++++++++++++++---
+ 1 file changed, 31 insertions(+), 3 deletions(-)
 
 diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
-index ac8c667..4f77379 100644
+index ac8c667..89f7b91 100644
 --- a/src/jit/codegencommon.cpp
 +++ b/src/jit/codegencommon.cpp
 @@ -4574,7 +4574,7 @@ void CodeGen::genFnPrologCalleeRegArgs(regNumber xtraReg, bool* pXtraRegClobbere
@@ -16,7 +16,7 @@ index ac8c667..4f77379 100644
                      destRegNum = varDsc->lvRegNum;
                  }
 -#if FEATURE_MULTIREG_ARGS && defined(FEATURE_SIMD) && defined(_TARGET_AMD64_)
-+#if FEATURE_MULTIREG_ARGS && defined(FEATURE_SIMD) && (defined(_TARGET_AMD64_) || defined(_TARGET_ARM64_))
++#if FEATURE_MULTIREG_ARGS && defined(FEATURE_SIMD) && defined(_TARGET_64BIT_)
                  else
                  {
                      assert(regArgTab[argNum].slot == 2);
@@ -29,13 +29,26 @@ index ac8c667..4f77379 100644
              else
              {
                  assert(regArgTab[argNum].slot == 2);
-@@ -5228,6 +5228,13 @@ void CodeGen::genFnPrologCalleeRegArgs(regNumber xtraReg, bool* pXtraRegClobbere
+@@ -5201,7 +5201,7 @@ void CodeGen::genFnPrologCalleeRegArgs(regNumber xtraReg, bool* pXtraRegClobbere
+                 noway_assert(regNum != destRegNum);
+                 continue;
+             }
+-#endif // defined(FEATURE_UNIX_AMD64_STRUCT_PASSING) && defined(FEATURE_SIMD)
++#endif // (defined(FEATURE_UNIX_AMD64_STRUCT_PASSING) || defined(_TARGET_ARM64_)) && defined(FEATURE_SIMD)
+             noway_assert(destRegNum != REG_NA);
+             if (destRegNum != regNum)
+             {
+@@ -5228,6 +5228,17 @@ void CodeGen::genFnPrologCalleeRegArgs(regNumber xtraReg, bool* pXtraRegClobbere
  
                  emitAttr size = emitActualTypeSize(destMemType);
  
 +#if defined(_TARGET_ARM64_)
-+                if (EA_SIZE(size) > 8)
++                if (varTypeIsSIMD(varDsc) && argNum < (argMax - 1) && regArgTab[argNum + 1].slot == 2)
 +                {
++                    // For a SIMD type that is passed in two integer registers,
++                    // Limit the copy below to the first 8 bytes from the first integer register.
++                    // Handle the remaining 8 bytes from the second slot in the code further below
++                    assert(EA_SIZE(size) >= 8);
 +                    size = EA_8BYTE;
 +                }
 +#endif
@@ -43,20 +56,24 @@ index ac8c667..4f77379 100644
                  getEmitter()->emitIns_R_R(ins_Copy(destMemType), size, destRegNum, regNum);
  
                  psiMoveToReg(varNum);
-@@ -5261,6 +5268,19 @@ void CodeGen::genFnPrologCalleeRegArgs(regNumber xtraReg, bool* pXtraRegClobbere
+@@ -5261,6 +5272,23 @@ void CodeGen::genFnPrologCalleeRegArgs(regNumber xtraReg, bool* pXtraRegClobbere
                  destRegNum = regNum;
              }
  #endif // defined(FEATURE_UNIX_AMD64_STRUCT_PASSING) && defined(FEATURE_SIMD)
 +#if defined(_TARGET_ARM64_) && defined(FEATURE_SIMD)
 +            if (varTypeIsSIMD(varDsc) && argNum < (argMax - 1) && regArgTab[argNum + 1].slot == 2)
 +            {
++                // For a SIMD type that is passed in two integer registers,
++                // Code above copies the first integer argument register into the lower 8 bytes
++                // of the target register. Here we must handle the second 8 bytes of the slot pair by
++                // inserting the second integer register into the upper 8 bytes of the target
++                // SIMD floating point register.
 +                argRegCount          = 2;
 +                int       nextArgNum = argNum + 1;
 +                regNumber nextRegNum = genMapRegArgNumToRegNum(nextArgNum, regArgTab[nextArgNum].getRegType(compiler));
 +                noway_assert(regArgTab[nextArgNum].varNum == varNum);
 +                noway_assert(genIsValidIntReg(nextRegNum));
 +                noway_assert(genIsValidFloatReg(destRegNum));
-+                // Insert second integer argument register into upper 8 bytes of simd floating point register
 +                getEmitter()->emitIns_R_R_I(INS_mov, EA_8BYTE, destRegNum, nextRegNum, 1);
 +            }
 +#endif // defined(_TARGET_ARM64_) && defined(FEATURE_SIMD)
