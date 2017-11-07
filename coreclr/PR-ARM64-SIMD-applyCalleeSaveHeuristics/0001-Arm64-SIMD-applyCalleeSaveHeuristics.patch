@@ -1,23 +1,21 @@
-From 8f63be71bdf942c2f33b556b837caeca1c3daccc Mon Sep 17 00:00:00 2001
+From 755d2667ac03716f88d5207760a493572bc56848 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 3 Nov 2017 11:20:13 -0400
 Subject: [PATCH] [Arm64] SIMD applyCalleeSaveHeuristics
 
 ---
- src/jit/lsra.cpp | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ src/jit/lsra.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/src/jit/lsra.cpp b/src/jit/lsra.cpp
-index 1ac414c..316d383 100644
+index 6580264..01a6604 100644
 --- a/src/jit/lsra.cpp
 +++ b/src/jit/lsra.cpp
-@@ -720,10 +720,10 @@ void LinearScan::applyCalleeSaveHeuristics(RefPosition* rp)
- 
+@@ -721,9 +721,9 @@ void LinearScan::applyCalleeSaveHeuristics(RefPosition* rp)
      Interval* theInterval = rp->getInterval();
  
--#ifdef DEBUG
+ #ifdef DEBUG
 -    regMaskTP calleeSaveMask = calleeSaveRegs(getRegisterType(theInterval, rp));
-+#if defined(DEBUG)
      if (doReverseCallerCallee())
      {
 +        regMaskTP calleeSaveMask = calleeSaveRegs(theInterval->registerType);
