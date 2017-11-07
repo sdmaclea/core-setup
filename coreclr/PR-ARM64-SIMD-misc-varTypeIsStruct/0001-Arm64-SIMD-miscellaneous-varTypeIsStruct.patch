@@ -1,0 +1,110 @@
+From 42cdc959d90cfe7cd035b527a95e898542b95acf Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 31 Oct 2017 17:29:42 -0400
+Subject: [PATCH] [Arm64] SIMD miscellaneous varTypeIsStruct
+
+---
+ src/jit/codegencommon.cpp | 3 ---
+ src/jit/compiler.h        | 2 +-
+ src/jit/lclvars.cpp       | 2 +-
+ src/jit/morph.cpp         | 6 +++---
+ src/jit/regalloc.cpp      | 4 ++--
+ 5 files changed, 7 insertions(+), 10 deletions(-)
+
+diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
+index ac8c667..5336c79 100644
+--- a/src/jit/codegencommon.cpp
++++ b/src/jit/codegencommon.cpp
+@@ -11221,10 +11221,7 @@ bool Compiler::IsHfa(GenTreePtr tree)
+ var_types Compiler::GetHfaType(GenTreePtr tree)
+ {
+ #ifdef FEATURE_HFA
+-    if (tree->TypeGet() == TYP_STRUCT)
+-    {
+     return GetHfaType(gtGetStructHandleIfPresent(tree));
+-    }
+ #endif
+     return TYP_UNDEF;
+ }
+diff --git a/src/jit/compiler.h b/src/jit/compiler.h
+index ffaa8ce..ee2bc4b 100644
+--- a/src/jit/compiler.h
++++ b/src/jit/compiler.h
+@@ -425,7 +425,7 @@ public:
+     unsigned lvHfaSlots() const
+     {
+         assert(lvIsHfa());
+-        assert(lvType == TYP_STRUCT);
++        assert(varTypeIsStruct(lvType));
+ #ifdef _TARGET_ARM_
+         return lvExactSize / sizeof(float);
+ #else  //  _TARGET_ARM64_
+diff --git a/src/jit/lclvars.cpp b/src/jit/lclvars.cpp
+index c7f15d8..4a48219 100644
+--- a/src/jit/lclvars.cpp
++++ b/src/jit/lclvars.cpp
+@@ -2215,7 +2215,7 @@ void Compiler::lvaSetVarDoNotEnregister(unsigned varNum DEBUGARG(DoNotEnregister
+ // Returns true if this local var is a multireg struct
+ bool Compiler::lvaIsMultiregStruct(LclVarDsc* varDsc)
+ {
+-    if (varDsc->TypeGet() == TYP_STRUCT)
++    if (varTypeIsStruct(varDsc->TypeGet()))
+     {
+         CORINFO_CLASS_HANDLE clsHnd = varDsc->lvVerTypeInfo.GetClassHandleForValueClass();
+         structPassingKind    howToPassStruct;
+diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
+index a881d34..74bb0c5 100644
+--- a/src/jit/morph.cpp
++++ b/src/jit/morph.cpp
+@@ -4788,7 +4788,7 @@ void Compiler::fgMorphMultiregStructArgs(GenTreeCall* call)
+ 
+         GenTreePtr arg = argx;
+ 
+-        if (arg->TypeGet() == TYP_STRUCT)
++        if (varTypeIsStruct(arg->TypeGet()))
+         {
+             foundStructArg = true;
+ 
+@@ -4843,7 +4843,7 @@ void Compiler::fgMorphMultiregStructArgs(GenTreeCall* call)
+ //
+ GenTreePtr Compiler::fgMorphMultiregStructArg(GenTreePtr arg, fgArgTabEntryPtr fgEntryPtr)
+ {
+-    assert(arg->TypeGet() == TYP_STRUCT);
++    assert(varTypeIsStruct(arg->TypeGet()));
+ 
+ #ifndef _TARGET_ARMARCH_
+     NYI("fgMorphMultiregStructArg requires implementation for this target");
+@@ -4990,7 +4990,7 @@ GenTreePtr Compiler::fgMorphMultiregStructArg(GenTreePtr arg, fgArgTabEntryPtr f
+         }
+     }
+     // We should still have a TYP_STRUCT
+-    assert(argValue->TypeGet() == TYP_STRUCT);
++    assert(varTypeIsStruct(argValue->TypeGet()));
+ 
+     GenTreeFieldList* newArg = nullptr;
+ 
+diff --git a/src/jit/regalloc.cpp b/src/jit/regalloc.cpp
+index a911994..6a992d4 100644
+--- a/src/jit/regalloc.cpp
++++ b/src/jit/regalloc.cpp
+@@ -360,7 +360,7 @@ inline regMaskTP Compiler::genReturnRegForTree(GenTreePtr tree)
+ {
+     var_types type = tree->TypeGet();
+ 
+-    if (type == TYP_STRUCT && IsHfa(tree))
++    if (varTypeIsStruct(type) && IsHfa(tree))
+     {
+         int retSlots = GetHfaCount(tree);
+         return ((1 << retSlots) - 1) << REG_FLOATRET;
+@@ -751,7 +751,7 @@ regNumber Compiler::raUpdateRegStateForArg(RegState* regState, LclVarDsc* argDsc
+ #endif // _TARGET_ARM_
+ 
+ #if FEATURE_MULTIREG_ARGS
+-    if (argDsc->lvType == TYP_STRUCT)
++    if (varTypeIsStruct(argDsc->lvType))
+     {
+         if (argDsc->lvIsHfaRegArg())
+         {
+-- 
+2.7.4
+
