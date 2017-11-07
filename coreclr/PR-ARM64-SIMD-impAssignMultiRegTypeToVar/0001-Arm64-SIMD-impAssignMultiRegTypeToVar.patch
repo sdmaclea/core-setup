@@ -1,4 +1,4 @@
-From 09ee149135978210e3a3b7a6542ece54a8672733 Mon Sep 17 00:00:00 2001
+From 89b83771803e478636507480db89829056e5283d Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 7 Nov 2017 14:24:02 -0500
 Subject: [PATCH] [Arm64] SIMD impAssignMultiRegTypeToVar
@@ -8,14 +8,14 @@ Subject: [PATCH] [Arm64] SIMD impAssignMultiRegTypeToVar
  1 file changed, 1 insertion(+)
 
 diff --git a/src/jit/importer.cpp b/src/jit/importer.cpp
-index e1c96cd..f9ccfee 100644
+index e1c96cd..8dcf982 100644
 --- a/src/jit/importer.cpp
 +++ b/src/jit/importer.cpp
 @@ -15648,6 +15648,7 @@ GenTreePtr Compiler::impAssignMultiRegTypeToVar(GenTreePtr op, CORINFO_CLASS_HAN
  {
      unsigned tmpNum = lvaGrabTemp(true DEBUGARG("Return value temp for multireg return."));
      impAssignTempGen(tmpNum, op, hClass, (unsigned)CHECK_SPILL_ALL);
-+    op->gtType = impNormStructType(hClass);
++    op->gtType     = impNormStructType(hClass);
      GenTreePtr ret = gtNewLclvNode(tmpNum, op->gtType);
  
      // TODO-1stClassStructs: Handle constant propagation and CSE-ing of multireg returns.
