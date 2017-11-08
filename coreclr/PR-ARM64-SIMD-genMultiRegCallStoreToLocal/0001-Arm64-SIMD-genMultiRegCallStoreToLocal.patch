@@ -1,17 +1,17 @@
-From 91a510bda1a6c377a8ec51943721caa14fff1911 Mon Sep 17 00:00:00 2001
+From 2c34f05b6da47d1efb76cbbf30e433d90d3aa9ae Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 8 Nov 2017 12:32:45 -0500
 Subject: [PATCH] [Arm64] SIMD genMultiRegCallStoreToLocal
 
 ---
- src/jit/codegenarmarch.cpp | 39 ++++++++++++++++++++++++++++++++++++++-
- 1 file changed, 38 insertions(+), 1 deletion(-)
+ src/jit/codegenarmarch.cpp | 40 +++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 39 insertions(+), 1 deletion(-)
 
 diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
-index 758dd0b..1a0b1c3 100644
+index 758dd0b..ac632f6 100644
 --- a/src/jit/codegenarmarch.cpp
 +++ b/src/jit/codegenarmarch.cpp
-@@ -1207,7 +1207,44 @@ void CodeGen::genMultiRegCallStoreToLocal(GenTreePtr treeNode)
+@@ -1207,7 +1207,45 @@ void CodeGen::genMultiRegCallStoreToLocal(GenTreePtr treeNode)
      {
          // Right now the only enregistrable multi-reg return types supported are SIMD types.
          assert(varTypeIsSIMD(treeNode));
@@ -35,7 +35,8 @@ index 758dd0b..1a0b1c3 100644
 +            }
 +
 +            assert(reg != REG_NA);
-+            // Destination is a homogneous vector with element size equal to the src size
++            // Treat dst register as a homogenous vector with element size equal to the src size
++            // Insert pieces in order
 +            if (varTypeIsFloating(type))
 +            {
 +                // If the register piece was passed in a floating point register
