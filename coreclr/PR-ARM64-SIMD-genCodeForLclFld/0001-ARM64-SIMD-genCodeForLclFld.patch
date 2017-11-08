@@ -1,0 +1,25 @@
+From 636373c79fe8a00da47c67cf627407ee565374ea Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 3 Nov 2017 13:28:38 -0400
+Subject: [PATCH] [ARM64] SIMD genCodeForLclFld
+
+---
+ src/jit/codegenarmarch.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index 758dd0b..0a1a53e 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -1589,7 +1589,7 @@ void CodeGen::genCodeForLclFld(GenTreeLclFld* tree)
+     unsigned varNum = tree->gtLclNum;
+     assert(varNum < compiler->lvaCount);
+ 
+-    if (varTypeIsFloating(targetType))
++    if (varTypeIsFloating(targetType) || varTypeIsSIMD(targetType))
+     {
+         emit->emitIns_R_S(ins_Load(targetType), size, targetReg, varNum, offs);
+     }
+-- 
+2.7.4
+
