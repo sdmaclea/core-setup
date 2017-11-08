@@ -1,0 +1,52 @@
+From 7a33e77af90aac5f80fec465c2251a5b99856000 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 8 Nov 2017 12:32:45 -0500
+Subject: [PATCH] [Arm64] SIMD genMultiRegCallStoreToLocal
+
+---
+ src/jit/codegenarmarch.cpp | 29 ++++++++++++++++++++++++++++-
+ 1 file changed, 28 insertions(+), 1 deletion(-)
+
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index 758dd0b..70366f4 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -1207,7 +1207,34 @@ void CodeGen::genMultiRegCallStoreToLocal(GenTreePtr treeNode)
+     {
+         // Right now the only enregistrable multi-reg return types supported are SIMD types.
+         assert(varTypeIsSIMD(treeNode));
+-        NYI("GT_STORE_LCL_VAR of a SIMD enregisterable struct");
++
++        regNumber dst = treeNode->gtRegNum;
++
++        for (unsigned i = 0; i < regCount; ++i)
++        {
++            var_types type = pRetTypeDesc->GetReturnRegType(i);
++            regNumber reg  = call->GetRegNumByIdx(i);
++            if (op1->IsCopyOrReload())
++            {
++                // GT_COPY/GT_RELOAD will have valid reg for those positions
++                // that need to be copied or reloaded.
++                regNumber reloadReg = op1->AsCopyOrReload()->GetRegNumByIdx(i);
++                if (reloadReg != REG_NA)
++                {
++                    reg = reloadReg;
++                }
++            }
++
++            assert(reg != REG_NA);
++            if (varTypeIsFloating(type))
++            {
++                getEmitter()->emitIns_R_R_I_I(INS_mov, emitTypeSize(type), dst, reg, i, 0);
++            }
++            else
++            {
++                getEmitter()->emitIns_R_R_I(INS_mov, emitTypeSize(type), dst, reg, i);
++            }
++        }
+     }
+     else
+     {
+-- 
+2.7.4
+
