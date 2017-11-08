@@ -1,0 +1,105 @@
+From b25ed62cc923d38039ccb1207df213ad0c74a00b Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 7 Nov 2017 21:28:56 -0500
+Subject: [PATCH] [Arm64] SIMD Normalize struct return type
+
+---
+ src/jit/codegencommon.cpp | 2 +-
+ src/jit/compiler.cpp      | 9 +++++++++
+ src/jit/gentree.cpp       | 6 +++---
+ src/jit/lclvars.cpp       | 2 +-
+ src/jit/morph.cpp         | 2 +-
+ 5 files changed, 15 insertions(+), 6 deletions(-)
+
+diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
+index 18b5120..0c423f1 100644
+--- a/src/jit/codegencommon.cpp
++++ b/src/jit/codegencommon.cpp
+@@ -11195,7 +11195,7 @@ bool Compiler::IsMultiRegReturnedType(CORINFO_CLASS_HANDLE hClass)
+     structPassingKind howToReturnStruct;
+     var_types         returnType = getReturnTypeForStruct(hClass, &howToReturnStruct);
+ 
+-    return (returnType == TYP_STRUCT);
++    return (varTypeIsStruct(returnType));
+ }
+ 
+ //----------------------------------------------
+diff --git a/src/jit/compiler.cpp b/src/jit/compiler.cpp
+index 35cfcf6..177adb7 100644
+--- a/src/jit/compiler.cpp
++++ b/src/jit/compiler.cpp
+@@ -1138,6 +1138,15 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE clsHnd,
+     {
+         *wbReturnStruct = howToReturnStruct;
+     }
++
++#ifdef _TARGET_ARM64_
++    // Normalize struct return type
++    if (varTypeIsStruct(useType))
++    {
++        useType = impNormStructType(clsHnd);
++    }
++#endif
++
+     return useType;
+ }
+ 
+diff --git a/src/jit/gentree.cpp b/src/jit/gentree.cpp
+index 0423df0..3505595 100644
+--- a/src/jit/gentree.cpp
++++ b/src/jit/gentree.cpp
+@@ -17804,14 +17804,14 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler* comp, CORINFO_CLASS_HA
+         case Compiler::SPK_PrimitiveType:
+         {
+             assert(returnType != TYP_UNKNOWN);
+-            assert(returnType != TYP_STRUCT);
++            assert(!varTypeIsStruct(returnType));
+             m_regType[0] = returnType;
+             break;
+         }
+ 
+         case Compiler::SPK_ByValueAsHfa:
+         {
+-            assert(returnType == TYP_STRUCT);
++            assert(varTypeIsStruct(returnType));
+             var_types hfaType = comp->GetHfaType(retClsHnd);
+ 
+             // We should have an hfa struct type
+@@ -17838,7 +17838,7 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler* comp, CORINFO_CLASS_HA
+ 
+         case Compiler::SPK_ByValue:
+         {
+-            assert(returnType == TYP_STRUCT);
++            assert(varTypeIsStruct(returnType));
+ 
+ #ifdef FEATURE_UNIX_AMD64_STRUCT_PASSING
+ 
+diff --git a/src/jit/lclvars.cpp b/src/jit/lclvars.cpp
+index d7d1f6e..f172995 100644
+--- a/src/jit/lclvars.cpp
++++ b/src/jit/lclvars.cpp
+@@ -147,7 +147,7 @@ void Compiler::lvaInitTypeRef()
+         if (howToReturnStruct == SPK_PrimitiveType)
+         {
+             assert(returnType != TYP_UNKNOWN);
+-            assert(returnType != TYP_STRUCT);
++            assert(!varTypeIsStruct(returnType));
+ 
+             info.compRetNativeType = returnType;
+ 
+diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
+index 6a421c6..999ccfe 100644
+--- a/src/jit/morph.cpp
++++ b/src/jit/morph.cpp
+@@ -5581,7 +5581,7 @@ void Compiler::fgFixupStructReturn(GenTreePtr callNode)
+     {
+         assert(returnType != TYP_UNKNOWN);
+ 
+-        if (returnType != TYP_STRUCT)
++        if (!varTypeIsStruct(returnType))
+         {
+             // Widen the primitive type if necessary
+             returnType = genActualType(returnType);
+-- 
+2.7.4
+
