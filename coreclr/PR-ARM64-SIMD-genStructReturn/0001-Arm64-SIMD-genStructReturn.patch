@@ -1,14 +1,14 @@
-From 6db2f0b8986a3daf4555d81f7cc3b4ee8dee7aca Mon Sep 17 00:00:00 2001
+From 0af5654b2f51368fd9e6214f725936dd60aac238 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 7 Nov 2017 12:45:58 -0500
 Subject: [PATCH] [Arm64] SIMD genStructReturn
 
 ---
- src/jit/codegenarmarch.cpp | 36 ++++++++++++++++++++++++++++++++----
- 1 file changed, 32 insertions(+), 4 deletions(-)
+ src/jit/codegenarmarch.cpp | 45 +++++++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 41 insertions(+), 4 deletions(-)
 
 diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
-index 758dd0b..fbf82cf 100644
+index 758dd0b..65c83d4 100644
 --- a/src/jit/codegenarmarch.cpp
 +++ b/src/jit/codegenarmarch.cpp
 @@ -3626,9 +3626,7 @@ void CodeGen::genStructReturn(GenTreePtr treeNode)
@@ -35,31 +35,40 @@ index 758dd0b..fbf82cf 100644
              // Copy var on stack into ABI return registers
              // TODO: It could be optimized by reducing two float loading to one double
              int offset = 0;
-@@ -3651,6 +3652,33 @@ void CodeGen::genStructReturn(GenTreePtr treeNode)
+@@ -3651,6 +3652,42 @@ void CodeGen::genStructReturn(GenTreePtr treeNode)
                  offset += genTypeSize(type);
              }
          }
 +        else
 +        {
-+            // Only SIMD types are not required to be contained
-+            assert(varTypeIsSIMD(lclType));
-+
++            // Handle SIMD genStructReturn case
 +            NYI_ARM("SIMD genStructReturn");
 +
 +#ifdef _TARGET_ARM64_
 +            genConsumeRegs(op1);
 +            regNumber src = op1->gtRegNum;
 +
++            // Treat dst register as a homogenous vector with element size equal to the src size
++            // Insert pieces in order
 +            for (unsigned i = 0; i < regCount; ++i)
 +            {
 +                var_types type = retTypeDesc.GetReturnRegType(i);
 +                regNumber reg  = retTypeDesc.GetABIReturnReg(i);
 +                if (varTypeIsFloating(type))
 +                {
++                    // If the register piece is to be passed in a floating point register
++                    // Use a vector mov element instruction
++                    // src is not a vector, so it is in the first element reg[0]
++                    // mov reg[0], src[i]
++                    // This effectively moves from `src[i]` to `reg`
 +                    getEmitter()->emitIns_R_R_I_I(INS_mov, emitTypeSize(type), reg, src, 0, i);
 +                }
 +                else
 +                {
++                    // If the register piece is to be passed in an integer register
++                    // Use a vector mov to general purpose register instruction
++                    // mov reg, src[i]
++                    // This effectively moves from `src[i]` to `reg`
 +                    getEmitter()->emitIns_R_R_I(INS_mov, emitTypeSize(type), reg, src, i);
 +                }
 +            }
