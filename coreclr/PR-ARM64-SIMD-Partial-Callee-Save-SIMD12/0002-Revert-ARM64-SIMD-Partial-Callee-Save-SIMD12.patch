@@ -1,0 +1,198 @@
+From 58dec07d1242329e19c06e861114f150ba6ae2aa Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 9 Nov 2017 17:55:18 -0500
+Subject: [PATCH] Revert "[ARM64] SIMD Partial Callee Save SIMD12"
+
+This reverts commit 2cdac1691c39ebb0ea9bdddd1ca6488ae121e62f.
+---
+ src/jit/codegenarm64.cpp |  6 ++----
+ src/jit/lsra.cpp         | 56 ++++++++----------------------------------------
+ src/jit/lsra.h           | 10 ++-------
+ 3 files changed, 13 insertions(+), 59 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 4912e09..f507ceb 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -4695,8 +4695,7 @@ void CodeGen::genSIMDIntrinsicUpperSave(GenTreeSIMD* simdNode)
+     assert(simdNode->gtSIMDIntrinsicID == SIMDIntrinsicUpperSave);
+ 
+     GenTree* op1 = simdNode->gtGetOp1();
+-    assert(op1->IsLocal());
+-    assert((op1->TypeGet() == TYP_SIMD16) || (op1->TypeGet() == TYP_SIMD12));
++    assert(op1->IsLocal() && op1->TypeGet() == TYP_SIMD16);
+     regNumber targetReg = simdNode->gtRegNum;
+     regNumber op1Reg    = genConsumeReg(op1);
+     assert(op1Reg != REG_NA);
+@@ -4732,8 +4731,7 @@ void CodeGen::genSIMDIntrinsicUpperRestore(GenTreeSIMD* simdNode)
+     assert(simdNode->gtSIMDIntrinsicID == SIMDIntrinsicUpperRestore);
+ 
+     GenTree* op1 = simdNode->gtGetOp1();
+-    assert(op1->IsLocal());
+-    assert((op1->TypeGet() == TYP_SIMD16) || (op1->TypeGet() == TYP_SIMD12));
++    assert(op1->IsLocal() && op1->TypeGet() == TYP_SIMD16);
+     regNumber srcReg    = simdNode->gtRegNum;
+     regNumber lclVarReg = genConsumeReg(op1);
+     unsigned  varNum    = op1->AsLclVarCommon()->gtLclNum;
+diff --git a/src/jit/lsra.cpp b/src/jit/lsra.cpp
+index c6056be..382eb51 100644
+--- a/src/jit/lsra.cpp
++++ b/src/jit/lsra.cpp
+@@ -2332,7 +2332,7 @@ void LinearScan::identifyCandidates()
+ #if FEATURE_PARTIAL_SIMD_CALLEE_SAVE
+             // Additionally, when we are generating AVX on non-UNIX amd64, we keep a separate set of the LargeVectorType
+             // vars.
+-            if (varTypeNeedsPartialCalleeSave(varDsc->lvType))
++            if (varDsc->lvType == LargeVectorType)
+             {
+                 largeVectorVarCount++;
+                 VarSetOps::AddElemD(compiler, largeVectorVars, varDsc->lvVarIndex);
+@@ -3044,7 +3044,7 @@ bool LinearScan::buildKillPositionsForNode(GenTree* tree, LsraLocation currentLo
+                 unsigned   varNum = compiler->lvaTrackedToVarNum[varIndex];
+                 LclVarDsc* varDsc = compiler->lvaTable + varNum;
+ #if FEATURE_PARTIAL_SIMD_CALLEE_SAVE
+-                if (varTypeNeedsPartialCalleeSave(varDsc->lvType))
++                if (varDsc->lvType == LargeVectorType)
+                 {
+                     if (!VarSetOps::IsMember(compiler, largeVectorCalleeSaveCandidateVars, varIndex))
+                     {
+@@ -3478,7 +3478,7 @@ LinearScan::buildUpperVectorSaveRefPositions(GenTree* tree, LsraLocation current
+             while (iter.NextElem(&varIndex))
+             {
+                 Interval* varInterval    = getIntervalForLocalVar(varIndex);
+-                Interval* tempInterval   = newInterval(compiler->lvaTable[varIndex].lvType);
++                Interval* tempInterval   = newInterval(LargeVectorType);
+                 tempInterval->isInternal = true;
+                 RefPosition* pos =
+                     newRefPosition(tempInterval, currentLoc, RefTypeUpperVectorSaveDef, tree, RBM_FLT_CALLEE_SAVED);
+@@ -8322,32 +8322,9 @@ void LinearScan::allocateRegisters()
+ 
+             if (allocateReg)
+             {
+-#if FEATURE_PARTIAL_SIMD_CALLEE_SAVE
+-                if (refType == RefTypeUpperVectorSaveDef)
+-                {
+-                    // The register type of the currentInterval is actually the return type of the call node
+-                    // For calls returning non-SIMD data, this means the registerType is incorrect
+-                    // the correct type is stored in the related interval
+-
+-                    // Save the original registerType
+-                    var_types savedRegisterType = currentInterval->registerType;
+-
+-                    // Switch to the related register type
+-                    currentInterval->registerType = currentInterval->relatedInterval->registerType;
+-
+-                    // Try to allocate a register
+-                    assignedRegister = tryAllocateFreeReg(currentInterval, currentRefPosition);
+-
+-                    // Restore the original registerType
+-                    currentInterval->registerType = savedRegisterType;
+-                }
+-                else
+-#endif // FEATURE_PARTIAL_SIMD_CALLEE_SAVE
+-                {
+                 // Try to allocate a register
+                 assignedRegister = tryAllocateFreeReg(currentInterval, currentRefPosition);
+             }
+-            }
+ 
+             // If no register was found, and if the currentRefPosition must have a register,
+             // then find a register to spill
+@@ -8357,18 +8334,6 @@ void LinearScan::allocateRegisters()
+                 if (refType == RefTypeUpperVectorSaveDef)
+                 {
+                     // TODO-CQ: Determine whether copying to two integer callee-save registers would be profitable.
+-                    // TODO-ARM64-CQ: Determine whether copying to one integer callee-save registers would be
+-                    // profitable.
+-
+-                    // The register type of the currentInterval is actually the return type of the call node
+-                    // For calls returning non-SIMD data, this means the registerType is incorrect
+-                    // the correct type is stored in the related interval
+-
+-                    // Save the original registerType
+-                    var_types savedRegisterType = currentInterval->registerType;
+-
+-                    // Switch to the related register type
+-                    currentInterval->registerType = currentInterval->relatedInterval->registerType;
+ 
+                     // SaveDef position occurs after the Use of args and at the same location as Kill/Def
+                     // positions of a call node.  But SaveDef position cannot use any of the arg regs as
+@@ -8377,9 +8342,6 @@ void LinearScan::allocateRegisters()
+                         (allRegs(TYP_FLOAT) & RBM_FLT_CALLEE_TRASH & ~RBM_FLTARG_REGS);
+                     assignedRegister = tryAllocateFreeReg(currentInterval, currentRefPosition);
+ 
+-                    // Restore the original registerType
+-                    currentInterval->registerType = savedRegisterType;
+-
+                     // There MUST be caller-save registers available, because they have all just been killed.
+                     // Amd64 Windows: xmm4-xmm5 are guaranteed to be available as xmm0-xmm3 are used for passing args.
+                     // Amd64 Unix: xmm8-xmm15 are guaranteed to be avilable as xmm0-xmm7 are used for passing args.
+@@ -9051,7 +9013,7 @@ void LinearScan::insertUpperVectorSaveAndReload(GenTreePtr tree, RefPosition* re
+     Interval* lclVarInterval = refPosition->getInterval()->relatedInterval;
+     assert(lclVarInterval->isLocalVar == true);
+     LclVarDsc* varDsc = compiler->lvaTable + lclVarInterval->varNum;
+-    assert(varTypeNeedsPartialCalleeSave(varDsc->lvType));
++    assert(varDsc->lvType == LargeVectorType);
+     regNumber lclVarReg = lclVarInterval->physReg;
+     if (lclVarReg == REG_NA)
+     {
+@@ -9067,14 +9029,14 @@ void LinearScan::insertUpperVectorSaveAndReload(GenTreePtr tree, RefPosition* re
+ 
+     // First, insert the save before the call.
+ 
+-    GenTreePtr saveLcl                = compiler->gtNewLclvNode(lclVarInterval->varNum, varDsc->lvType);
++    GenTreePtr saveLcl                = compiler->gtNewLclvNode(lclVarInterval->varNum, LargeVectorType);
+     saveLcl->gtLsraInfo.isLsraAdded   = true;
+     saveLcl->gtRegNum                 = lclVarReg;
+     saveLcl->gtLsraInfo.isLocalDefUse = false;
+ 
+     GenTreeSIMD* simdNode =
+         new (compiler, GT_SIMD) GenTreeSIMD(LargeVectorSaveType, saveLcl, nullptr, SIMDIntrinsicUpperSave,
+-                                            varDsc->lvBaseType, genTypeSize(varDsc->lvType));
++                                            varDsc->lvBaseType, genTypeSize(LargeVectorType));
+     simdNode->gtLsraInfo.isLsraAdded = true;
+     simdNode->gtRegNum               = spillReg;
+     if (spillToMem)
+@@ -9086,13 +9048,13 @@ void LinearScan::insertUpperVectorSaveAndReload(GenTreePtr tree, RefPosition* re
+ 
+     // Now insert the restore after the call.
+ 
+-    GenTreePtr restoreLcl                = compiler->gtNewLclvNode(lclVarInterval->varNum, varDsc->lvType);
++    GenTreePtr restoreLcl                = compiler->gtNewLclvNode(lclVarInterval->varNum, LargeVectorType);
+     restoreLcl->gtLsraInfo.isLsraAdded   = true;
+     restoreLcl->gtRegNum                 = lclVarReg;
+     restoreLcl->gtLsraInfo.isLocalDefUse = false;
+ 
+-    simdNode = new (compiler, GT_SIMD) GenTreeSIMD(varDsc->lvType, restoreLcl, nullptr, SIMDIntrinsicUpperRestore,
+-                                                   varDsc->lvBaseType, genTypeSize(varDsc->lvType));
++    simdNode = new (compiler, GT_SIMD)
++        GenTreeSIMD(LargeVectorType, restoreLcl, nullptr, SIMDIntrinsicUpperRestore, varDsc->lvBaseType, 32);
+     simdNode->gtLsraInfo.isLsraAdded = true;
+     simdNode->gtRegNum               = spillReg;
+     if (spillToMem)
+diff --git a/src/jit/lsra.h b/src/jit/lsra.h
+index c4ddd3c..00ce7ee 100644
+--- a/src/jit/lsra.h
++++ b/src/jit/lsra.h
+@@ -1219,16 +1219,10 @@ private:
+     VARSET_TP fpCalleeSaveCandidateVars;
+ #if FEATURE_PARTIAL_SIMD_CALLEE_SAVE
+ #if defined(_TARGET_AMD64_)
+-    static bool varTypeNeedsPartialCalleeSave(var_types type)
+-    {
+-        return (type == TYP_SIMD32);
+-    }
++    static const var_types LargeVectorType     = TYP_SIMD32;
+     static const var_types LargeVectorSaveType = TYP_SIMD16;
+ #elif defined(_TARGET_ARM64_)
+-    static bool varTypeNeedsPartialCalleeSave(var_types type)
+-    {
+-        return (type == TYP_SIMD16) || (type == TYP_SIMD12);
+-    }
++    static const var_types LargeVectorType      = TYP_SIMD16;
+     static const var_types LargeVectorSaveType  = TYP_DOUBLE;
+ #else // !defined(_TARGET_AMD64_) && !defined(_TARGET_ARM64_)
+ #error("Unknown target architecture for FEATURE_SIMD")
+-- 
+2.7.4
+
