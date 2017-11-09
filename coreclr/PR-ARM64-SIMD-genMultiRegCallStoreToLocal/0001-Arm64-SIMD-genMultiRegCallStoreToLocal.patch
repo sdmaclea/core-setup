@@ -1,25 +1,28 @@
-From 2c34f05b6da47d1efb76cbbf30e433d90d3aa9ae Mon Sep 17 00:00:00 2001
+From 1aaf94841cec10557311d887ae3a3e8cebe4410f Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 8 Nov 2017 12:32:45 -0500
 Subject: [PATCH] [Arm64] SIMD genMultiRegCallStoreToLocal
 
 ---
- src/jit/codegenarmarch.cpp | 40 +++++++++++++++++++++++++++++++++++++++-
- 1 file changed, 39 insertions(+), 1 deletion(-)
+ src/jit/codegenarmarch.cpp | 44 +++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 43 insertions(+), 1 deletion(-)
 
 diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
-index 758dd0b..ac632f6 100644
+index 758dd0b..0240d5c 100644
 --- a/src/jit/codegenarmarch.cpp
 +++ b/src/jit/codegenarmarch.cpp
-@@ -1207,7 +1207,45 @@ void CodeGen::genMultiRegCallStoreToLocal(GenTreePtr treeNode)
+@@ -1207,7 +1207,49 @@ void CodeGen::genMultiRegCallStoreToLocal(GenTreePtr treeNode)
      {
          // Right now the only enregistrable multi-reg return types supported are SIMD types.
          assert(varTypeIsSIMD(treeNode));
 -        NYI("GT_STORE_LCL_VAR of a SIMD enregisterable struct");
++        assert(regCount != 0);
 +
 +        regNumber dst = treeNode->gtRegNum;
 +
-+        for (unsigned i = 0; i < regCount; ++i)
++        // Treat dst register as a homogenous vector with element size equal to the src size
++        // Insert pieces in reverse order
++        for (int i = regCount - 1; i >= 0; --i)
 +        {
 +            var_types type = pRetTypeDesc->GetReturnRegType(i);
 +            regNumber reg  = call->GetRegNumByIdx(i);
@@ -35,15 +38,16 @@ index 758dd0b..ac632f6 100644
 +            }
 +
 +            assert(reg != REG_NA);
-+            // Treat dst register as a homogenous vector with element size equal to the src size
-+            // Insert pieces in order
 +            if (varTypeIsFloating(type))
 +            {
 +                // If the register piece was passed in a floating point register
 +                // Use a vector mov element instruction
 +                // src is not a vector, so it is in the first element reg[0]
 +                // mov dst[i], reg[0]
-+                // This effectively moves from `reg` to `dst[i]`
++                // This effectively moves from `reg[0]` to `dst[i]`, leaving other dst bits unchanged till further
++                // iterations
++                // For the case where reg == dst, if we iterate so that we write dst[0] last, we eliminate the need for
++                // a temporary
 +                getEmitter()->emitIns_R_R_I_I(INS_mov, emitTypeSize(type), dst, reg, i, 0);
 +            }
 +            else
