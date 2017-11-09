@@ -1,13 +1,13 @@
-From f70d7add93d5500eb6e098a6ba994341a83cccbe Mon Sep 17 00:00:00 2001
+From 2cdac1691c39ebb0ea9bdddd1ca6488ae121e62f Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 8 Nov 2017 13:47:38 -0500
 Subject: [PATCH] [ARM64] SIMD Partial Callee Save SIMD12
 
 ---
  src/jit/codegenarm64.cpp |  6 ++++--
- src/jit/lsra.cpp         | 55 ++++++++++++++++++++++++++++++++++++++++--------
+ src/jit/lsra.cpp         | 56 ++++++++++++++++++++++++++++++++++++++++--------
  src/jit/lsra.h           | 10 +++++++--
- 3 files changed, 58 insertions(+), 13 deletions(-)
+ 3 files changed, 59 insertions(+), 13 deletions(-)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
 index f507ceb..4912e09 100644
@@ -34,7 +34,7 @@ index f507ceb..4912e09 100644
      regNumber lclVarReg = genConsumeReg(op1);
      unsigned  varNum    = op1->AsLclVarCommon()->gtLclNum;
 diff --git a/src/jit/lsra.cpp b/src/jit/lsra.cpp
-index 382eb51..2522437 100644
+index 382eb51..c6056be 100644
 --- a/src/jit/lsra.cpp
 +++ b/src/jit/lsra.cpp
 @@ -2332,7 +2332,7 @@ void LinearScan::identifyCandidates()
@@ -97,11 +97,12 @@ index 382eb51..2522437 100644
  
              // If no register was found, and if the currentRefPosition must have a register,
              // then find a register to spill
-@@ -8334,6 +8357,17 @@ void LinearScan::allocateRegisters()
+@@ -8334,6 +8357,18 @@ void LinearScan::allocateRegisters()
                  if (refType == RefTypeUpperVectorSaveDef)
                  {
                      // TODO-CQ: Determine whether copying to two integer callee-save registers would be profitable.
-+                    // TODO-ARM64-CQ: Determine whether copying to one integer callee-save registers would be profitable.
++                    // TODO-ARM64-CQ: Determine whether copying to one integer callee-save registers would be
++                    // profitable.
 +
 +                    // The register type of the currentInterval is actually the return type of the call node
 +                    // For calls returning non-SIMD data, this means the registerType is incorrect
@@ -115,7 +116,7 @@ index 382eb51..2522437 100644
  
                      // SaveDef position occurs after the Use of args and at the same location as Kill/Def
                      // positions of a call node.  But SaveDef position cannot use any of the arg regs as
-@@ -8342,6 +8376,9 @@ void LinearScan::allocateRegisters()
+@@ -8342,6 +8377,9 @@ void LinearScan::allocateRegisters()
                          (allRegs(TYP_FLOAT) & RBM_FLT_CALLEE_TRASH & ~RBM_FLTARG_REGS);
                      assignedRegister = tryAllocateFreeReg(currentInterval, currentRefPosition);
  
@@ -125,7 +126,7 @@ index 382eb51..2522437 100644
                      // There MUST be caller-save registers available, because they have all just been killed.
                      // Amd64 Windows: xmm4-xmm5 are guaranteed to be available as xmm0-xmm3 are used for passing args.
                      // Amd64 Unix: xmm8-xmm15 are guaranteed to be avilable as xmm0-xmm7 are used for passing args.
-@@ -9013,7 +9050,7 @@ void LinearScan::insertUpperVectorSaveAndReload(GenTreePtr tree, RefPosition* re
+@@ -9013,7 +9051,7 @@ void LinearScan::insertUpperVectorSaveAndReload(GenTreePtr tree, RefPosition* re
      Interval* lclVarInterval = refPosition->getInterval()->relatedInterval;
      assert(lclVarInterval->isLocalVar == true);
      LclVarDsc* varDsc = compiler->lvaTable + lclVarInterval->varNum;
@@ -134,7 +135,7 @@ index 382eb51..2522437 100644
      regNumber lclVarReg = lclVarInterval->physReg;
      if (lclVarReg == REG_NA)
      {
-@@ -9029,14 +9066,14 @@ void LinearScan::insertUpperVectorSaveAndReload(GenTreePtr tree, RefPosition* re
+@@ -9029,14 +9067,14 @@ void LinearScan::insertUpperVectorSaveAndReload(GenTreePtr tree, RefPosition* re
  
      // First, insert the save before the call.
  
@@ -151,7 +152,7 @@ index 382eb51..2522437 100644
      simdNode->gtLsraInfo.isLsraAdded = true;
      simdNode->gtRegNum               = spillReg;
      if (spillToMem)
-@@ -9048,13 +9085,13 @@ void LinearScan::insertUpperVectorSaveAndReload(GenTreePtr tree, RefPosition* re
+@@ -9048,13 +9086,13 @@ void LinearScan::insertUpperVectorSaveAndReload(GenTreePtr tree, RefPosition* re
  
      // Now insert the restore after the call.
  
