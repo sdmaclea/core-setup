@@ -1,4 +1,4 @@
-From 742881d001583f2c89c56a68fda34a5b63f9d7ac Mon Sep 17 00:00:00 2001
+From 33037a9740ed16547ad1d0a8752bbf016ccf5087 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 20 Oct 2017 16:31:07 -0400
 Subject: [PATCH] [Arm64] Enable genSetRegToConst for SIMD nodes
@@ -8,7 +8,7 @@ Subject: [PATCH] [Arm64] Enable genSetRegToConst for SIMD nodes
  1 file changed, 10 insertions(+)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index a200e20..3401b8a 100644
+index f507ceb..ec3c6d1 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
 @@ -1454,9 +1454,19 @@ void CodeGen::genSetRegToConst(regNumber targetReg, var_types targetType, GenTre
