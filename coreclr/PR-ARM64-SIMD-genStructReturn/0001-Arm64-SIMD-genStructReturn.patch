@@ -1,14 +1,14 @@
-From f5bde82fe0a9c0393ad85a4b0072c349efd71d7d Mon Sep 17 00:00:00 2001
+From 7c91fc832b7de17d6c56173d1175e6d09a62e8c7 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 7 Nov 2017 12:45:58 -0500
 Subject: [PATCH] [Arm64] SIMD genStructReturn
 
 ---
- src/jit/codegenarmarch.cpp | 45 +++++++++++++++++++++++++++++++++++++++++----
- 1 file changed, 41 insertions(+), 4 deletions(-)
+ src/jit/codegenarmarch.cpp | 47 ++++++++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 43 insertions(+), 4 deletions(-)
 
 diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
-index 758dd0b..e8fbd89 100644
+index 758dd0b..e2c68c7 100644
 --- a/src/jit/codegenarmarch.cpp
 +++ b/src/jit/codegenarmarch.cpp
 @@ -3626,9 +3626,7 @@ void CodeGen::genStructReturn(GenTreePtr treeNode)
@@ -35,7 +35,7 @@ index 758dd0b..e8fbd89 100644
              // Copy var on stack into ABI return registers
              // TODO: It could be optimized by reducing two float loading to one double
              int offset = 0;
-@@ -3651,6 +3652,42 @@ void CodeGen::genStructReturn(GenTreePtr treeNode)
+@@ -3651,6 +3652,44 @@ void CodeGen::genStructReturn(GenTreePtr treeNode)
                  offset += genTypeSize(type);
              }
          }
@@ -60,7 +60,9 @@ index 758dd0b..e8fbd89 100644
 +                    // Use a vector mov element instruction
 +                    // reg is not a vector, so it is in the first element reg[0]
 +                    // mov reg[0], src[i]
-+                    // This effectively moves from `src[i]` to `reg`
++                    // This effectively moves from `src[i]` to `reg[0]`, upper bits of reg remain unchanged
++                    // For the case where src == reg, since we are only writing reg[0], as long as we iterate
++                    // so that src[0] is consumed before writing reg[0], we do not need a temporary.
 +                    getEmitter()->emitIns_R_R_I_I(INS_mov, emitTypeSize(type), reg, src, 0, i);
 +                }
 +                else
