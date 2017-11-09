@@ -1,4 +1,4 @@
-From 0af5654b2f51368fd9e6214f725936dd60aac238 Mon Sep 17 00:00:00 2001
+From 34bec6d5872768684a73767d6cbff5aaa5cfd0f3 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 7 Nov 2017 12:45:58 -0500
 Subject: [PATCH] [Arm64] SIMD genStructReturn
@@ -8,7 +8,7 @@ Subject: [PATCH] [Arm64] SIMD genStructReturn
  1 file changed, 41 insertions(+), 4 deletions(-)
 
 diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
-index 758dd0b..65c83d4 100644
+index 758dd0b..615b02f 100644
 --- a/src/jit/codegenarmarch.cpp
 +++ b/src/jit/codegenarmarch.cpp
 @@ -3626,9 +3626,7 @@ void CodeGen::genStructReturn(GenTreePtr treeNode)
@@ -48,7 +48,7 @@ index 758dd0b..65c83d4 100644
 +            genConsumeRegs(op1);
 +            regNumber src = op1->gtRegNum;
 +
-+            // Treat dst register as a homogenous vector with element size equal to the src size
++            // Treat src register as a homogenous vector with element size equal to the reg size
 +            // Insert pieces in order
 +            for (unsigned i = 0; i < regCount; ++i)
 +            {
