@@ -1,21 +1,21 @@
-From b25ed62cc923d38039ccb1207df213ad0c74a00b Mon Sep 17 00:00:00 2001
+From 456849aa34a4737848430b66ccc681cb6c184bb0 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 7 Nov 2017 21:28:56 -0500
 Subject: [PATCH] [Arm64] SIMD Normalize struct return type
 
 ---
- src/jit/codegencommon.cpp | 2 +-
- src/jit/compiler.cpp      | 9 +++++++++
- src/jit/gentree.cpp       | 6 +++---
- src/jit/lclvars.cpp       | 2 +-
- src/jit/morph.cpp         | 2 +-
- 5 files changed, 15 insertions(+), 6 deletions(-)
+ src/jit/codegencommon.cpp |  2 +-
+ src/jit/compiler.cpp      | 11 +++++++++++
+ src/jit/gentree.cpp       |  6 +++---
+ src/jit/lclvars.cpp       |  2 +-
+ src/jit/morph.cpp         |  2 +-
+ 5 files changed, 17 insertions(+), 6 deletions(-)
 
 diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
-index 18b5120..0c423f1 100644
+index 41ce431..3a8bc6e 100644
 --- a/src/jit/codegencommon.cpp
 +++ b/src/jit/codegencommon.cpp
-@@ -11195,7 +11195,7 @@ bool Compiler::IsMultiRegReturnedType(CORINFO_CLASS_HANDLE hClass)
+@@ -11223,7 +11223,7 @@ bool Compiler::IsMultiRegReturnedType(CORINFO_CLASS_HANDLE hClass)
      structPassingKind howToReturnStruct;
      var_types         returnType = getReturnTypeForStruct(hClass, &howToReturnStruct);
  
@@ -25,16 +25,18 @@ index 18b5120..0c423f1 100644
  
  //----------------------------------------------
 diff --git a/src/jit/compiler.cpp b/src/jit/compiler.cpp
-index 35cfcf6..177adb7 100644
+index 385fe4c..03be460 100644
 --- a/src/jit/compiler.cpp
 +++ b/src/jit/compiler.cpp
-@@ -1138,6 +1138,15 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE clsHnd,
+@@ -1138,6 +1138,17 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE clsHnd,
      {
          *wbReturnStruct = howToReturnStruct;
      }
 +
-+#ifdef _TARGET_ARM64_
-+    // Normalize struct return type
++#if defined(FEATURE_MULTIREG_RET) && defined(_TARGET_ARM64_)
++    // Normalize struct return type for ARM64 FEATURE_MULTIREG_RET
++    // This is not yet enabled for ARM32 since FEATURE_SIMD is not enabled
++    // This is not needed for XARCH as eeGetSystemVAmd64PassStructInRegisterDescriptor() is used
 +    if (varTypeIsStruct(useType))
 +    {
 +        useType = impNormStructType(clsHnd);
@@ -88,7 +90,7 @@ index d7d1f6e..f172995 100644
              info.compRetNativeType = returnType;
  
 diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
-index 6a421c6..999ccfe 100644
+index 80a0008..3450979 100644
 --- a/src/jit/morph.cpp
 +++ b/src/jit/morph.cpp
 @@ -5581,7 +5581,7 @@ void Compiler::fgFixupStructReturn(GenTreePtr callNode)
