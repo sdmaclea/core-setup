@@ -1,15 +1,15 @@
-From d9572a1c0ae46789618663fc8e5af38e787d5db2 Mon Sep 17 00:00:00 2001
+From 746893b080b4098029d2bb49bfb6aa74e5014c1b Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Thu, 9 Nov 2017 12:13:51 -0500
 Subject: [PATCH] [Arm64] Do not change vector load register size
 
 ---
- src/jit/codegenarm64.cpp  | 2 +-
+ src/jit/codegenarm64.cpp  | 6 +++---
  src/jit/codegenlinear.cpp | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ 2 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index f507ceb..0f15bd5 100644
+index f507ceb..7618432 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
 @@ -1613,7 +1613,7 @@ void CodeGen::genCodeForLclVar(GenTreeLclVar* tree)
@@ -17,12 +17,30 @@ index f507ceb..0f15bd5 100644
          emitAttr    attr = emitTypeSize(targetType);
  
 -        attr = emit->emitInsAdjustLoadStoreAttr(ins, attr);
-+        attr = emitter::isVectorRegister(tree->gtRegNum) ? attr : emit->emitInsAdjustLoadStoreAttr(ins, attr);
++        attr = varTypeIsFloating(targetType) ? attr : emit->emitInsAdjustLoadStoreAttr(ins, attr);
  
          emit->emitIns_R_S(ins, attr, tree->gtRegNum, varNum, 0);
          genProduceReg(tree);
+@@ -1666,7 +1666,7 @@ void CodeGen::genCodeForStoreLclFld(GenTreeLclFld* tree)
+ 
+     emitAttr attr = emitTypeSize(targetType);
+ 
+-    attr = emit->emitInsAdjustLoadStoreAttr(ins, attr);
++    attr = varTypeIsFloating(targetType) ? attr : emit->emitInsAdjustLoadStoreAttr(ins, attr);
+ 
+     emit->emitIns_S_R(ins, attr, dataReg, varNum, offset);
+ 
+@@ -1726,7 +1726,7 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* tree)
+             instruction ins  = ins_Store(targetType);
+             emitAttr    attr = emitTypeSize(targetType);
+ 
+-            attr = emit->emitInsAdjustLoadStoreAttr(ins, attr);
++            attr = varTypeIsFloating(targetType) ? attr : emit->emitInsAdjustLoadStoreAttr(ins, attr);
+ 
+             emit->emitIns_S_R(ins, attr, dataReg, varNum, /* offset */ 0);
+ 
 diff --git a/src/jit/codegenlinear.cpp b/src/jit/codegenlinear.cpp
-index de56380..11c4280 100644
+index de56380..afffe01 100644
 --- a/src/jit/codegenlinear.cpp
 +++ b/src/jit/codegenlinear.cpp
 @@ -902,7 +902,7 @@ void CodeGen::genUnspillRegIfNeeded(GenTree* tree)
@@ -30,7 +48,7 @@ index de56380..11c4280 100644
  
              // Fixes Issue #3326
 -            attr = emit->emitInsAdjustLoadStoreAttr(ins, attr);
-+            attr = emitter::isVectorRegister(dstReg) ? attr : emit->emitInsAdjustLoadStoreAttr(ins, attr);
++            attr = varTypeIsFloating(targetType) ? attr : emit->emitInsAdjustLoadStoreAttr(ins, attr);
  
              // Load local variable from its home location.
              inst_RV_TT(ins, dstReg, unspillTree, 0, attr);
