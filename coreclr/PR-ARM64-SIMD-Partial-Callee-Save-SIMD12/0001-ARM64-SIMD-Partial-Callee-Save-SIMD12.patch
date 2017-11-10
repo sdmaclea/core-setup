@@ -1,4 +1,4 @@
-From bace0ed86fd829d7d88234843b26f6e16a69bc92 Mon Sep 17 00:00:00 2001
+From dfbb40a8ab7d551eb0e8411ffa4a057ad32aa9ce Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 8 Nov 2017 13:47:38 -0500
 Subject: [PATCH] [ARM64] SIMD Partial Callee Save SIMD12
@@ -10,7 +10,7 @@ Subject: [PATCH] [ARM64] SIMD Partial Callee Save SIMD12
  3 files changed, 25 insertions(+), 13 deletions(-)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index f507ceb..4912e09 100644
+index f507ceb..1b41150 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
 @@ -4695,7 +4695,8 @@ void CodeGen::genSIMDIntrinsicUpperSave(GenTreeSIMD* simdNode)
@@ -19,7 +19,7 @@ index f507ceb..4912e09 100644
      GenTree* op1 = simdNode->gtGetOp1();
 -    assert(op1->IsLocal() && op1->TypeGet() == TYP_SIMD16);
 +    assert(op1->IsLocal());
-+    assert((op1->TypeGet() == TYP_SIMD16) || (op1->TypeGet() == TYP_SIMD12));
++    assert(emitTypeSize(op1->TypeGet()) == 16);
      regNumber targetReg = simdNode->gtRegNum;
      regNumber op1Reg    = genConsumeReg(op1);
      assert(op1Reg != REG_NA);
@@ -29,7 +29,7 @@ index f507ceb..4912e09 100644
      GenTree* op1 = simdNode->gtGetOp1();
 -    assert(op1->IsLocal() && op1->TypeGet() == TYP_SIMD16);
 +    assert(op1->IsLocal());
-+    assert((op1->TypeGet() == TYP_SIMD16) || (op1->TypeGet() == TYP_SIMD12));
++    assert(emitTypeSize(op1->TypeGet()) == 16);
      regNumber srcReg    = simdNode->gtRegNum;
      regNumber lclVarReg = genConsumeReg(op1);
      unsigned  varNum    = op1->AsLclVarCommon()->gtLclNum;
@@ -117,7 +117,7 @@ index 382eb51..c865ceb 100644
      simdNode->gtRegNum               = spillReg;
      if (spillToMem)
 diff --git a/src/jit/lsra.h b/src/jit/lsra.h
-index 00ce7ee..cb341a9 100644
+index 00ce7ee..fb58364 100644
 --- a/src/jit/lsra.h
 +++ b/src/jit/lsra.h
 @@ -1219,10 +1219,18 @@ private:
@@ -127,7 +127,7 @@ index 00ce7ee..cb341a9 100644
 -    static const var_types LargeVectorType     = TYP_SIMD32;
 +    static bool varTypeNeedsPartialCalleeSave(var_types type)
 +    {
-+        return (type == TYP_SIMD32);
++        return (emitTypeSize(type) == 32);
 +    }
      static const var_types LargeVectorSaveType = TYP_SIMD16;
  #elif defined(_TARGET_ARM64_)
@@ -136,7 +136,7 @@ index 00ce7ee..cb341a9 100644
 +    {
 +        // ARM64 ABI FP Callee save registers only require Callee to save lower 8 Bytes
 +        // For SIMD types longer then 8 bytes Caller is responsible for saving and restoring Upper bytes.
-+        return (type == TYP_SIMD16) || (type == TYP_SIMD12);
++        return (emitTypeSize(type) == 16);
 +    }
      static const var_types LargeVectorSaveType = TYP_DOUBLE;
  #else // !defined(_TARGET_AMD64_) && !defined(_TARGET_ARM64_)
