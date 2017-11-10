@@ -1,0 +1,51 @@
+From 0fd489fa9d7bbd1927ba1c8f5640473db1936c7c Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 10 Nov 2017 11:09:33 -0500
+Subject: [PATCH] [ARM64] SIMD genCodeForStoreLclVar zero init
+
+---
+ src/jit/codegenarm64.cpp | 10 ++++++++++
+ src/jit/lowerarmarch.cpp |  5 +++++
+ 2 files changed, 15 insertions(+)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index f507ceb..196641f 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -1709,7 +1709,17 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* tree)
+         regNumber dataReg = REG_NA;
+         if (data->isContainedIntOrIImmed())
+         {
++            // This is only possible for a zero-init.
+             assert(data->IsIntegralConst(0));
++
++            if (varTypeIsSIMD(targetType))
++            {
++                assert(targetReg != REG_NA);
++                getEmitter()->emitIns_R_I(INS_movi, EA_16BYTE, targetReg, 0x00, INS_OPTS_16B);
++                genProduceReg(tree);
++                return;
++            }
++
+             dataReg = REG_ZR;
+         }
+         else
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index 6526117..79e6bbd 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -679,6 +679,11 @@ void Lowering::ContainCheckStoreLoc(GenTreeLclVarCommon* storeLoc)
+ #ifdef FEATURE_SIMD
+     if (varTypeIsSIMD(storeLoc))
+     {
++        if (op1->IsIntegralConst(0))
++        {
++            // For an InitBlk we want op1 to be contained
++            MakeSrcContained(storeLoc, op1);
++        }
+         return;
+     }
+ #endif // FEATURE_SIMD
+-- 
+2.7.4
+
