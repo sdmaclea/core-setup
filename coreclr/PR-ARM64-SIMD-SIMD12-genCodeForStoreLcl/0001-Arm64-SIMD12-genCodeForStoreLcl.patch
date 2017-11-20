@@ -1,0 +1,119 @@
+From da79c0d3d1d4fe76e96583d69f859b66e7c3a6ac Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 20 Nov 2017 15:34:03 -0500
+Subject: [PATCH] [Arm64] SIMD12 genCodeForStoreLcl*
+
+---
+ src/jit/codegenarm64.cpp | 59 ++++++++++++++++++++++++++++++++++++++++++++++++
+ src/jit/lsraarmarch.cpp  | 11 +++++++++
+ 2 files changed, 70 insertions(+)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 95a56df..3fc7f51 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -1633,6 +1633,15 @@ void CodeGen::genCodeForStoreLclFld(GenTreeLclFld* tree)
+     emitter*  emit       = getEmitter();
+     noway_assert(targetType != TYP_STRUCT);
+ 
++#ifdef FEATURE_SIMD
++    // storing of TYP_SIMD12 (i.e. Vector3) field
++    if (tree->TypeGet() == TYP_SIMD12)
++    {
++        genStoreLclTypeSIMD12(tree);
++        return;
++    }
++#endif // FEATURE_SIMD
++
+     // record the offset
+     unsigned offset = tree->gtLclOffs;
+ 
+@@ -1704,6 +1713,15 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* tree)
+     }
+     else
+     {
++#ifdef FEATURE_SIMD
++        // storing of TYP_SIMD12 (i.e. Vector3) field
++        if (tree->TypeGet() == TYP_SIMD12)
++        {
++            genStoreLclTypeSIMD12(tree);
++            return;
++        }
++#endif // FEATURE_SIMD
++
+         genConsumeRegs(data);
+ 
+         regNumber dataReg = REG_NA;
+@@ -4840,6 +4858,47 @@ void CodeGen::genLoadIndTypeSIMD12(GenTree* treeNode)
+     genProduceReg(treeNode);
+ }
+ 
++//-----------------------------------------------------------------------------
++// genStoreLclTypeSIMD12: store a TYP_SIMD12 (i.e. Vector3) type field.
++// Since Vector3 is not a hardware supported write size, it is performed
++// as two stores: 8 byte followed by 4-byte.
++//
++// Arguments:
++//    treeNode - tree node that is attempting to store TYP_SIMD12 field
++//
++// Return Value:
++//    None.
++//
++void CodeGen::genStoreLclTypeSIMD12(GenTree* treeNode)
++{
++    assert((treeNode->OperGet() == GT_STORE_LCL_FLD) || (treeNode->OperGet() == GT_STORE_LCL_VAR));
++
++    unsigned offs   = 0;
++    unsigned varNum = treeNode->gtLclVarCommon.gtLclNum;
++    assert(varNum < compiler->lvaCount);
++
++    if (treeNode->OperGet() == GT_LCL_FLD)
++    {
++        offs = treeNode->gtLclFld.gtLclOffs;
++    }
++
++    GenTreePtr op1 = treeNode->gtOp.gtOp1;
++    assert(!op1->isContained());
++    regNumber operandReg = genConsumeReg(op1);
++
++    // Need an addtional integer register to extract upper 4 bytes from data.
++    regNumber tmpReg = treeNode->GetSingleTempReg();
++
++    // store lower 8 bytes
++    getEmitter()->emitIns_S_R(ins_Store(TYP_DOUBLE), EA_8BYTE, operandReg, varNum, offs);
++
++    // Extract upper 4-bytes from data
++    getEmitter()->emitIns_R_R_I(INS_mov, EA_4BYTE, tmpReg, operandReg, 2);
++
++    // 4-byte write
++    getEmitter()->emitIns_S_R(INS_str, EA_4BYTE, tmpReg, varNum, offs + 8);
++}
++
+ #endif // FEATURE_SIMD
+ 
+ /*****************************************************************************
+diff --git a/src/jit/lsraarmarch.cpp b/src/jit/lsraarmarch.cpp
+index dc4228c..c1c4d62 100644
+--- a/src/jit/lsraarmarch.cpp
++++ b/src/jit/lsraarmarch.cpp
+@@ -77,6 +77,17 @@ void LinearScan::TreeNodeInfoInitStoreLoc(GenTreeLclVarCommon* storeLoc)
+     {
+         info->srcCount = 1;
+     }
++
++#ifdef FEATURE_SIMD
++    if (varTypeIsSIMD(storeLoc))
++    {
++        if (storeLoc->TypeGet() == TYP_SIMD12)
++        {
++            // Need an additional register to extract upper 4 bytes of Vector3.
++            info->internalIntCount = 1;
++        }
++    }
++#endif // FEATURE_SIMD
+ }
+ 
+ //------------------------------------------------------------------------
+-- 
+2.7.4
+
