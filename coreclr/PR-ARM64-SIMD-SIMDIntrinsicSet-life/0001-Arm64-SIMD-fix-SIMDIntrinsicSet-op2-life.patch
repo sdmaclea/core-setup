@@ -1,0 +1,38 @@
+From f66e0fde17f4d15e620b3163324cad43e32ce05c Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 20 Nov 2017 12:40:09 -0500
+Subject: [PATCH] [Arm64] SIMD fix SIMDIntrinsicSet* op2 life
+
+---
+ src/jit/lsraarm64.cpp | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/jit/lsraarm64.cpp b/src/jit/lsraarm64.cpp
+index 8f3d034..22fb56e 100644
+--- a/src/jit/lsraarm64.cpp
++++ b/src/jit/lsraarm64.cpp
+@@ -842,10 +842,6 @@ void LinearScan::TreeNodeInfoInitSIMD(GenTreeSIMD* simdTree)
+         case SIMDIntrinsicBitwiseXor:
+         case SIMDIntrinsicMin:
+         case SIMDIntrinsicMax:
+-        case SIMDIntrinsicSetX:
+-        case SIMDIntrinsicSetY:
+-        case SIMDIntrinsicSetZ:
+-        case SIMDIntrinsicSetW:
+         case SIMDIntrinsicEqual:
+         case SIMDIntrinsicLessThan:
+         case SIMDIntrinsicGreaterThan:
+@@ -854,6 +850,10 @@ void LinearScan::TreeNodeInfoInitSIMD(GenTreeSIMD* simdTree)
+             info->srcCount = 2;
+             break;
+ 
++        case SIMDIntrinsicSetX:
++        case SIMDIntrinsicSetY:
++        case SIMDIntrinsicSetZ:
++        case SIMDIntrinsicSetW:
+         case SIMDIntrinsicNarrow:
+             info->srcCount = 2;
+ 
+-- 
+2.7.4
+
