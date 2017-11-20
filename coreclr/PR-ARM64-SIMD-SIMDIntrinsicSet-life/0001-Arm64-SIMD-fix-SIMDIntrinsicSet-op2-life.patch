@@ -1,12 +1,25 @@
-From f66e0fde17f4d15e620b3163324cad43e32ce05c Mon Sep 17 00:00:00 2001
+From d1fd9ee331ae4afa5fa10d3692a414cacfc60e9d Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Mon, 20 Nov 2017 12:40:09 -0500
 Subject: [PATCH] [Arm64] SIMD fix SIMDIntrinsicSet* op2 life
 
 ---
- src/jit/lsraarm64.cpp | 8 ++++----
- 1 file changed, 4 insertions(+), 4 deletions(-)
+ src/jit/codegenarm64.cpp | 1 +
+ src/jit/lsraarm64.cpp    | 8 ++++----
+ 2 files changed, 5 insertions(+), 4 deletions(-)
 
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 95a56df..a0478f3 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -4662,6 +4662,7 @@ void CodeGen::genSIMDIntrinsicSetItem(GenTreeSIMD* simdNode)
+     assert(genIsValidFloatReg(targetReg));
+     assert(genIsValidFloatReg(op1Reg));
+     assert(genIsValidIntReg(op2Reg) || genIsValidFloatReg(op2Reg));
++    assert(targetReg != op2Reg);
+ 
+     emitAttr attr = emitTypeSize(baseType);
+ 
 diff --git a/src/jit/lsraarm64.cpp b/src/jit/lsraarm64.cpp
 index 8f3d034..22fb56e 100644
 --- a/src/jit/lsraarm64.cpp
