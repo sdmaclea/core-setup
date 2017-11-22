@@ -1,17 +1,17 @@
-From 00df55dbd3d10fdfbaea08e3a137d51e907a35b2 Mon Sep 17 00:00:00 2001
+From 817907e319bdb30b02dfb4064dd613b2eeb15292 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 22 Nov 2017 15:15:35 -0500
 Subject: [PATCH] [Arm64] Fix LowerVirtualStubCall reg allocation
 
 ---
- src/jit/lower.cpp | 10 +++++++++-
- 1 file changed, 9 insertions(+), 1 deletion(-)
+ src/jit/lower.cpp | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
 
 diff --git a/src/jit/lower.cpp b/src/jit/lower.cpp
-index 9d63c4b..a095f7e 100644
+index 9d63c4b..321f754 100644
 --- a/src/jit/lower.cpp
 +++ b/src/jit/lower.cpp
-@@ -4184,8 +4184,16 @@ GenTree* Lowering::LowerVirtualStubCall(GenTreeCall* call)
+@@ -4184,8 +4184,17 @@ GenTree* Lowering::LowerVirtualStubCall(GenTreeCall* call)
  // On ARM we must use a proper address in R12(thunk register) without dereferencing.
  // So for the jump we use the default register.
  // TODO: specifying register probably unnecessary for other platforms, too.
@@ -23,9 +23,10 @@ index 9d63c4b..a095f7e 100644
 +            indir->gtRegNum = REG_JUMP_THUNK_PARAM;
 +
 +            // Sanity checks
-+            assert(addr->gtRegNum != indir->gtRegNum);                  // indir and addr registers must be different
-+            assert((RBM_JUMP_THUNK_PARAM & RBM_ARG_REGS) == 0);         // Not an argument register
-+            assert((RBM_JUMP_THUNK_PARAM & RBM_INT_CALLEE_TRASH) != 0); // Callee will trash so this is safe
++            assert(addr->gtRegNum != indir->gtRegNum); // indir and addr registers must be different
++            static_assert_no_msg((RBM_JUMP_THUNK_PARAM & RBM_ARG_REGS) == 0);
++            static_assert_no_msg((RBM_JUMP_THUNK_PARAM & RBM_INT_CALLEE_TRASH) != 0);
++
  #elif defined(_TARGET_ARM_)
              // TODO-ARM-Cleanup: This is a temporarey hotfix to fix a regression observed in Linux/ARM.
              if (!comp->IsTargetAbi(CORINFO_CORERT_ABI))
