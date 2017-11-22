@@ -1,0 +1,34 @@
+From 639f9036fe25f4fb39845514cb7a2ca4d7f3285e Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 22 Nov 2017 16:10:41 -0500
+Subject: [PATCH] [Arm64] Assign temps to GT_SIMD arguments
+
+---
+ src/jit/morph.cpp | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
+index ccde238..a2ae91a 100644
+--- a/src/jit/morph.cpp
++++ b/src/jit/morph.cpp
+@@ -1625,6 +1625,17 @@ void fgArgInfo::ArgsComplete()
+                     // Spill multireg struct arguments that are expensive to evaluate twice
+                     curArgTabEntry->needTmp = true;
+                 }
++#if defined(FEATURE_SIMD) && defined(_TARGET_ARM64_)
++                else if (isMultiRegArg && varTypeIsSIMD(argx->TypeGet()))
++                {
++                    // SIMD types do not need the optimization below due to their sizes
++                    if (argx->OperIs(GT_SIMD) || (argx->OperIs(GT_OBJ) && argx->AsObj()->gtOp1->OperIs(GT_ADDR) &&
++                                                  argx->AsObj()->gtOp1->gtOp.gtOp1->OperIs(GT_SIMD)))
++                    {
++                        curArgTabEntry->needTmp = true;
++                    }
++                }
++#endif
+ #ifndef _TARGET_ARM_
+                 // TODO-Arm: This optimization is not implemented for ARM32
+                 // so we skip this for ARM32 until it is ported to use RyuJIT backend
+-- 
+2.7.4
+
