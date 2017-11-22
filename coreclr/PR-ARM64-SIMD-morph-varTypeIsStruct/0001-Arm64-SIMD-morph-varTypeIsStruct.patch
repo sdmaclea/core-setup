@@ -1,0 +1,43 @@
+From b09c77a3056220bc94c54600778641f836f7cc7b Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 10 Nov 2017 16:33:11 -0500
+Subject: [PATCH] [Arm64] SIMD morph varTypeIsStruct
+
+---
+ src/jit/morph.cpp | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
+index ccde238..efdca74 100644
+--- a/src/jit/morph.cpp
++++ b/src/jit/morph.cpp
+@@ -1608,7 +1608,7 @@ void fgArgInfo::ArgsComplete()
+         bool isMultiRegArg = (curArgTabEntry->numRegs > 1);
+ #endif
+ 
+-        if ((argx->TypeGet() == TYP_STRUCT) && (curArgTabEntry->needTmp == false))
++        if ((varTypeIsStruct(argx->TypeGet())) && (curArgTabEntry->needTmp == false))
+         {
+             if (isMultiRegArg && ((argx->gtFlags & GTF_PERSISTENT_SIDE_EFFECTS) != 0))
+             {
+@@ -3856,7 +3856,7 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+ 
+ #endif // not _TARGET_X86_
+                     // We still have a struct unless we converted the GT_OBJ into a GT_IND above...
+-                    if ((structBaseType == TYP_STRUCT) &&
++                    if (varTypeIsStruct(structBaseType) &&
+ #if defined(FEATURE_UNIX_AMD64_STRUCT_PASSING)
+                         !passStructInRegisters
+ #else  // !defined(FEATURE_UNIX_AMD64_STRUCT_PASSING)
+@@ -6275,7 +6275,7 @@ GenTreePtr Compiler::fgMorphStackArgForVarArgs(unsigned lclNum, var_types varTyp
+ 
+         // Access the argument through the local
+         GenTreePtr tree;
+-        if (varType == TYP_STRUCT)
++        if (varTypeIsStruct(varType))
+         {
+             tree = gtNewBlockVal(ptrArg, varDsc->lvExactSize);
+         }
+-- 
+2.7.4
+
