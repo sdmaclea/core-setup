@@ -1,0 +1,69 @@
+From 5b5c3e92c6704fde6d484926aef344689d543b36 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 20 Nov 2017 16:27:55 -0500
+Subject: [PATCH] [Arm64] SIMD Normalize struct arg type
+
+---
+ src/jit/codegencommon.cpp |  2 +-
+ src/jit/compiler.cpp      | 10 ++++++++++
+ src/jit/lclvars.cpp       |  4 ++--
+ 3 files changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
+index e80b79e..4b1de0e 100644
+--- a/src/jit/codegencommon.cpp
++++ b/src/jit/codegencommon.cpp
+@@ -11207,7 +11207,7 @@ bool Compiler::IsMultiRegPassedType(CORINFO_CLASS_HANDLE hClass)
+     structPassingKind howToPassStruct;
+     var_types         returnType = getArgTypeForStruct(hClass, &howToPassStruct);
+ 
+-    return (returnType == TYP_STRUCT);
++    return (varTypeIsStruct(returnType));
+ }
+ 
+ //-----------------------------------------------------------------------------------
+diff --git a/src/jit/compiler.cpp b/src/jit/compiler.cpp
+index 7375b6d..08efaef 100644
+--- a/src/jit/compiler.cpp
++++ b/src/jit/compiler.cpp
+@@ -918,6 +918,16 @@ var_types Compiler::getArgTypeForStruct(CORINFO_CLASS_HANDLE clsHnd,
+     {
+         *wbPassStruct = howToPassStruct;
+     }
++
++#if defined(FEATURE_MULTIREG_ARGS) && defined(_TARGET_ARM64_)
++    // Normalize struct return type for ARM64 FEATURE_MULTIREG_ARGS
++    // This is not yet enabled for ARM32 since FEATURE_SIMD is not enabled
++    if (varTypeIsStruct(useType))
++    {
++        useType = impNormStructType(clsHnd);
++    }
++#endif
++
+     return useType;
+ }
+ 
+diff --git a/src/jit/lclvars.cpp b/src/jit/lclvars.cpp
+index d16b11c..900cbb6 100644
+--- a/src/jit/lclvars.cpp
++++ b/src/jit/lclvars.cpp
+@@ -2224,14 +2224,14 @@ bool Compiler::lvaIsMultiregStruct(LclVarDsc* varDsc)
+ 
+         if (howToPassStruct == SPK_ByValueAsHfa)
+         {
+-            assert(type == TYP_STRUCT);
++            assert(varTypeIsStruct(TYP_STRUCT));
+             return true;
+         }
+ 
+ #if defined(FEATURE_UNIX_AMD64_STRUCT_PASSING) || defined(_TARGET_ARM64_)
+         if (howToPassStruct == SPK_ByValue)
+         {
+-            assert(type == TYP_STRUCT);
++            assert(varTypeIsStruct(TYP_STRUCT));
+             return true;
+         }
+ #endif
+-- 
+2.7.4
+
