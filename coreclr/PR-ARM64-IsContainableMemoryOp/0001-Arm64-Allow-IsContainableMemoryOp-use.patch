@@ -1,0 +1,50 @@
+From edb20d113988ef6e11d38d51be949e0ef4750b6c Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 22 Nov 2017 18:33:59 -0500
+Subject: [PATCH] [Arm64] Allow IsContainableMemoryOp() use
+
+---
+ src/jit/lower.cpp | 6 +++++-
+ src/jit/lsra.cpp  | 2 --
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/src/jit/lower.cpp b/src/jit/lower.cpp
+index 1c4cdd4..86d42bf 100644
+--- a/src/jit/lower.cpp
++++ b/src/jit/lower.cpp
+@@ -2695,7 +2695,11 @@ GenTree* Lowering::LowerCompare(GenTree* cmp)
+ #ifdef _TARGET_ARM64_
+                     (op2Value == 0) && cmp->OperIs(GT_EQ, GT_NE, GT_GT) &&
+ #endif
+-                    (castOp->OperIs(GT_CALL, GT_LCL_VAR) || castOp->OperIsLogical() || IsContainableMemoryOp(castOp));
++                    (castOp->OperIs(GT_CALL, GT_LCL_VAR) || castOp->OperIsLogical()
++#ifdef _TARGET_XARCH_
++                     || IsContainableMemoryOp(castOp)
++#endif
++                         );
+ 
+                 if (removeCast)
+                 {
+diff --git a/src/jit/lsra.cpp b/src/jit/lsra.cpp
+index a512221..9fdef4a 100644
+--- a/src/jit/lsra.cpp
++++ b/src/jit/lsra.cpp
+@@ -1973,7 +1973,6 @@ void LinearScan::identifyCandidatesExceptionDataflow()
+ //
+ bool LinearScan::isContainableMemoryOp(GenTree* node)
+ {
+-#ifdef _TARGET_XARCH_
+     if (node->isMemoryOp())
+     {
+         return true;
+@@ -1987,7 +1986,6 @@ bool LinearScan::isContainableMemoryOp(GenTree* node)
+         LclVarDsc* varDsc = &compiler->lvaTable[node->AsLclVar()->gtLclNum];
+         return varDsc->lvDoNotEnregister;
+     }
+-#endif // _TARGET_XARCH_
+     return false;
+ }
+ 
+-- 
+2.7.4
+
