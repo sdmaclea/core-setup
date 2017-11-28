@@ -1,4 +1,4 @@
-From 89ce66312c5765b29e621fabeb8355b88fb70ac8 Mon Sep 17 00:00:00 2001
+From 1e6ed5ba901a4cf4f5293bfe0f44f409c2be372b Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 28 Nov 2017 13:20:55 -0500
 Subject: [PATCH] [Arm64] Enable SIMD in crossgen
@@ -8,7 +8,7 @@ Subject: [PATCH] [Arm64] Enable SIMD in crossgen
  1 file changed, 8 insertions(+)
 
 diff --git a/src/zap/zapper.cpp b/src/zap/zapper.cpp
-index 3765135..41d842b 100644
+index 3765135..7bf1ead 100644
 --- a/src/zap/zapper.cpp
 +++ b/src/zap/zapper.cpp
 @@ -1394,6 +1394,14 @@ void Zapper::InitializeCompilerFlags(CORCOMPILE_VERSION_INFO * pVersionInfo)
@@ -19,7 +19,7 @@ index 3765135..41d842b 100644
 +    static ConfigDWORD fFeatureSIMD;
 +    if (fFeatureSIMD.val(CLRConfig::EXTERNAL_FeatureSIMD) != 0)
 +    {
-+        CPUCompileFlags.Set(CORJIT_FLAGS::CORJIT_FLAG_FEATURE_SIMD);
++        m_pOpt->m_compilerFlags.Set(CORJIT_FLAGS::CORJIT_FLAG_FEATURE_SIMD);
 +    }
 +#endif
 +

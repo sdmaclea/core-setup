@@ -1,4 +1,4 @@
-From f8494a309dd8494b65c88cec0056ea58f67c0af9 Mon Sep 17 00:00:00 2001
+From 694ea1ba4460333e815c511fb7d50e9cd6334959 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 28 Nov 2017 13:13:31 -0500
 Subject: [PATCH] [Arm64] Allow SIMD in altjit
