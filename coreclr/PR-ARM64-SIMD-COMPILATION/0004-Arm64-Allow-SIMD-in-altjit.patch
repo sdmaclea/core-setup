@@ -1,0 +1,141 @@
+From 75f7780005a1446e13346b33d9a933a8090e8267 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 28 Nov 2017 13:13:31 -0500
+Subject: [PATCH] [Arm64] Allow SIMD in altjit
+
+Add flag SIMD16ByteOnly
+Set COMPlus_SIMD16ByteOnly=1 in x64_arm64_altjit.cmd
+If SIMD16ByteOnly, limit getMaxIntrinsicSIMDVectorLength() to 16 bytes
+Enable SIMD in protonjit
+---
+ src/inc/clrconfigvalues.h          | 1 +
+ src/inc/corjit.h                   | 6 ++++--
+ src/jit/ee_il_dll.cpp              | 2 +-
+ src/jit/jitee.h                    | 6 ++++--
+ src/jit/protononjit/CMakeLists.txt | 3 +--
+ src/vm/codeman.cpp                 | 5 +++++
+ tests/x64_arm64_altjit.cmd         | 1 +
+ 7 files changed, 17 insertions(+), 7 deletions(-)
+
+diff --git a/src/inc/clrconfigvalues.h b/src/inc/clrconfigvalues.h
+index c92af6f..fce22c5 100644
+--- a/src/inc/clrconfigvalues.h
++++ b/src/inc/clrconfigvalues.h
+@@ -540,6 +540,7 @@ RETAIL_CONFIG_DWORD_INFO(INTERNAL_JitVNMapSelBudget, W("JitVNMapSelBudget"), 100
+ #define EXTERNAL_JitEnableAVX_Default 0
+ #endif // !defined(_TARGET_XARCH_)
+ RETAIL_CONFIG_DWORD_INFO_EX(EXTERNAL_FeatureSIMD, W("FeatureSIMD"), EXTERNAL_FeatureSIMD_Default, "Enable SIMD support with companion SIMDVector.dll", CLRConfig::REGUTIL_default)
++RETAIL_CONFIG_DWORD_INFO(INTERNAL_SIMD16ByteOnly, W("SIMD16ByteOnly"), 0, "Limit maximum SIMD vector length to 16 bytes (used by x64_arm64_altjit)")
+ RETAIL_CONFIG_DWORD_INFO_EX(EXTERNAL_EnableAVX, W("EnableAVX"), EXTERNAL_JitEnableAVX_Default, "Enable AVX instruction set for wide operations as default", CLRConfig::REGUTIL_default)
+ 
+ #if defined(_TARGET_X86_) || defined(_TARGET_AMD64_)
+diff --git a/src/inc/corjit.h b/src/inc/corjit.h
+index 6f217f1..2464fae 100644
+--- a/src/inc/corjit.h
++++ b/src/inc/corjit.h
+@@ -173,7 +173,8 @@ public:
+         CORJIT_FLAG_USE_FMA                 = 50,
+         CORJIT_FLAG_USE_LZCNT               = 51,
+         CORJIT_FLAG_USE_PCLMULQDQ           = 52,
+-        CORJIT_FLAG_USE_POPCNT              = 53
++        CORJIT_FLAG_USE_POPCNT              = 53,
++        CORJIT_FLAG_SIMD_16BYTE_ONLY        = 54
+         
+ 
+ #else // !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
+@@ -188,7 +189,8 @@ public:
+         CORJIT_FLAG_UNUSED19                = 50,
+         CORJIT_FLAG_UNUSED20                = 51,
+         CORJIT_FLAG_UNUSED21                = 52,
+-        CORJIT_FLAG_UNUSED22                = 53
++        CORJIT_FLAG_UNUSED22                = 53,
++        CORJIT_FLAG_UNUSED23                = 54
+ 
+ #endif // !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
+     };
+diff --git a/src/jit/ee_il_dll.cpp b/src/jit/ee_il_dll.cpp
+index 45df939..003ee2b 100644
+--- a/src/jit/ee_il_dll.cpp
++++ b/src/jit/ee_il_dll.cpp
+@@ -384,7 +384,7 @@ unsigned CILJit::getMaxIntrinsicSIMDVectorLength(CORJIT_FLAGS cpuCompileFlags)
+ #ifdef FEATURE_SIMD
+ #if defined(_TARGET_XARCH_) && !defined(LEGACY_BACKEND)
+     if (!jitFlags.IsSet(JitFlags::JIT_FLAG_PREJIT) && jitFlags.IsSet(JitFlags::JIT_FLAG_FEATURE_SIMD) &&
+-        jitFlags.IsSet(JitFlags::JIT_FLAG_USE_AVX2))
++        jitFlags.IsSet(JitFlags::JIT_FLAG_USE_AVX2) && !jitFlags.IsSet(JitFlags::CORJIT_FLAG_SIMD_16BYTE_ONLY))
+     {
+         if (JitConfig.EnableAVX() != 0)
+         {
+diff --git a/src/jit/jitee.h b/src/jit/jitee.h
+index 3da1093..f52cc76 100644
+--- a/src/jit/jitee.h
++++ b/src/jit/jitee.h
+@@ -105,7 +105,8 @@ public:
+         JIT_FLAG_USE_FMA                 = 50,
+         JIT_FLAG_USE_LZCNT               = 51,
+         JIT_FLAG_USE_PCLMULQDQ           = 52,
+-        JIT_FLAG_USE_POPCNT              = 53
++        JIT_FLAG_USE_POPCNT              = 53,
++        JIT_FLAG_SIMD_16BYTE_ONLY        = 54
+         
+ 
+ #else // !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
+@@ -120,7 +121,8 @@ public:
+         JIT_FLAG_UNUSED19                = 50,
+         JIT_FLAG_UNUSED20                = 51,
+         JIT_FLAG_UNUSED21                = 52,
+-        JIT_FLAG_UNUSED22                = 53
++        JIT_FLAG_UNUSED22                = 53,
++        JIT_FLAG_UNUSED23                = 54
+ 
+ #endif // !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
+     };
+diff --git a/src/jit/protononjit/CMakeLists.txt b/src/jit/protononjit/CMakeLists.txt
+index 33916c3..1d82086 100644
+--- a/src/jit/protononjit/CMakeLists.txt
++++ b/src/jit/protononjit/CMakeLists.txt
+@@ -5,8 +5,6 @@ add_definitions(-DFEATURE_NO_HOST)
+ add_definitions(-DSELF_NO_HOST)
+ remove_definitions(-DFEATURE_MERGE_JIT_AND_ENGINE)
+ 
+-remove_definitions(-DFEATURE_SIMD)
+-
+ remove_definitions(-DFEATURE_HW_INTRINSICS)
+ 
+ if(FEATURE_READYTORUN)
+@@ -15,6 +13,7 @@ endif(FEATURE_READYTORUN)
+ 
+ if (CLR_CMAKE_PLATFORM_ARCH_I386)
+     remove_definitions(-D_TARGET_X86_=1)
++    remove_definitions(-DFEATURE_SIMD)
+     add_definitions(-D_TARGET_ARM_)
+     set(JIT_ARCH_ALTJIT_SOURCES ${JIT_ARM_SOURCES})
+     set(JIT_ARCH_LINK_LIBRARIES gcinfo_arm)
+diff --git a/src/vm/codeman.cpp b/src/vm/codeman.cpp
+index 174de17..c57ff4f 100644
+--- a/src/vm/codeman.cpp
++++ b/src/vm/codeman.cpp
+@@ -1435,6 +1435,11 @@ void EEJitManager::SetCpuInfo()
+             {
+                 CPUCompileFlags.Set(CORJIT_FLAGS::CORJIT_FLAG_FEATURE_SIMD);
+             }
++
++            if (CLRConfig::GetConfigValue(CLRConfig::INTERNAL_SIMD16ByteOnly) != 0)
++            {
++                CPUCompileFlags.Set(CORJIT_FLAGS::CORJIT_FLAG_SIMD_16BYTE_ONLY);
++            }
+         }
+     }
+ #endif // defined(_TARGET_X86_) || defined(_TARGET_AMD64_)
+diff --git a/tests/x64_arm64_altjit.cmd b/tests/x64_arm64_altjit.cmd
+index d6c3fdd..9a86d0e 100644
+--- a/tests/x64_arm64_altjit.cmd
++++ b/tests/x64_arm64_altjit.cmd
+@@ -4,3 +4,4 @@ set COMPlus_AltJitName=protononjit.dll
+ set COMPlus_NoGuiOnAssert=1
+ set COMPlus_ContinueOnAssert=0
+ set COMPlus_AltJitAssertOnNYI=1
++set COMPlus_SIMD16ByteOnly=1
+-- 
+2.7.4
+

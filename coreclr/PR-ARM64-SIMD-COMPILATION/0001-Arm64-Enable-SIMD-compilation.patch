@@ -1,4 +1,4 @@
-From 7cf364f591d52d8727c8af99c3f150b3e7a79d69 Mon Sep 17 00:00:00 2001
+From 75f0af88c7d7f545d82566ea01339082c493f380 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 20 Oct 2017 16:30:22 -0400
 Subject: [PATCH] [Arm64] Enable SIMD compilation
@@ -8,7 +8,7 @@ Subject: [PATCH] [Arm64] Enable SIMD compilation
  1 file changed, 5 insertions(+)
 
 diff --git a/src/jit/CMakeLists.txt b/src/jit/CMakeLists.txt
-index 32c6065..a18107d 100644
+index 6e295fa..6ce89c8 100644
 --- a/src/jit/CMakeLists.txt
 +++ b/src/jit/CMakeLists.txt
 @@ -9,6 +9,10 @@ if (CLR_CMAKE_TARGET_ARCH_AMD64 OR (CLR_CMAKE_TARGET_ARCH_I386 AND NOT CLR_CMAKE
