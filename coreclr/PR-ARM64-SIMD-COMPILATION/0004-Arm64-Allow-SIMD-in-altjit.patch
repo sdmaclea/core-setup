@@ -1,4 +1,4 @@
-From 75f7780005a1446e13346b33d9a933a8090e8267 Mon Sep 17 00:00:00 2001
+From f8494a309dd8494b65c88cec0056ea58f67c0af9 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 28 Nov 2017 13:13:31 -0500
 Subject: [PATCH] [Arm64] Allow SIMD in altjit
@@ -54,7 +54,7 @@ index 6f217f1..2464fae 100644
  #endif // !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
      };
 diff --git a/src/jit/ee_il_dll.cpp b/src/jit/ee_il_dll.cpp
-index 45df939..003ee2b 100644
+index 45df939..4bee9cb 100644
 --- a/src/jit/ee_il_dll.cpp
 +++ b/src/jit/ee_il_dll.cpp
 @@ -384,7 +384,7 @@ unsigned CILJit::getMaxIntrinsicSIMDVectorLength(CORJIT_FLAGS cpuCompileFlags)
@@ -62,7 +62,7 @@ index 45df939..003ee2b 100644
  #if defined(_TARGET_XARCH_) && !defined(LEGACY_BACKEND)
      if (!jitFlags.IsSet(JitFlags::JIT_FLAG_PREJIT) && jitFlags.IsSet(JitFlags::JIT_FLAG_FEATURE_SIMD) &&
 -        jitFlags.IsSet(JitFlags::JIT_FLAG_USE_AVX2))
-+        jitFlags.IsSet(JitFlags::JIT_FLAG_USE_AVX2) && !jitFlags.IsSet(JitFlags::CORJIT_FLAG_SIMD_16BYTE_ONLY))
++        jitFlags.IsSet(JitFlags::JIT_FLAG_USE_AVX2) && !jitFlags.IsSet(JitFlags::JIT_FLAG_SIMD_16BYTE_ONLY))
      {
          if (JitConfig.EnableAVX() != 0)
          {
