@@ -1,0 +1,192 @@
+From a8c89789e42837da4926f5345a7293d90e07fe11 Mon Sep 17 00:00:00 2001
+From: Stephen Toub <stoub@microsoft.com>
+Date: Tue, 28 Nov 2017 12:18:43 -0500
+Subject: [PATCH] Port ValueStringBuilder updates/fixes from corefx
+
+---
+ src/mscorlib/shared/System/Number.Formatting.cs    | 18 +++----
+ .../shared/System/Text/ValueStringBuilder.cs       | 55 +++++++++++++---------
+ 2 files changed, 42 insertions(+), 31 deletions(-)
+
+diff --git a/src/mscorlib/shared/System/Number.Formatting.cs b/src/mscorlib/shared/System/Number.Formatting.cs
+index 8a6268d..4958bd5 100644
+--- a/src/mscorlib/shared/System/Number.Formatting.cs
++++ b/src/mscorlib/shared/System/Number.Formatting.cs
+@@ -306,7 +306,7 @@ namespace System
+                 NumberToStringFormat(ref sb, ref number, format, info);
+             }
+ 
+-            return sb.GetString();
++            return sb.ToString();
+         }
+ 
+         public static bool TryFormatDecimal(decimal value, ReadOnlySpan<char> format, NumberFormatInfo info, Span<char> destination, out int charsWritten)
+@@ -405,7 +405,7 @@ namespace System
+                             NumberToString(ref sb, ref number, 'G', 17, info, isDecimal: false);
+                         }
+ 
+-                        return sb.GetString();
++                        return sb.ToString();
+                     }
+ 
+                 case 'E':
+@@ -446,7 +446,7 @@ namespace System
+                 NumberToStringFormat(ref sb, ref number, format, info);
+             }
+ 
+-            return sb.GetString();
++            return sb.ToString();
+         }
+ 
+         public static string FormatSingle(float value, string format, NumberFormatInfo info)
+@@ -490,7 +490,7 @@ namespace System
+                             NumberToString(ref sb, ref number, 'G', 9, info, isDecimal: false);
+                         }
+ 
+-                        return sb.GetString();
++                        return sb.ToString();
+                     }
+ 
+                 case 'E':
+@@ -531,7 +531,7 @@ namespace System
+                 NumberToStringFormat(ref sb, ref number, format, info);
+             }
+ 
+-            return sb.GetString();
++            return sb.ToString();
+         }
+ 
+         public static string FormatInt32(int value, ReadOnlySpan<char> format, NumberFormatInfo info)
+@@ -570,7 +570,7 @@ namespace System
+                 {
+                     NumberToStringFormat(ref sb, ref number, format, info);
+                 }
+-                return sb.GetString();
++                return sb.ToString();
+             }
+         }
+ 
+@@ -648,7 +648,7 @@ namespace System
+                 {
+                     NumberToStringFormat(ref sb, ref number, format, info);
+                 }
+-                return sb.GetString();
++                return sb.ToString();
+             }
+         }
+ 
+@@ -727,7 +727,7 @@ namespace System
+                 {
+                     NumberToStringFormat(ref sb, ref number, format, info);
+                 }
+-                return sb.GetString();
++                return sb.ToString();
+             }
+         }
+ 
+@@ -807,7 +807,7 @@ namespace System
+                 {
+                     NumberToStringFormat(ref sb, ref number, format, info);
+                 }
+-                return sb.GetString();
++                return sb.ToString();
+             }
+         }
+ 
+diff --git a/src/mscorlib/shared/System/Text/ValueStringBuilder.cs b/src/mscorlib/shared/System/Text/ValueStringBuilder.cs
+index f9f6bb7..0a91eb0 100644
+--- a/src/mscorlib/shared/System/Text/ValueStringBuilder.cs
++++ b/src/mscorlib/shared/System/Text/ValueStringBuilder.cs
+@@ -21,42 +21,42 @@ namespace System.Text
+             _pos = 0;
+         }
+ 
+-        public string GetString()
+-        {
+-            var s = new string(_chars.Slice(0, _pos));
+-
+-            char[] toReturn = _arrayToReturnToPool;
+-            this = default; // for safety, to avoid using pooled array if this instance is erroneously appended to again
++        public int Length => _pos;
+ 
+-            if (toReturn != null)
++        public override string ToString()
+         {
+-                ArrayPool<char>.Shared.Return(toReturn);
+-            }
+-
++            var s = new string(_chars.Slice(0, _pos));
++            Clear();
+             return s;
+         }
+ 
+         public bool TryCopyTo(Span<char> destination, out int charsWritten)
+         {
+-            if (_pos > destination.Length)
++            if (_chars.Slice(0, _pos).TryCopyTo(destination))
++            {
++                charsWritten = _pos;
++                Clear();
++                return true;
++            }
++            else
+             {
+                 charsWritten = 0;
++                Clear();
+                 return false;
+             }
++        }
+ 
+-            bool copied = _chars.Slice(0, _pos).TryCopyTo(destination);
+-            Debug.Assert(copied);
+-            charsWritten = _pos;
+-
+-            char[] toReturn = _arrayToReturnToPool;
+-            this = default; // for safety, to avoid using pooled array if this instance is erroneously appended to again
+-
+-            if (toReturn != null)
++        public void Insert(int index, char value, int count)
+         {
+-                ArrayPool<char>.Shared.Return(toReturn);
++            if (_pos > _chars.Length - count)
++            {
++                Grow(count);
+             }
+ 
+-            return true;
++            int remaining = _pos - index;
++            _chars.Slice(index, remaining).CopyTo(_chars.Slice(index + count));
++            _chars.Slice(index, count).Fill(value);
++            _pos += count;
+         }
+ 
+         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+@@ -158,7 +158,7 @@ namespace System.Text
+         {
+             Debug.Assert(requiredAdditionalCapacity > _chars.Length - _pos);
+ 
+-            char[] poolArray = ArrayPool<char>.Shared.Rent(_pos + requiredAdditionalCapacity);
++            char[] poolArray = ArrayPool<char>.Shared.Rent(Math.Max(_pos + requiredAdditionalCapacity, _chars.Length * 2));
+ 
+             bool success = _chars.TryCopyTo(poolArray);
+             Debug.Assert(success);
+@@ -170,5 +170,16 @@ namespace System.Text
+                 ArrayPool<char>.Shared.Return(toReturn);
+             }
+         }
++
++        [MethodImpl(MethodImplOptions.AggressiveInlining)]
++        private void Clear()
++        {
++            char[] toReturn = _arrayToReturnToPool;
++            this = default; // for safety, to avoid using pooled array if this instance is erroneously appended to again
++            if (toReturn != null)
++            {
++                ArrayPool<char>.Shared.Return(toReturn);
++            }
++        }
+     }
+ }
+-- 
+2.7.4
+

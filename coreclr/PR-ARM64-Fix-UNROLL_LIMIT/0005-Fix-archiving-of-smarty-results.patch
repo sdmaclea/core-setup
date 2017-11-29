@@ -1,0 +1,53 @@
+From fe20a18afb320996791678849d7b2bad2daa7a25 Mon Sep 17 00:00:00 2001
+From: Bruce Forstall <brucefo@microsoft.com>
+Date: Tue, 28 Nov 2017 16:10:55 -0800
+Subject: [PATCH] Fix archiving of smarty results
+
+Run the command to ZIP the output directory in the same
+"Execute Batch File" step as the smarty. Otherwise, a failure
+of smarty will cause Jenkins to not run the subsequent batch file
+steps, including the ZIP step.
+
+Also, preserve the smarty error code to use that as the batch
+file step exit code.
+---
+ netci.groovy | 14 +++++++++++---
+ 1 file changed, 11 insertions(+), 3 deletions(-)
+
+diff --git a/netci.groovy b/netci.groovy
+index 6909a9b..581c3b7 100755
+--- a/netci.groovy
++++ b/netci.groovy
+@@ -2536,6 +2536,9 @@ Constants.allScenarios.each { scenario ->
+                                 def addEnvVariable =  { variable, value -> buildCommands += "set ${variable}=${value}\r\n"}
+                                 def addCommand = { cmd -> buildCommands += "${cmd}\r\n"}
+ 
++                                // Make sure Command Extensions are enabled. Used so %ERRORLEVEL% is available.
++                                addCommand("SETLOCAL ENABLEEXTENSIONS")
++    
+                                 // For all jobs 
+                                 addEnvVariable("CORE_ROOT", coreRootLocation)
+ 
+@@ -2611,11 +2614,16 @@ Constants.allScenarios.each { scenario ->
+                                 addCommand("copy %WORKSPACE%\\tests\\${archLocation}\\Tests.lst bin\\tests\\${osGroup}.${architecture}.${configuration}")
+                                 addCommand("pushd bin\\tests\\${osGroup}.${architecture}.${configuration}")
+                                 addCommand("${smartyCommand}")
++                                addCommand("set __save_smarty_errorlevel=%errorlevel%")
++                                addCommand("popd")
+ 
+-                                batchFile(buildCommands)
++                                // ZIP up the smarty output, no matter what the smarty result.
++                                addCommand("powershell -NoProfile -Command \"Add-Type -Assembly 'System.IO.Compression.FileSystem'; [System.IO.Compression.ZipFile]::CreateFromDirectory('.\\bin\\tests\\${osGroup}.${architecture}.${configuration}\\Smarty.run.0', '.\\bin\\tests\\${osGroup}.${architecture}.${configuration}\\Smarty.run.0.zip')\"")
+ 
+-                                // ZIP up the smarty output.
+-                                batchFile("powershell -NoProfile -Command \"Add-Type -Assembly 'System.IO.Compression.FileSystem'; [System.IO.Compression.ZipFile]::CreateFromDirectory('.\\bin\\tests\\${osGroup}.${architecture}.${configuration}\\Smarty.run.0', '.\\bin\\tests\\${osGroup}.${architecture}.${configuration}\\Smarty.run.0.zip')\"")
++                                // Use the smarty errorlevel as the script errorlevel.
++                                addCommand("exit /b %__save_smarty_errorlevel%")
++
++                                batchFile(buildCommands)
+                             }
+                         }
+                     }
+-- 
+2.7.4
+

@@ -1,0 +1,39 @@
+From 82f798ce94bfda99d116c71bd73212af48142293 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 29 Nov 2017 16:14:04 -0500
+Subject: [PATCH] [Arm64] Fix UNROLL_LIMIT logic
+
+---
+ src/jit/codegenarmarch.cpp | 2 +-
+ src/jit/lowerarmarch.cpp   | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index e3fab8a..a1ebfb8 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -2044,7 +2044,7 @@ void CodeGen::genCodeForInitBlk(GenTreeBlk* initBlkNode)
+ #ifdef _TARGET_ARM64_
+     if (size != 0)
+     {
+-        assert(size > INITBLK_UNROLL_LIMIT);
++        assert((size > INITBLK_UNROLL_LIMIT) || !initVal->IsCnsIntOrI());
+     }
+ #endif // _TARGET_ARM64_
+ 
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index 51d4a3b..2316501 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -362,7 +362,7 @@ void Lowering::LowerBlockStore(GenTreeBlk* blkNode)
+             // we should unroll the loop to improve CQ.
+             // For reference see the code in lowerxarch.cpp.
+ 
+-            if ((size != 0) && (size <= INITBLK_UNROLL_LIMIT))
++            if ((size != 0) && (size <= CPBLK_UNROLL_LIMIT))
+             {
+                 blkNode->gtBlkOpKind = GenTreeBlk::BlkOpKindUnroll;
+             }
+-- 
+2.7.4
+

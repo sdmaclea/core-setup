@@ -1,0 +1,192 @@
+From 39e99cabf31a89624c40b718ba2faf9829ab2455 Mon Sep 17 00:00:00 2001
+From: Andy Ayers <andya@microsoft.com>
+Date: Tue, 28 Nov 2017 18:10:06 -0800
+Subject: [PATCH] JIT: fix bug with int casts of long shifts (#15236)
+
+* JIT: fix bug with int casts of long shifts
+
+The jit is pushing int casts down through long left shifts in ways that can
+change computation. The push is only safe if the shift amount is 31 bits or
+less. So split the current optimization for shifts into three cases:
+* shift amount unknown: don't push the cast
+* shift amount > 31: result of cast/shift is zero
+* shift amout <= 31: push the cast
+
+Fixes #15077.
+---
+ src/jit/morph.cpp                                  | 54 ++++++++++++++++++++--
+ .../JitBlue/GitHub_15077/GitHub_15077.cs           | 43 +++++++++++++++++
+ .../JitBlue/GitHub_15077/GitHub_15077.csproj       | 38 +++++++++++++++
+ 3 files changed, 132 insertions(+), 3 deletions(-)
+ create mode 100644 tests/src/JIT/Regression/JitBlue/GitHub_15077/GitHub_15077.cs
+ create mode 100644 tests/src/JIT/Regression/JitBlue/GitHub_15077/GitHub_15077.csproj
+
+diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
+index 1d8c9dd..cc36469 100644
+--- a/src/jit/morph.cpp
++++ b/src/jit/morph.cpp
+@@ -444,7 +444,8 @@ GenTreePtr Compiler::fgMorphCast(GenTreePtr tree)
+             {
+                 // gtFoldExprConst will deal with whether the cast is signed or
+                 // unsigned, or overflow-sensitive.
+-                andOp2 = oper->gtOp.gtOp2 = gtFoldExprConst(andOp2);
++                andOp2           = gtFoldExprConst(andOp2);
++                oper->gtOp.gtOp2 = andOp2;
+             }
+ 
+             // Look for a constant less than 2^{32} for a cast to uint, or less
+@@ -465,9 +466,56 @@ GenTreePtr Compiler::fgMorphCast(GenTreePtr tree)
+         if (fgGlobalMorph && !tree->gtOverflow() && !oper->gtOverflowEx())
+         {
+             // For these operations the lower 32 bits of the result only depends
+-            // upon the lower 32 bits of the operands
++            // upon the lower 32 bits of the operands.
+             //
+-            if (oper->OperIs(GT_ADD, GT_SUB, GT_MUL, GT_AND, GT_OR, GT_XOR, GT_NOT, GT_NEG, GT_LSH))
++            bool canPushCast = oper->OperIs(GT_ADD, GT_SUB, GT_MUL, GT_AND, GT_OR, GT_XOR, GT_NOT, GT_NEG);
++
++            // For long LSH cast to int, there is a discontinuity in behavior
++            // when the shift amount is 32 or larger.
++            //
++            // CAST(INT, LSH(1LL, 31)) == LSH(1, 31)
++            // LSH(CAST(INT, 1LL), CAST(INT, 31)) == LSH(1, 31)
++            //
++            // CAST(INT, LSH(1LL, 32)) == 0
++            // LSH(CAST(INT, 1LL), CAST(INT, 32)) == LSH(1, 32) == LSH(1, 0) == 1
++            //
++            // So some extra validation is needed.
++            //
++            if (oper->OperIs(GT_LSH))
++            {
++                GenTree* shiftAmount = oper->gtOp.gtOp2;
++
++                // Expose constant value for shift, if possible, to maximize the number
++                // of cases we can handle.
++                shiftAmount      = gtFoldExpr(shiftAmount);
++                oper->gtOp.gtOp2 = shiftAmount;
++
++                if (shiftAmount->IsIntegralConst())
++                {
++                    const ssize_t shiftAmountValue = shiftAmount->AsIntCon()->IconValue();
++                    assert(shiftAmountValue >= 0);
++
++                    if (shiftAmountValue >= 32)
++                    {
++                        // Result of the shift is zero.
++                        DEBUG_DESTROY_NODE(tree);
++                        GenTree* zero = gtNewZeroConNode(TYP_INT);
++                        return fgMorphTree(zero);
++                    }
++                    else
++                    {
++                        // Shift amount is small enough that we can push the cast through.
++                        canPushCast = true;
++                    }
++                }
++                else
++                {
++                    // Shift amount is unknown. We can't optimize this case.
++                    assert(!canPushCast);
++                }
++            }
++
++            if (canPushCast)
+             {
+                 DEBUG_DESTROY_NODE(tree);
+ 
+diff --git a/tests/src/JIT/Regression/JitBlue/GitHub_15077/GitHub_15077.cs b/tests/src/JIT/Regression/JitBlue/GitHub_15077/GitHub_15077.cs
+new file mode 100644
+index 0000000..0502dea
+--- /dev/null
++++ b/tests/src/JIT/Regression/JitBlue/GitHub_15077/GitHub_15077.cs
+@@ -0,0 +1,43 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++using System;
++using System.Runtime.CompilerServices;
++
++// Codegen bug when propagating an int cast through
++// a long shift. Tests below have known and unknown
++// long shifts where shift amount is 31 or 32.
++
++class P
++{
++    [MethodImpl(MethodImplOptions.NoInlining)]
++    public static UInt32 G32()
++    {
++        int q = 32;
++        return (UInt32)((1UL << q) - 1);
++    }
++
++    [MethodImpl(MethodImplOptions.NoInlining)]
++    public static UInt32 G31()
++    {
++        int q = 31;
++        return (UInt32)((1UL << q) - 1);
++    }
++
++    [MethodImpl(MethodImplOptions.NoInlining)]
++    public static UInt32 Gx(int q)
++    {
++        return (UInt32)((1UL << q) - 1);
++    }
++
++    public static int Main()
++    {
++        UInt32 r32 = G32();
++        UInt32 r31 = G31();
++        UInt32 r32a = Gx(32);
++        UInt32 r31a = Gx(31);
++        Console.WriteLine($"r32:{r32,0:X} r31:{r31,0:X} r32a:{r32a,0:X} r31a:{r31a,0:X}");
++        return (r32 == 0xFFFFFFFF) && (r32a == 0xFFFFFFFF) && (r31 == 0x7FFFFFFF) && (r31a == 0x7FFFFFFF) ? 100 : 0;
++    }
++}
+diff --git a/tests/src/JIT/Regression/JitBlue/GitHub_15077/GitHub_15077.csproj b/tests/src/JIT/Regression/JitBlue/GitHub_15077/GitHub_15077.csproj
+new file mode 100644
+index 0000000..f24c04b
+--- /dev/null
++++ b/tests/src/JIT/Regression/JitBlue/GitHub_15077/GitHub_15077.csproj
+@@ -0,0 +1,38 @@
++<?xml version="1.0" encoding="utf-8"?>
++<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
++  <PropertyGroup>
++    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
++    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
++    <AssemblyName>$(MSBuildProjectName)</AssemblyName>
++    <SchemaVersion>2.0</SchemaVersion>
++    <ProjectGuid>{95DFC527-4DC1-495E-97D7-E94EE1F7140D}</ProjectGuid>
++    <OutputType>Exe</OutputType>
++    <AppDesignerFolder>Properties</AppDesignerFolder>
++    <FileAlignment>512</FileAlignment>
++    <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
++    <ReferencePath>$(ProgramFiles)\Common Files\microsoft shared\VSTT\11.0\UITestExtensionPackages</ReferencePath>
++    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
++    <NuGetPackageImportStamp>7a9bfb7d</NuGetPackageImportStamp>
++  </PropertyGroup>
++  <!-- Default configurations to help VS understand the configurations -->
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' "></PropertyGroup>
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' "></PropertyGroup>
++  <ItemGroup>
++    <CodeAnalysisDependentAssemblyPaths Condition=" '$(VS100COMNTOOLS)' != '' " Include="$(VS100COMNTOOLS)..\IDE\PrivateAssemblies">
++      <Visible>False</Visible>
++    </CodeAnalysisDependentAssemblyPaths>
++  </ItemGroup>
++  <PropertyGroup>
++    <DebugType></DebugType>
++    <Optimize>True</Optimize>
++  </PropertyGroup>
++  <ItemGroup>
++    <Compile Include="GitHub_15077.cs" />
++  </ItemGroup>
++  <ItemGroup>
++    <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
++  </ItemGroup>
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
++  <PropertyGroup Condition=" '$(MsBuildProjectDirOverride)' != '' "></PropertyGroup>
++</Project>
+-- 
+2.7.4
+
