@@ -1,12 +1,12 @@
-From c5f5f36bf7eac469d929673bc03d114a8fc3c45a Mon Sep 17 00:00:00 2001
+From f78693ead5f5840f3d443a4fb1975e6d46bc9dd4 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 29 Nov 2017 10:03:05 -0500
 Subject: [PATCH] [ARM64] Align Compiler::lvaStressLclFldCB padding
 
 ---
  src/jit/codegencommon.cpp | 22 +++++++++++++---------
- src/jit/lclvars.cpp       |  6 +++---
- 2 files changed, 16 insertions(+), 12 deletions(-)
+ src/jit/lclvars.cpp       | 10 +++++-----
+ 2 files changed, 18 insertions(+), 14 deletions(-)
 
 diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
 index 4b1de0e..da8b493 100644
@@ -85,7 +85,7 @@ index 4b1de0e..da8b493 100644
  /*****************************************************************************
   *
 diff --git a/src/jit/lclvars.cpp b/src/jit/lclvars.cpp
-index 900cbb6..cd15512 100644
+index 900cbb6..0aa3d85 100644
 --- a/src/jit/lclvars.cpp
 +++ b/src/jit/lclvars.cpp
 @@ -7300,13 +7300,13 @@ Compiler::fgWalkResult Compiler::lvaStressLclFldCB(GenTreePtr* pTree, fgWalkData
@@ -98,9 +98,11 @@ index 900cbb6..cd15512 100644
 +        // We need to support alignment requirements to access memory on ARM ARCH
          unsigned alignment = 1;
          pComp->codeGen->InferOpSizeAlign(lcl, &alignment);
-         alignment = roundUp(alignment, TARGET_POINTER_SIZE);
-         padding   = roundUp(padding, alignment);
+-        alignment = roundUp(alignment, TARGET_POINTER_SIZE);
+-        padding   = roundUp(padding, alignment);
 -#endif // _TARGET_ARM_
++        alignment = (unsigned)roundUp(alignment, TARGET_POINTER_SIZE);
++        padding   = (unsigned)roundUp(padding, alignment);
 +#endif // _TARGET_ARMARCH_
  
          // Change the variable to a TYP_BLK
