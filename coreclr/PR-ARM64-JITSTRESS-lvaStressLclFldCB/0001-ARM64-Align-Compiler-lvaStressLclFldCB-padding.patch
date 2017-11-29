@@ -1,0 +1,70 @@
+From 8a331ba160544c01f9302221fd2d9146c0d93eda Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 29 Nov 2017 10:03:05 -0500
+Subject: [PATCH] [ARM64] Align Compiler::lvaStressLclFldCB padding
+
+---
+ src/jit/codegencommon.cpp | 6 ++++--
+ src/jit/lclvars.cpp       | 6 +++---
+ 2 files changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
+index 4b1de0e..42070da 100644
+--- a/src/jit/codegencommon.cpp
++++ b/src/jit/codegencommon.cpp
+@@ -1684,7 +1684,7 @@ void CodeGen::genAdjustStackLevel(BasicBlock* block)
+ #endif // !FEATURE_FIXED_OUT_ARGS
+ }
+ 
+-#ifdef _TARGET_ARM_
++#ifdef _TARGET_ARMARCH_
+ // return size
+ // alignmentWB is out param
+ unsigned CodeGenInterface::InferOpSizeAlign(GenTreePtr op, unsigned* alignmentWB)
+@@ -1732,11 +1732,13 @@ unsigned CodeGenInterface::InferStructOpSizeAlign(GenTreePtr op, unsigned* align
+         LclVarDsc* varDsc = compiler->lvaTable + varNum;
+         assert(varDsc->lvType == TYP_STRUCT);
+         opSize = varDsc->lvSize();
++#ifndef _TARGET_64BIT_
+         if (varDsc->lvStructDoubleAlign)
+         {
+             alignment = TARGET_POINTER_SIZE * 2;
+         }
+         else
++#endif
+         {
+             alignment = TARGET_POINTER_SIZE;
+         }
+@@ -1804,7 +1806,7 @@ unsigned CodeGenInterface::InferStructOpSizeAlign(GenTreePtr op, unsigned* align
+     return opSize;
+ }
+ 
+-#endif // _TARGET_ARM_
++#endif // _TARGET_ARMARCH_
+ 
+ /*****************************************************************************
+  *
+diff --git a/src/jit/lclvars.cpp b/src/jit/lclvars.cpp
+index 900cbb6..cd15512 100644
+--- a/src/jit/lclvars.cpp
++++ b/src/jit/lclvars.cpp
+@@ -7300,13 +7300,13 @@ Compiler::fgWalkResult Compiler::lvaStressLclFldCB(GenTreePtr* pTree, fgWalkData
+         // Calculate padding
+         unsigned padding = LCL_FLD_PADDING(lclNum);
+ 
+-#ifdef _TARGET_ARM_
+-        // We need to support alignment requirements to access memory on ARM
++#ifdef _TARGET_ARMARCH_
++        // We need to support alignment requirements to access memory on ARM ARCH
+         unsigned alignment = 1;
+         pComp->codeGen->InferOpSizeAlign(lcl, &alignment);
+         alignment = roundUp(alignment, TARGET_POINTER_SIZE);
+         padding   = roundUp(padding, alignment);
+-#endif // _TARGET_ARM_
++#endif // _TARGET_ARMARCH_
+ 
+         // Change the variable to a TYP_BLK
+         if (varType != TYP_BLK)
+-- 
+2.7.4
+
