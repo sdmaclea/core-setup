@@ -1,0 +1,27 @@
+From 290e796782aae84266d71e88fce05d8efb6c7618 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 29 Nov 2017 11:35:23 -0500
+Subject: [PATCH] [Arm64] genStoreLclTypeSIMD12 update life
+
+---
+ src/jit/codegenarm64.cpp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 1fa486c..c63638c 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -4898,6 +4898,10 @@ void CodeGen::genStoreLclTypeSIMD12(GenTree* treeNode)
+ 
+     // 4-byte write
+     getEmitter()->emitIns_S_R(INS_str, EA_4BYTE, tmpReg, varNum, offs + 8);
++
++    genUpdateLife(treeNode);
++
++    compiler->lvaTable[varNum].lvRegNum = REG_STK;
+ }
+ 
+ #endif // FEATURE_SIMD
+-- 
+2.7.4
+
