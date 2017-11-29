@@ -1,0 +1,26 @@
+From f89e46c80c9e4692f54f32b1fb9cd988d5cc557d Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 29 Nov 2017 12:30:32 -0500
+Subject: [PATCH] [Arm64] SIMD genMultiRegCallStoreToLocal add missing
+ produceReg
+
+---
+ src/jit/codegenarmarch.cpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index e3fab8a..87de8ab 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -1266,6 +1266,8 @@ void CodeGen::genMultiRegCallStoreToLocal(GenTreePtr treeNode)
+                 getEmitter()->emitIns_R_R_I(INS_mov, emitTypeSize(type), dst, reg, i);
+             }
+         }
++
++        genProduceReg(treeNode);
+     }
+     else
+     {
+-- 
+2.7.4
+
