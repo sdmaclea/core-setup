@@ -1,0 +1,68 @@
+From 10d1879925c96fb3a8500ae2cc35bccf21e31829 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 28 Nov 2017 15:10:38 -0500
+Subject: [PATCH] [Arm64] Use REG_IP1 for genEpilogRestoreReg*
+
+Avoid conflict with FASTTAILCALL_TARGET reg
+---
+ src/jit/codegenarm64.cpp  | 8 ++++----
+ src/jit/codegencommon.cpp | 4 ++--
+ 2 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 1fa486c..da9c7bf 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -653,11 +653,11 @@ void CodeGen::genRestoreCalleeSavedRegistersHelp(regMaskTP regsToRestoreMask, in
+             maskRestoreRegsFloat &= ~reg1Mask;
+             floatRegsToRestoreCount -= 1;
+ 
+-            genEpilogRestoreRegPair(reg1, reg2, spOffset, stackDelta, REG_IP0, nullptr);
++            genEpilogRestoreRegPair(reg1, reg2, spOffset, stackDelta, REG_IP1, nullptr);
+         }
+         else
+         {
+-            genEpilogRestoreReg(reg2, spOffset, stackDelta, REG_IP0, nullptr);
++            genEpilogRestoreReg(reg2, spOffset, stackDelta, REG_IP1, nullptr);
+         }
+     }
+ 
+@@ -702,11 +702,11 @@ void CodeGen::genRestoreCalleeSavedRegistersHelp(regMaskTP regsToRestoreMask, in
+             maskRestoreRegsInt &= ~reg1Mask;
+             intRegsToRestoreCount -= 1;
+ 
+-            genEpilogRestoreRegPair(reg1, reg2, spOffset, stackDelta, REG_IP0, nullptr);
++            genEpilogRestoreRegPair(reg1, reg2, spOffset, stackDelta, REG_IP1, nullptr);
+         }
+         else
+         {
+-            genEpilogRestoreReg(reg2, spOffset, stackDelta, REG_IP0, nullptr);
++            genEpilogRestoreReg(reg2, spOffset, stackDelta, REG_IP1, nullptr);
+         }
+     }
+ 
+diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
+index 4b1de0e..aafeaec 100644
+--- a/src/jit/codegencommon.cpp
++++ b/src/jit/codegencommon.cpp
+@@ -6824,7 +6824,7 @@ void CodeGen::genPopCalleeSavedRegistersAndFreeLclFrame(bool jmpEpilog)
+                 // Generate:
+                 //      ldp fp,lr,[sp]
+                 //      add sp,sp,#remainingFrameSz
+-                genEpilogRestoreRegPair(REG_FP, REG_LR, alignmentAdjustment2, spAdjustment2, REG_IP0, nullptr);
++                genEpilogRestoreRegPair(REG_FP, REG_LR, alignmentAdjustment2, spAdjustment2, REG_IP1, nullptr);
+             }
+             else
+             {
+@@ -6842,7 +6842,7 @@ void CodeGen::genPopCalleeSavedRegistersAndFreeLclFrame(bool jmpEpilog)
+                 //      add sp,sp,#remainingFrameSz     ; might need to load this constant in a scratch register if
+                 //                                      ; it's large
+ 
+-                genEpilogRestoreRegPair(REG_FP, REG_LR, compiler->lvaOutgoingArgSpaceSize, remainingFrameSz, REG_IP0,
++                genEpilogRestoreRegPair(REG_FP, REG_LR, compiler->lvaOutgoingArgSpaceSize, remainingFrameSz, REG_IP1,
+                                         nullptr);
+             }
+ 
+-- 
+2.7.4
+
