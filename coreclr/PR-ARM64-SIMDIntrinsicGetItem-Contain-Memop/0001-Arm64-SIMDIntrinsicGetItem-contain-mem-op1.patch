@@ -1,0 +1,227 @@
+From 909229f5ac5b33ff08244244f55c37da531bd89f Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 28 Nov 2017 19:46:43 -0500
+Subject: [PATCH] [Arm64] SIMDIntrinsicGetItem contain mem op1
+
+---
+ src/jit/codegenarm64.cpp | 102 ++++++++++++++++++++++++++++++++++++++++++++---
+ src/jit/lowerarmarch.cpp |  12 +++++-
+ src/jit/lsraarm64.cpp    |  30 +++++++++++---
+ 3 files changed, 130 insertions(+), 14 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 1fa486c..20e71a7 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -4578,13 +4578,104 @@ void CodeGen::genSIMDIntrinsicGetItem(GenTreeSIMD* simdNode)
+     // - the source of SIMD type (op1)
+     // - the index of the value to be returned.
+     genConsumeOperands(simdNode);
+-    regNumber srcReg = op1->gtRegNum;
+ 
+-    // TODO-ARM64-CQ Optimize SIMDIntrinsicGetItem
++    emitAttr baseTypeSize  = emitTypeSize(baseType);
++    unsigned baseTypeScale = genLog2(EA_SIZE_IN_BYTES(baseTypeSize));
++
++    if (op1->isContained())
++    {
+         // Optimize the case of op1 is in memory and trying to access ith element.
+-    assert(op1->isUsedFromReg());
++        assert(!op1->isUsedFromReg());
+ 
+-    emitAttr baseTypeSize = emitTypeSize(baseType);
++        if (op1->OperIsLocal())
++        {
++            unsigned varNum = op1->gtLclVarCommon.gtLclNum;
++
++            if (op2->IsCnsIntOrI())
++            {
++                assert(op2->isContained());
++
++                ssize_t index = op2->gtIntCon.gtIconVal;
++
++                if (getEmitter()->isValidVectorIndex(emitTypeSize(simdType), baseTypeSize, index))
++                {
++                    // Only generate code for the get if the index is valid
++                    // Otherwise generated code will throw
++                    int offset = (int)index * genTypeSize(baseType);
++
++                    instruction ins = ins_Load(baseType);
++                    baseTypeSize    = varTypeIsFloating(baseType)
++                                       ? baseTypeSize
++                                       : getEmitter()->emitInsAdjustLoadStoreAttr(ins, baseTypeSize);
++
++                    getEmitter()->emitIns_R_S(ins, baseTypeSize, targetReg, varNum, offset);
++                }
++            }
++            else
++            {
++                assert(!op2->isContained());
++
++                regNumber indexReg = op2->gtRegNum;
++                regNumber tmpReg   = simdNode->ExtractTempReg();
++
++                assert(genIsValidIntReg(indexReg));
++                assert(genIsValidIntReg(tmpReg));
++
++                // Load the address of varNum
++                getEmitter()->emitIns_R_S(INS_lea, EA_PTRSIZE, tmpReg, varNum, 0);
++
++                // Load item at varNum[index]
++                getEmitter()->emitIns_R_R_R_Ext(ins_Load(baseType), baseTypeSize, targetReg, tmpReg, indexReg,
++                                                INS_OPTS_LSL, baseTypeScale);
++            }
++        }
++        else
++        {
++            // Require GT_IND addr to be not contained.
++            assert(op1->OperGet() == GT_IND);
++
++            GenTree* addr = op1->AsIndir()->Addr();
++            assert(!addr->isContained());
++            regNumber baseReg = addr->gtRegNum;
++
++            if (op2->IsCnsIntOrI())
++            {
++                assert(op2->isContained());
++
++                ssize_t index = op2->gtIntCon.gtIconVal;
++
++                if (getEmitter()->isValidVectorIndex(emitTypeSize(simdType), baseTypeSize, index))
++                {
++                    // Only generate code for the get if the index is valid
++                    // Otherwise generated code will throw
++                    int offset = (int)index * genTypeSize(baseType);
++
++                    instruction ins = ins_Load(baseType);
++                    baseTypeSize    = varTypeIsFloating(baseType)
++                                       ? baseTypeSize
++                                       : getEmitter()->emitInsAdjustLoadStoreAttr(ins, baseTypeSize);
++
++                    // ldr targetReg, [baseReg, #offset]
++                    getEmitter()->emitIns_R_R_I(ins, baseTypeSize, targetReg, baseReg, offset);
++                }
++            }
++            else
++            {
++                assert(!op2->isContained());
++
++                regNumber indexReg = op2->gtRegNum;
++                assert(genIsValidIntReg(indexReg));
++
++                // ldr targetReg, [baseReg, indexReg LSL baseTypeScale]
++                getEmitter()->emitIns_R_R_R_Ext(ins_Load(baseType), baseTypeSize, targetReg, baseReg, indexReg,
++                                                INS_OPTS_LSL, baseTypeScale);
++            }
++        }
++    }
++    else
++    {
++        assert(op1->isUsedFromReg());
++        regNumber srcReg = op1->gtRegNum;
+ 
+         if (op2->IsCnsIntOrI())
+         {
+@@ -4610,8 +4701,6 @@ void CodeGen::genSIMDIntrinsicGetItem(GenTreeSIMD* simdNode)
+             assert(genIsValidIntReg(tmpReg));
+             assert(tmpReg != indexReg);
+ 
+-        unsigned baseTypeScale = genLog2(EA_SIZE_IN_BYTES(baseTypeSize));
+-
+             // Load the address of simdInitTempVarNum
+             getEmitter()->emitIns_R_S(INS_lea, EA_PTRSIZE, tmpReg, simdInitTempVarNum, 0);
+ 
+@@ -4622,6 +4711,7 @@ void CodeGen::genSIMDIntrinsicGetItem(GenTreeSIMD* simdNode)
+             getEmitter()->emitIns_R_R_R_Ext(ins_Load(baseType), baseTypeSize, targetReg, tmpReg, indexReg, INS_OPTS_LSL,
+                                             baseTypeScale);
+         }
++    }
+ 
+     genProduceReg(simdNode);
+ }
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index 51d4a3b..531dc44 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -785,12 +785,11 @@ void Lowering::ContainCheckSIMD(GenTreeSIMD* simdNode)
+ 
+         case SIMDIntrinsicGetItem:
+         {
+-            // TODO-ARM64-CQ Support containing op1 memory ops
+-
+             // This implements get_Item method. The sources are:
+             //  - the source SIMD struct
+             //  - index (which element to get)
+             // The result is baseType of SIMD struct.
++            op1 = simdNode->gtOp.gtOp1;
+             op2 = simdNode->gtOp.gtOp2;
+ 
+             // If the index is a constant, mark it as contained.
+@@ -798,6 +797,15 @@ void Lowering::ContainCheckSIMD(GenTreeSIMD* simdNode)
+             {
+                 MakeSrcContained(simdNode, op2);
+             }
++
++            if (IsContainableMemoryOp(op1))
++            {
++                MakeSrcContained(simdNode, op1);
++                if (op1->OperGet() == GT_IND)
++                {
++                    op1->AsIndir()->Addr()->ClearContained();
++                }
++            }
+             break;
+         }
+ 
+diff --git a/src/jit/lsraarm64.cpp b/src/jit/lsraarm64.cpp
+index 22fb56e..ce4b9f8 100644
+--- a/src/jit/lsraarm64.cpp
++++ b/src/jit/lsraarm64.cpp
+@@ -816,20 +816,38 @@ void LinearScan::TreeNodeInfoInitSIMD(GenTreeSIMD* simdTree)
+ 
+         case SIMDIntrinsicGetItem:
+             // We have an object and an item, which may be contained.
+-            info->srcCount = simdTree->gtGetOp2()->isContained() ? 1 : 2;
++            info->srcCount = (simdTree->gtGetOp2()->isContained() ? 1 : 2);
++
++            op1 = simdTree->gtGetOp1();
+ 
+-            if (!simdTree->gtGetOp2()->IsCnsIntOrI())
++            if (op1->isContained())
+             {
+-                // If the index is not a constant, we will need a general purpose register
+-                info->internalIntCount = 1;
++                // Although GT_IND of TYP_SIMD12 reserves an internal register for reading 4 and 8 bytes from memory
++                // and assembling them into target reg, it is not required in this case.
++                op1->gtLsraInfo.internalIntCount   = 0;
++                op1->gtLsraInfo.internalFloatCount = 0;
++                info->srcCount -= 1;
++                info->srcCount += GetOperandSourceCount(op1);
++            }
+ 
+-                // If the index is not a constant, we will use the SIMD temp location to store the vector.
+-                compiler->getSIMDInitTempVarNum();
++            if (!simdTree->gtGetOp2()->IsCnsIntOrI() &&
++                (!simdTree->gtGetOp1()->isContained() || simdTree->gtGetOp1()->OperIsLocal()))
++            {
++                // If the index is not a constant and not contained or is a local
++                // we will need a general purpose register to calculate the address
++                info->internalIntCount = 1;
+ 
+                 // internal register must not clobber input index
+                 simdTree->gtOp.gtOp2->gtLsraInfo.isDelayFree = true;
+                 info->hasDelayFreeSrc                        = true;
+             }
++
++            if (!simdTree->gtGetOp2()->IsCnsIntOrI() && (!simdTree->gtGetOp1()->isContained()))
++            {
++                // If vector is not already in memory (contained) and the index is not a constant,
++                // we will use the SIMD temp location to store the vector.
++                compiler->getSIMDInitTempVarNum();
++            }
+             break;
+ 
+         case SIMDIntrinsicAdd:
+-- 
+2.7.4
+
