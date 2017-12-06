@@ -1,0 +1,139 @@
+From 4527a26a61bb0d5b80ecb4411de0ad0f3a0199af Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 6 Dec 2017 13:40:15 -0500
+Subject: [PATCH] [Arm64] Define ISA feature flags
+
+---
+ src/inc/corjit.h | 36 ++++++++++++++++++++++++++++++++++--
+ src/jit/jitee.h  | 36 ++++++++++++++++++++++++++++++++++--
+ 2 files changed, 68 insertions(+), 4 deletions(-)
+
+diff --git a/src/inc/corjit.h b/src/inc/corjit.h
+index 6f217f1..f53c8c2 100644
+--- a/src/inc/corjit.h
++++ b/src/inc/corjit.h
+@@ -161,6 +161,28 @@ public:
+ 
+         CORJIT_FLAG_NO_INLINING             = 42, // JIT should not inline any called method into this method
+ 
++#if defined(_TARGET_ARM64_)
++
++        CORJIT_FLAG_HAS_AES                 = 43, // ID_AA64ISAR0_EL1.AES is 1 or better
++        CORJIT_FLAG_HAS_ATOMICS             = 44, // ID_AA64ISAR0_EL1.Atomic is 2 or better
++        CORJIT_FLAG_HAS_CRC32               = 45, // ID_AA64ISAR0_EL1.CRC32 is 1 or better
++        CORJIT_FLAG_HAS_DP                  = 46, // ID_AA64ISAR0_EL1.DP is 1 or better
++        CORJIT_FLAG_HAS_FP                  = 47, // ID_AA64PFR0_EL1.FP is 0 or better
++        CORJIT_FLAG_HAS_FP16                = 48, // ID_AA64PFR0_EL1.FP is 1 or better
++        CORJIT_FLAG_HAS_PMULL               = 49, // ID_AA64ISAR0_EL1.AES is 2 or better
++        CORJIT_FLAG_HAS_RAS                 = 50, // ID_AA64PFR0_EL1.RAS is 1 or better
++        CORJIT_FLAG_HAS_SHA1                = 51, // ID_AA64ISAR0_EL1.SHA1 is 1 or better
++        CORJIT_FLAG_HAS_SHA2                = 52, // ID_AA64ISAR0_EL1.SHA2 is 1 or better
++        CORJIT_FLAG_HAS_SHA512              = 53, // ID_AA64ISAR0_EL1.SHA2 is 2 or better
++        CORJIT_FLAG_HAS_SHA3                = 54, // ID_AA64ISAR0_EL1.SHA3 is 1 or better
++        CORJIT_FLAG_HAS_SIMD                = 55, // ID_AA64PFR0_EL1.AdvSIMD is 0 or better
++        CORJIT_FLAG_HAS_SIMD_V81            = 56, // ID_AA64ISAR0_EL1.RDM is 1 or better
++        CORJIT_FLAG_HAS_SIMD_FP16           = 57, // ID_AA64PFR0_EL1.AdvSIMD is 1 or better
++        CORJIT_FLAG_HAS_SM3                 = 58, // ID_AA64ISAR0_EL1.SM3 is 1 or better
++        CORJIT_FLAG_HAS_SM4                 = 59, // ID_AA64ISAR0_EL1.SM4 is 1 or better
++        CORJIT_FLAG_HAS_SVE                 = 60  // ID_AA64PFR0_EL1.SVE is 1 or better
++
++#else // !defined(_TARGET_ARM64_)
+ #if defined(_TARGET_X86_) || defined(_TARGET_AMD64_)
+ 
+         CORJIT_FLAG_USE_SSE3                = 43,
+@@ -173,7 +195,7 @@ public:
+         CORJIT_FLAG_USE_FMA                 = 50,
+         CORJIT_FLAG_USE_LZCNT               = 51,
+         CORJIT_FLAG_USE_PCLMULQDQ           = 52,
+-        CORJIT_FLAG_USE_POPCNT              = 53
++        CORJIT_FLAG_USE_POPCNT              = 53,
+         
+ 
+ #else // !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
+@@ -188,9 +210,19 @@ public:
+         CORJIT_FLAG_UNUSED19                = 50,
+         CORJIT_FLAG_UNUSED20                = 51,
+         CORJIT_FLAG_UNUSED21                = 52,
+-        CORJIT_FLAG_UNUSED22                = 53
++        CORJIT_FLAG_UNUSED22                = 53,
+ 
+ #endif // !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
++
++        CORJIT_FLAG_UNUSED23                = 54,
++        CORJIT_FLAG_UNUSED24                = 55,
++        CORJIT_FLAG_UNUSED25                = 56,
++        CORJIT_FLAG_UNUSED26                = 57,
++        CORJIT_FLAG_UNUSED27                = 58,
++        CORJIT_FLAG_UNUSED28                = 59,
++        CORJIT_FLAG_UNUSED29                = 60
++
++#endif // !defined(_TARGET_ARM64_)
+     };
+ 
+     CORJIT_FLAGS()
+diff --git a/src/jit/jitee.h b/src/jit/jitee.h
+index 3da1093..018b858 100644
+--- a/src/jit/jitee.h
++++ b/src/jit/jitee.h
+@@ -93,6 +93,28 @@ public:
+ 
+         JIT_FLAG_NO_INLINING             = 42, // JIT should not inline any called method into this method
+ 
++#if defined(_TARGET_ARM64_)
++
++        JIT_FLAG_HAS_AES                 = 43, // ID_AA64ISAR0_EL1.AES is 1 or better
++        JIT_FLAG_HAS_ATOMICS             = 44, // ID_AA64ISAR0_EL1.Atomic is 2 or better
++        JIT_FLAG_HAS_CRC32               = 45, // ID_AA64ISAR0_EL1.CRC32 is 1 or better
++        JIT_FLAG_HAS_DP                  = 46, // ID_AA64ISAR0_EL1.DP is 1 or better
++        JIT_FLAG_HAS_FP                  = 47, // ID_AA64PFR0_EL1.FP is 0 or better
++        JIT_FLAG_HAS_FP16                = 48, // ID_AA64PFR0_EL1.FP is 1 or better
++        JIT_FLAG_HAS_PMULL               = 49, // ID_AA64ISAR0_EL1.AES is 2 or better
++        JIT_FLAG_HAS_RAS                 = 50, // ID_AA64PFR0_EL1.RAS is 1 or better
++        JIT_FLAG_HAS_SHA1                = 51, // ID_AA64ISAR0_EL1.SHA1 is 1 or better
++        JIT_FLAG_HAS_SHA2                = 52, // ID_AA64ISAR0_EL1.SHA2 is 1 or better
++        JIT_FLAG_HAS_SHA512              = 53, // ID_AA64ISAR0_EL1.SHA2 is 2 or better
++        JIT_FLAG_HAS_SHA3                = 54, // ID_AA64ISAR0_EL1.SHA3 is 1 or better
++        JIT_FLAG_HAS_SIMD                = 55, // ID_AA64PFR0_EL1.AdvSIMD is 0 or better
++        JIT_FLAG_HAS_SIMD_V81            = 56, // ID_AA64ISAR0_EL1.RDM is 1 or better
++        JIT_FLAG_HAS_SIMD_FP16           = 57, // ID_AA64PFR0_EL1.AdvSIMD is 1 or better
++        JIT_FLAG_HAS_SM3                 = 58, // ID_AA64ISAR0_EL1.SM3 is 1 or better
++        JIT_FLAG_HAS_SM4                 = 59, // ID_AA64ISAR0_EL1.SM4 is 1 or better
++        JIT_FLAG_HAS_SVE                 = 60  // ID_AA64PFR0_EL1.SVE is 1 or better
++
++#else // !defined(_TARGET_ARM64_)
+ #if defined(_TARGET_X86_) || defined(_TARGET_AMD64_)
+ 
+         JIT_FLAG_USE_SSE3                = 43,
+@@ -105,7 +127,7 @@ public:
+         JIT_FLAG_USE_FMA                 = 50,
+         JIT_FLAG_USE_LZCNT               = 51,
+         JIT_FLAG_USE_PCLMULQDQ           = 52,
+-        JIT_FLAG_USE_POPCNT              = 53
++        JIT_FLAG_USE_POPCNT              = 53,
+         
+ 
+ #else // !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
+@@ -120,9 +142,19 @@ public:
+         JIT_FLAG_UNUSED19                = 50,
+         JIT_FLAG_UNUSED20                = 51,
+         JIT_FLAG_UNUSED21                = 52,
+-        JIT_FLAG_UNUSED22                = 53
++        JIT_FLAG_UNUSED22                = 53,
+ 
+ #endif // !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
++
++        JIT_FLAG_UNUSED23                = 54,
++        JIT_FLAG_UNUSED24                = 55,
++        JIT_FLAG_UNUSED25                = 56,
++        JIT_FLAG_UNUSED26                = 57,
++        JIT_FLAG_UNUSED27                = 58,
++        JIT_FLAG_UNUSED28                = 59,
++        JIT_FLAG_UNUSED29                = 60
++
++#endif // !defined(_TARGET_ARM64_)
+     };
+     // clang-format on
+ 
+-- 
+2.7.4
+
