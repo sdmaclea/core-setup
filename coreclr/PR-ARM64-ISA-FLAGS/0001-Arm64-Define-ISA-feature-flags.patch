@@ -1,27 +1,27 @@
-From 683cc1e0417e7c56eba50d7f2d7d62c27ee43e97 Mon Sep 17 00:00:00 2001
+From c3bc5857110bafc2238a5954eb5fd4da36388203 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 6 Dec 2017 13:40:15 -0500
 Subject: [PATCH] [Arm64] Define ISA feature flags
 
 ---
- src/inc/corinfo.h | 10 +++++-----
+ src/inc/corinfo.h | 27 ++++++---------------------
  src/inc/corjit.h  | 56 +++++++++++++++++++++++++++++++++++++++++++++++++------
  src/jit/jitee.h   | 55 +++++++++++++++++++++++++++++++++++++++++++++++++-----
- 3 files changed, 105 insertions(+), 16 deletions(-)
+ 3 files changed, 106 insertions(+), 32 deletions(-)
 
 diff --git a/src/inc/corinfo.h b/src/inc/corinfo.h
-index cd48999..09e622a 100644
+index 264cde6..09e622a 100644
 --- a/src/inc/corinfo.h
 +++ b/src/inc/corinfo.h
 @@ -213,11 +213,11 @@ TODO: Talk about initializing strutures before use
      #define SELECTANY extern __declspec(selectany)
  #endif
  
--SELECTANY const GUID JITEEVersionIdentifier = { /* b6af83a1-ca48-46c6-b7b0-5d7d6a79a5c5 */
--    0xb6af83a1,
--    0xca48,
--    0x46c6,
--    {0xb7, 0xb0, 0x5d, 0x7d, 0x6a, 0x79, 0xa5, 0xc5}
+-SELECTANY const GUID JITEEVersionIdentifier = { /* EBEE9A84-63C3-4610-9E4F-05491D335D67 */
+-    0xebee9a84, 
+-    0x63c3, 
+-    0x4610, 
+-    { 0x9e, 0x4f, 0x5, 0x49, 0x1d, 0x33, 0x5d, 0x67 } 
 +SELECTANY const GUID JITEEVersionIdentifier = { /* 01c3d216-a404-4290-8278-ac27a4793d31 */
 +    0x01c3d216,
 +    0xa404,
@@ -30,8 +30,39 @@ index cd48999..09e622a 100644
  };
  
  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+@@ -809,7 +809,7 @@ enum CorInfoFlag
+     CORINFO_FLG_VIRTUAL               = 0x00000040,
+ //  CORINFO_FLG_UNUSED                = 0x00000080,
+     CORINFO_FLG_NATIVE                = 0x00000100,
+-    CORINFO_FLG_INTRINSIC_TYPE        = 0x00000200, // This type is marked by [Intrinsic]
++//  CORINFO_FLG_UNUSED                = 0x00000200,
+     CORINFO_FLG_ABSTRACT              = 0x00000400,
+ 
+     CORINFO_FLG_EnC                   = 0x00000800, // member was added by Edit'n'Continue
+@@ -2281,21 +2281,6 @@ public:
+             CORINFO_CLASS_HANDLE    cls
+             ) = 0;
+ 
+-    // Return class name as in metadata, or nullptr if there is none.
+-    // Suitable for non-debugging use.
+-    virtual const char* getClassNameFromMetadata (
+-            CORINFO_CLASS_HANDLE    cls,
+-            const char            **namespaceName   /* OUT */
+-            ) = 0;
+-
+-    // Return the type argument of the instantiated generic class,
+-    // which is specified by the index
+-    virtual CORINFO_CLASS_HANDLE getTypeInstantiationArgument(
+-            CORINFO_CLASS_HANDLE cls, 
+-            unsigned             index
+-            ) = 0;
+-    
+-
+     // Append a (possibly truncated) representation of the type cls to the preallocated buffer ppBuf of length pnBufLen
+     // If fNamespace=TRUE, include the namespace/enclosing classes
+     // If fFullInst=TRUE (regardless of fNamespace and fAssembly), include namespace and assembly for any type parameters
 diff --git a/src/inc/corjit.h b/src/inc/corjit.h
-index 6f217f1..b6012aa 100644
+index 6f217f1..91cfb26 100644
 --- a/src/inc/corjit.h
 +++ b/src/inc/corjit.h
 @@ -161,7 +161,31 @@ public:
@@ -86,7 +117,7 @@ index 6f217f1..b6012aa 100644
          
  
 -#else // !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
-+#else // !defined(_TARGET_ARM64_) &&!defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
++#else // !defined(_TARGET_ARM64_) && !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
  
          CORJIT_FLAG_UNUSED12                = 43,
          CORJIT_FLAG_UNUSED13                = 44,
@@ -109,7 +140,7 @@ index 6f217f1..b6012aa 100644
 +        CORJIT_FLAG_UNUSED31                = 62,
 +        CORJIT_FLAG_UNUSED32                = 63
 +
-+#endif // !defined(_TARGET_ARM64_) &&!defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
++#endif // !defined(_TARGET_ARM64_) && !defined(_TARGET_X86_) && !defined(_TARGET_AMD64_)
      };
  
      CORJIT_FLAGS()
