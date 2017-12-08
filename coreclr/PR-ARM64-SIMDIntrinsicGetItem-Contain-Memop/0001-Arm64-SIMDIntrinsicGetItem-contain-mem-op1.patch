@@ -1,4 +1,4 @@
-From a8d88edcc3324e36233d49cfb60292fb23ceb102 Mon Sep 17 00:00:00 2001
+From 1c3336ef7c0d832f68922572a00901dba1d15bbb Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 28 Nov 2017 19:46:43 -0500
 Subject: [PATCH] [Arm64] SIMDIntrinsicGetItem contain mem op1
@@ -6,8 +6,8 @@ Subject: [PATCH] [Arm64] SIMDIntrinsicGetItem contain mem op1
 ---
  src/jit/codegenarm64.cpp | 98 +++++++++++++++++++++++++++++++++++++++---------
  src/jit/lowerarmarch.cpp | 12 +++++-
- src/jit/lsraarm64.cpp    | 30 ++++++++++++---
- 3 files changed, 115 insertions(+), 25 deletions(-)
+ src/jit/lsraarm64.cpp    | 32 ++++++++++++----
+ 3 files changed, 116 insertions(+), 26 deletions(-)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
 index da9c7bf..e63d961 100644
@@ -178,17 +178,19 @@ index 2316501..5aa3ff1 100644
          }
  
 diff --git a/src/jit/lsraarm64.cpp b/src/jit/lsraarm64.cpp
-index 22fb56e..ce4b9f8 100644
+index 22fb56e..7c9b601 100644
 --- a/src/jit/lsraarm64.cpp
 +++ b/src/jit/lsraarm64.cpp
-@@ -816,20 +816,38 @@ void LinearScan::TreeNodeInfoInitSIMD(GenTreeSIMD* simdTree)
+@@ -815,21 +815,39 @@ void LinearScan::TreeNodeInfoInitSIMD(GenTreeSIMD* simdTree)
+             break;
  
          case SIMDIntrinsicGetItem:
++            op1 = simdTree->gtGetOp1();
++            op2 = simdTree->gtGetOp2();
++
              // We have an object and an item, which may be contained.
 -            info->srcCount = simdTree->gtGetOp2()->isContained() ? 1 : 2;
-+            info->srcCount = (simdTree->gtGetOp2()->isContained() ? 1 : 2);
-+
-+            op1 = simdTree->gtGetOp1();
++            info->srcCount = (op2->isContained() ? 1 : 2);
  
 -            if (!simdTree->gtGetOp2()->IsCnsIntOrI())
 +            if (op1->isContained())
@@ -205,19 +207,19 @@ index 22fb56e..ce4b9f8 100644
  
 -                // If the index is not a constant, we will use the SIMD temp location to store the vector.
 -                compiler->getSIMDInitTempVarNum();
-+            if (!simdTree->gtGetOp2()->IsCnsIntOrI() &&
-+                (!simdTree->gtGetOp1()->isContained() || simdTree->gtGetOp1()->OperIsLocal()))
++            if (!op2->IsCnsIntOrI() && (!op1->isContained() || op1->OperIsLocal()))
 +            {
 +                // If the index is not a constant and not contained or is a local
 +                // we will need a general purpose register to calculate the address
 +                info->internalIntCount = 1;
  
                  // internal register must not clobber input index
-                 simdTree->gtOp.gtOp2->gtLsraInfo.isDelayFree = true;
-                 info->hasDelayFreeSrc                        = true;
+-                simdTree->gtOp.gtOp2->gtLsraInfo.isDelayFree = true;
++                op2->gtLsraInfo.isDelayFree = true;
+                 info->hasDelayFreeSrc       = true;
              }
 +
-+            if (!simdTree->gtGetOp2()->IsCnsIntOrI() && (!simdTree->gtGetOp1()->isContained()))
++            if (!op2->IsCnsIntOrI() && (!op1->isContained()))
 +            {
 +                // If vector is not already in memory (contained) and the index is not a constant,
 +                // we will use the SIMD temp location to store the vector.
