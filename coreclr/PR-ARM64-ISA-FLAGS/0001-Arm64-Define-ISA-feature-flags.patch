@@ -1,16 +1,16 @@
-From c3bc5857110bafc2238a5954eb5fd4da36388203 Mon Sep 17 00:00:00 2001
+From 31197318767f1b0d1b496c50da231d4f899b3f0b Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 6 Dec 2017 13:40:15 -0500
 Subject: [PATCH] [Arm64] Define ISA feature flags
 
 ---
- src/inc/corinfo.h | 27 ++++++---------------------
+ src/inc/corinfo.h | 10 +++++-----
  src/inc/corjit.h  | 56 +++++++++++++++++++++++++++++++++++++++++++++++++------
  src/jit/jitee.h   | 55 +++++++++++++++++++++++++++++++++++++++++++++++++-----
- 3 files changed, 106 insertions(+), 32 deletions(-)
+ 3 files changed, 105 insertions(+), 16 deletions(-)
 
 diff --git a/src/inc/corinfo.h b/src/inc/corinfo.h
-index 264cde6..09e622a 100644
+index 264cde6..287f44f 100644
 --- a/src/inc/corinfo.h
 +++ b/src/inc/corinfo.h
 @@ -213,11 +213,11 @@ TODO: Talk about initializing strutures before use
@@ -30,37 +30,6 @@ index 264cde6..09e622a 100644
  };
  
  //////////////////////////////////////////////////////////////////////////////////////////////////////////
-@@ -809,7 +809,7 @@ enum CorInfoFlag
-     CORINFO_FLG_VIRTUAL               = 0x00000040,
- //  CORINFO_FLG_UNUSED                = 0x00000080,
-     CORINFO_FLG_NATIVE                = 0x00000100,
--    CORINFO_FLG_INTRINSIC_TYPE        = 0x00000200, // This type is marked by [Intrinsic]
-+//  CORINFO_FLG_UNUSED                = 0x00000200,
-     CORINFO_FLG_ABSTRACT              = 0x00000400,
- 
-     CORINFO_FLG_EnC                   = 0x00000800, // member was added by Edit'n'Continue
-@@ -2281,21 +2281,6 @@ public:
-             CORINFO_CLASS_HANDLE    cls
-             ) = 0;
- 
--    // Return class name as in metadata, or nullptr if there is none.
--    // Suitable for non-debugging use.
--    virtual const char* getClassNameFromMetadata (
--            CORINFO_CLASS_HANDLE    cls,
--            const char            **namespaceName   /* OUT */
--            ) = 0;
--
--    // Return the type argument of the instantiated generic class,
--    // which is specified by the index
--    virtual CORINFO_CLASS_HANDLE getTypeInstantiationArgument(
--            CORINFO_CLASS_HANDLE cls, 
--            unsigned             index
--            ) = 0;
--    
--
-     // Append a (possibly truncated) representation of the type cls to the preallocated buffer ppBuf of length pnBufLen
-     // If fNamespace=TRUE, include the namespace/enclosing classes
-     // If fFullInst=TRUE (regardless of fNamespace and fAssembly), include namespace and assembly for any type parameters
 diff --git a/src/inc/corjit.h b/src/inc/corjit.h
 index 6f217f1..91cfb26 100644
 --- a/src/inc/corjit.h
