@@ -1,0 +1,25 @@
+From 56f3aee98b08d37206c19b3efe2c8b009c0fab80 Mon Sep 17 00:00:00 2001
+From: Jan Kotas <jkotas@microsoft.com>
+Date: Tue, 12 Dec 2017 11:47:30 -0500
+Subject: [PATCH] Correct sizeToCommit rounding (#15485)
+
+---
+ src/vm/dynamicmethod.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/vm/dynamicmethod.cpp b/src/vm/dynamicmethod.cpp
+index 129ae19..aa9b73e 100644
+--- a/src/vm/dynamicmethod.cpp
++++ b/src/vm/dynamicmethod.cpp
+@@ -715,7 +715,7 @@ HostCodeHeap::TrackAllocation* HostCodeHeap::AllocMemory_NoThrow(size_t header,
+ 
+         _ASSERTE(totalRequiredSize > availableInFreeList);
+         size_t sizeToCommit = totalRequiredSize - availableInFreeList;
+-        sizeToCommit = ROUND_UP_TO_PAGE(size); // round up to page
++        sizeToCommit = ROUND_UP_TO_PAGE(sizeToCommit);
+ 
+         if (m_pLastAvailableCommittedAddr + sizeToCommit <= m_pBaseAddr + m_TotalBytesAvailable)
+         {
+-- 
+2.7.4
+

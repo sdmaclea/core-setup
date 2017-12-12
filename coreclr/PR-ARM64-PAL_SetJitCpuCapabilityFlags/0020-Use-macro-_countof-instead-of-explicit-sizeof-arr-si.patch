@@ -1,0 +1,550 @@
+From 82a96afda22c869b67058971a403c87ab51de2c1 Mon Sep 17 00:00:00 2001
+From: Egor Chesakov <Egor.Chesakov@microsoft.com>
+Date: Tue, 12 Dec 2017 06:31:00 -0800
+Subject: [PATCH] Use macro _countof instead of explicit sizeof(arr) /
+ sizeof(arr[0]) or sizeof(arr) / sizeof(*arr) in clrjit. (#15474)
+
+---
+ src/jit/assertionprop.cpp |  2 +-
+ src/jit/codegenlegacy.cpp |  2 +-
+ src/jit/compiler.cpp      |  4 ++--
+ src/jit/compiler.hpp      |  4 ++--
+ src/jit/disasm.cpp        | 10 +++++-----
+ src/jit/emit.cpp          |  4 ++--
+ src/jit/emitxarch.cpp     | 24 ++++++++++++------------
+ src/jit/gentree.cpp       |  8 ++++----
+ src/jit/importer.cpp      |  4 ++--
+ src/jit/inline.cpp        |  2 +-
+ src/jit/instr.cpp         |  4 ++--
+ src/jit/jithashtable.h    |  2 +-
+ src/jit/lclvars.cpp       |  2 +-
+ src/jit/regalloc.cpp      |  8 ++++----
+ src/jit/regset.cpp        |  2 +-
+ src/jit/simd.cpp          |  2 +-
+ src/jit/smdata.cpp        |  2 +-
+ src/jit/smweights.cpp     |  2 +-
+ src/jit/stackfp.cpp       |  2 +-
+ src/jit/unwindarm.cpp     |  2 +-
+ src/jit/utils.cpp         |  2 +-
+ src/jit/valuenum.cpp      |  3 +--
+ 22 files changed, 48 insertions(+), 49 deletions(-)
+
+diff --git a/src/jit/assertionprop.cpp b/src/jit/assertionprop.cpp
+index 912ec07..b0d54b7 100644
+--- a/src/jit/assertionprop.cpp
++++ b/src/jit/assertionprop.cpp
+@@ -542,7 +542,7 @@ void Compiler::optAssertionInit(bool isLocalProp)
+     // Note this tracks at most only 256 assertions.
+     static const AssertionIndex countFunc[] = {64, 128, 256, 64};
+     static const unsigned       lowerBound  = 0;
+-    static const unsigned       upperBound  = sizeof(countFunc) / sizeof(countFunc[0]) - 1;
++    static const unsigned       upperBound  = _countof(countFunc) - 1;
+     const unsigned              codeSize    = info.compILCodeSize / 512;
+     optMaxAssertionCount                    = countFunc[isLocalProp ? lowerBound : min(upperBound, codeSize)];
+ 
+diff --git a/src/jit/codegenlegacy.cpp b/src/jit/codegenlegacy.cpp
+index 3a0c4e3..14e435a 100644
+--- a/src/jit/codegenlegacy.cpp
++++ b/src/jit/codegenlegacy.cpp
+@@ -6178,7 +6178,7 @@ bool CodeGen::genCodeForQmarkWithCMOV(GenTreePtr tree, regMaskTP destReg, regMas
+                                            INS_cmove,  INS_cmovne, INS_cmovbe, INS_cmova,  INS_cmovs,  INS_cmovns,
+                                            INS_cmovpe, INS_cmovpo, INS_cmovl,  INS_cmovge, INS_cmovle, INS_cmovg};
+ 
+-    noway_assert((unsigned)jumpKind < (sizeof(EJtoCMOV) / sizeof(EJtoCMOV[0])));
++    noway_assert((unsigned)jumpKind < _countof(EJtoCMOV));
+     instruction cmov_ins = EJtoCMOV[jumpKind];
+ 
+     noway_assert(insIsCMOV(cmov_ins));
+diff --git a/src/jit/compiler.cpp b/src/jit/compiler.cpp
+index a09b820..aaebe35 100644
+--- a/src/jit/compiler.cpp
++++ b/src/jit/compiler.cpp
+@@ -7818,7 +7818,7 @@ void CompTimeSummaryInfo::Print(FILE* f)
+                 extraHdr2);
+ 
+         // Ensure that at least the names array and the Phases enum have the same number of entries:
+-        assert(sizeof(PhaseNames) / sizeof(const char*) == PHASE_NUMBER_OF);
++        assert(_countof(PhaseNames) == PHASE_NUMBER_OF);
+         for (int i = 0; i < PHASE_NUMBER_OF; i++)
+         {
+             double phase_tot_ms  = (((double)m_total.m_cyclesByPhase[i]) / countsPerSec) * 1000.0;
+@@ -7882,7 +7882,7 @@ void CompTimeSummaryInfo::Print(FILE* f)
+         fprintf(f, "     PHASE                            inv/meth Mcycles    time (ms)  %% of total\n");
+         fprintf(f, "     --------------------------------------------------------------------------------------\n");
+         // Ensure that at least the names array and the Phases enum have the same number of entries:
+-        assert(sizeof(PhaseNames) / sizeof(const char*) == PHASE_NUMBER_OF);
++        assert(_countof(PhaseNames) == PHASE_NUMBER_OF);
+         for (int i = 0; i < PHASE_NUMBER_OF; i++)
+         {
+             double phase_tot_ms = (((double)m_filtered.m_cyclesByPhase[i]) / countsPerSec) * 1000.0;
+diff --git a/src/jit/compiler.hpp b/src/jit/compiler.hpp
+index c129d3f..bb3fa30 100644
+--- a/src/jit/compiler.hpp
++++ b/src/jit/compiler.hpp
+@@ -569,7 +569,7 @@ extern const BYTE genTypeSizes[TYP_COUNT];
+ template <class T>
+ inline unsigned genTypeSize(T type)
+ {
+-    assert((unsigned)TypeGet(type) < sizeof(genTypeSizes) / sizeof(genTypeSizes[0]));
++    assert((unsigned)TypeGet(type) < _countof(genTypeSizes));
+ 
+     return genTypeSizes[TypeGet(type)];
+ }
+@@ -584,7 +584,7 @@ extern const BYTE genTypeStSzs[TYP_COUNT];
+ 
+ inline unsigned genTypeStSz(var_types type)
+ {
+-    assert((unsigned)type < sizeof(genTypeStSzs) / sizeof(genTypeStSzs[0]));
++    assert((unsigned)type < _countof(genTypeStSzs));
+ 
+     return genTypeStSzs[type];
+ }
+diff --git a/src/jit/disasm.cpp b/src/jit/disasm.cpp
+index 925f2c3..e76d5b3 100644
+--- a/src/jit/disasm.cpp
++++ b/src/jit/disasm.cpp
+@@ -1106,7 +1106,7 @@ size_t DisAssembler::CbDisassemble(DIS*        pdis,
+     }
+ 
+     wchar_t wz[MAX_CLASSNAME_LENGTH];
+-    pdis->CchFormatInstr(wz, sizeof(wz) / sizeof(wz[0]));
++    pdis->CchFormatInstr(wz, _countof(wz));
+ 
+     if (printit)
+     {
+@@ -1137,7 +1137,7 @@ size_t DisAssembler::CbDisassemble(DIS*        pdis,
+             wchar_t wzBytes[MAX_CLASSNAME_LENGTH];
+             assert(cchBytesMax < MAX_CLASSNAME_LENGTH);
+ 
+-            size_t cchBytes = pdis->CchFormatBytes(wzBytes, sizeof(wzBytes) / sizeof(wzBytes[0]));
++            size_t cchBytes = pdis->CchFormatBytes(wzBytes, _countof(wzBytes));
+ 
+             if (cchBytes > CCH_INDENT)
+             {
+@@ -1172,7 +1172,7 @@ size_t CbDisassembleWithBytes(DIS* pdis, DIS::ADDR addr, const BYTE* pb, size_t
+ 
+     wchar_t wz[MAX_CLASSNAME_LENGTH];
+ 
+-    pdis->CchFormatAddr(addr, wz, sizeof(wz) / sizeof(wz[0]));
++    pdis->CchFormatAddr(addr, wz, _countof(wz));
+ 
+     size_t cchIndent = (size_t)fprintf(pfile, "  %ls: ", wz);
+ 
+@@ -1194,7 +1194,7 @@ size_t CbDisassembleWithBytes(DIS* pdis, DIS::ADDR addr, const BYTE* pb, size_t
+     }
+ 
+     wchar_t wzBytes[64];
+-    size_t  cchBytes = pdis->CchFormatBytes(wzBytes, sizeof(wzBytes) / sizeof(wzBytes[0]));
++    size_t  cchBytes = pdis->CchFormatBytes(wzBytes, _countof(wzBytes));
+ 
+     wchar_t* pwzBytes;
+     wchar_t* pwzNext;
+@@ -1232,7 +1232,7 @@ size_t CbDisassembleWithBytes(DIS* pdis, DIS::ADDR addr, const BYTE* pb, size_t
+ 
+         if (fFirst)
+         {
+-            pdis->CchFormatInstr(wz, sizeof(wz) / sizeof(wz[0]));
++            pdis->CchFormatInstr(wz, _countof(wz));
+             fprintf(pfile, "%-*ls %ls\n", cchBytesMax, pwzBytes, wz);
+         }
+ 
+diff --git a/src/jit/emit.cpp b/src/jit/emit.cpp
+index 936481a..c72deee 100644
+--- a/src/jit/emit.cpp
++++ b/src/jit/emit.cpp
+@@ -92,7 +92,7 @@ const char* emitter::emitIfName(unsigned f)
+ 
+     static char errBuff[32];
+ 
+-    if (f < sizeof(ifNames) / sizeof(*ifNames))
++    if (f < _countof(ifNames))
+     {
+         return ifNames[f];
+     }
+@@ -3118,7 +3118,7 @@ const BYTE emitter::emitFmtToOps[] = {
+ };
+ 
+ #ifdef DEBUG
+-const unsigned emitter::emitFmtCount = sizeof(emitFmtToOps) / sizeof(emitFmtToOps[0]);
++const unsigned emitter::emitFmtCount = _countof(emitFmtToOps);
+ #endif
+ 
+ /*****************************************************************************
+diff --git a/src/jit/emitxarch.cpp b/src/jit/emitxarch.cpp
+index 1e9a89b..b29e653 100644
+--- a/src/jit/emitxarch.cpp
++++ b/src/jit/emitxarch.cpp
+@@ -823,7 +823,7 @@ const BYTE          emitter::emitInsModeFmtTab[] =
+ // clang-format on
+ 
+ #ifdef DEBUG
+-unsigned const emitter::emitInsModeFmtCnt = sizeof(emitInsModeFmtTab) / sizeof(emitInsModeFmtTab[0]);
++unsigned const emitter::emitInsModeFmtCnt = _countof(emitInsModeFmtTab);
+ #endif
+ 
+ /*****************************************************************************
+@@ -938,7 +938,7 @@ inline size_t insCode(instruction ins)
+     };
+     // clang-format on
+ 
+-    assert((unsigned)ins < sizeof(insCodes) / sizeof(insCodes[0]));
++    assert((unsigned)ins < _countof(insCodes));
+     assert((insCodes[ins] != BAD_CODE));
+ 
+     return insCodes[ins];
+@@ -971,7 +971,7 @@ inline size_t insCodeACC(instruction ins)
+     };
+     // clang-format on
+ 
+-    assert((unsigned)ins < sizeof(insCodesACC) / sizeof(insCodesACC[0]));
++    assert((unsigned)ins < _countof(insCodesACC));
+     assert((insCodesACC[ins] != BAD_CODE));
+ 
+     return insCodesACC[ins];
+@@ -1004,7 +1004,7 @@ inline size_t insCodeRR(instruction ins)
+     };
+     // clang-format on
+ 
+-    assert((unsigned)ins < sizeof(insCodesRR) / sizeof(insCodesRR[0]));
++    assert((unsigned)ins < _countof(insCodesRR));
+     assert((insCodesRR[ins] != BAD_CODE));
+ 
+     return insCodesRR[ins];
+@@ -1033,7 +1033,7 @@ size_t          insCodesRM[] =
+ // Returns true iff the give CPU instruction has an RM encoding.
+ inline bool hasCodeRM(instruction ins)
+ {
+-    assert((unsigned)ins < sizeof(insCodesRM) / sizeof(insCodesRM[0]));
++    assert((unsigned)ins < _countof(insCodesRM));
+     return ((insCodesRM[ins] != BAD_CODE));
+ }
+ 
+@@ -1044,7 +1044,7 @@ inline bool hasCodeRM(instruction ins)
+ 
+ inline size_t insCodeRM(instruction ins)
+ {
+-    assert((unsigned)ins < sizeof(insCodesRM) / sizeof(insCodesRM[0]));
++    assert((unsigned)ins < _countof(insCodesRM));
+     assert((insCodesRM[ins] != BAD_CODE));
+ 
+     return insCodesRM[ins];
+@@ -1073,7 +1073,7 @@ size_t          insCodesMI[] =
+ // Returns true iff the give CPU instruction has an MI encoding.
+ inline bool hasCodeMI(instruction ins)
+ {
+-    assert((unsigned)ins < sizeof(insCodesMI) / sizeof(insCodesMI[0]));
++    assert((unsigned)ins < _countof(insCodesMI));
+     return ((insCodesMI[ins] != BAD_CODE));
+ }
+ 
+@@ -1084,7 +1084,7 @@ inline bool hasCodeMI(instruction ins)
+ 
+ inline size_t insCodeMI(instruction ins)
+ {
+-    assert((unsigned)ins < sizeof(insCodesMI) / sizeof(insCodesMI[0]));
++    assert((unsigned)ins < _countof(insCodesMI));
+     assert((insCodesMI[ins] != BAD_CODE));
+ 
+     return insCodesMI[ins];
+@@ -1113,7 +1113,7 @@ size_t          insCodesMR[] =
+ // Returns true iff the give CPU instruction has an MR encoding.
+ inline bool hasCodeMR(instruction ins)
+ {
+-    assert((unsigned)ins < sizeof(insCodesMR) / sizeof(insCodesMR[0]));
++    assert((unsigned)ins < _countof(insCodesMR));
+     return ((insCodesMR[ins] != BAD_CODE));
+ }
+ 
+@@ -1124,7 +1124,7 @@ inline bool hasCodeMR(instruction ins)
+ 
+ inline size_t insCodeMR(instruction ins)
+ {
+-    assert((unsigned)ins < sizeof(insCodesMR) / sizeof(insCodesMR[0]));
++    assert((unsigned)ins < _countof(insCodesMR));
+     assert((insCodesMR[ins] != BAD_CODE));
+ 
+     return insCodesMR[ins];
+@@ -5964,7 +5964,7 @@ const char* emitter::emitXMMregName(unsigned reg)
+     };
+ 
+     assert(reg < REG_COUNT);
+-    assert(reg < sizeof(regNames) / sizeof(regNames[0]));
++    assert(reg < _countof(regNames));
+ 
+     return regNames[reg];
+ }
+@@ -5986,7 +5986,7 @@ const char* emitter::emitYMMregName(unsigned reg)
+     };
+ 
+     assert(reg < REG_COUNT);
+-    assert(reg < sizeof(regNames) / sizeof(regNames[0]));
++    assert(reg < _countof(regNames));
+ 
+     return regNames[reg];
+ }
+diff --git a/src/jit/gentree.cpp b/src/jit/gentree.cpp
+index 8d9a1e9..a07fe34 100644
+--- a/src/jit/gentree.cpp
++++ b/src/jit/gentree.cpp
+@@ -221,7 +221,7 @@ static const char* opNames[] = {
+ 
+ const char* GenTree::OpName(genTreeOps op)
+ {
+-    assert((unsigned)op < sizeof(opNames) / sizeof(opNames[0]));
++    assert((unsigned)op < _countof(opNames));
+ 
+     return opNames[op];
+ }
+@@ -237,7 +237,7 @@ static const char* opStructNames[] = {
+ 
+ const char* GenTree::OpStructName(genTreeOps op)
+ {
+-    assert((unsigned)op < sizeof(opStructNames) / sizeof(opStructNames[0]));
++    assert((unsigned)op < _countof(opStructNames));
+ 
+     return opStructNames[op];
+ }
+@@ -10660,7 +10660,7 @@ int Compiler::gtGetLclVarName(unsigned lclNum, char* buf, unsigned buf_remaining
+ char* Compiler::gtGetLclVarName(unsigned lclNum)
+ {
+     char buf[BUF_SIZE];
+-    int  charsPrinted = gtGetLclVarName(lclNum, buf, sizeof(buf) / sizeof(buf[0]));
++    int  charsPrinted = gtGetLclVarName(lclNum, buf, _countof(buf));
+     if (charsPrinted < 0)
+     {
+         return nullptr;
+@@ -10675,7 +10675,7 @@ char* Compiler::gtGetLclVarName(unsigned lclNum)
+ void Compiler::gtDispLclVar(unsigned lclNum, bool padForBiggestDisp)
+ {
+     char buf[BUF_SIZE];
+-    int  charsPrinted = gtGetLclVarName(lclNum, buf, sizeof(buf) / sizeof(buf[0]));
++    int  charsPrinted = gtGetLclVarName(lclNum, buf, _countof(buf));
+ 
+     if (charsPrinted < 0)
+     {
+diff --git a/src/jit/importer.cpp b/src/jit/importer.cpp
+index f633139..f7513d4 100644
+--- a/src/jit/importer.cpp
++++ b/src/jit/importer.cpp
+@@ -17333,11 +17333,11 @@ void Compiler::impImport(BasicBlock* method)
+ 
+     /* Allocate the stack contents */
+ 
+-    if (info.compMaxStack <= sizeof(impSmallStack) / sizeof(impSmallStack[0]))
++    if (info.compMaxStack <= _countof(impSmallStack))
+     {
+         /* Use local variable, don't waste time allocating on the heap */
+ 
+-        impStkSize              = sizeof(impSmallStack) / sizeof(impSmallStack[0]);
++        impStkSize              = _countof(impSmallStack);
+         verCurrentState.esStack = impSmallStack;
+     }
+     else
+diff --git a/src/jit/inline.cpp b/src/jit/inline.cpp
+index 679ff41..2bff932 100644
+--- a/src/jit/inline.cpp
++++ b/src/jit/inline.cpp
+@@ -1545,7 +1545,7 @@ void InlineStrategy::DumpXml(FILE* file, unsigned indent)
+     strncpy(buf, methodName, sizeof(buf));
+     buf[sizeof(buf) - 1] = 0;
+ 
+-    for (int i = 0; i < sizeof(buf); i++)
++    for (int i = 0; i < _countof(buf); i++)
+     {
+         switch (buf[i])
+         {
+diff --git a/src/jit/instr.cpp b/src/jit/instr.cpp
+index 135ea15..b6d2266 100644
+--- a/src/jit/instr.cpp
++++ b/src/jit/instr.cpp
+@@ -72,7 +72,7 @@ const char* CodeGen::genInsName(instruction ins)
+     };
+     // clang-format on
+ 
+-    assert((unsigned)ins < sizeof(insNames) / sizeof(insNames[0]));
++    assert((unsigned)ins < _countof(insNames));
+     assert(insNames[ins] != nullptr);
+ 
+     return insNames[ins];
+@@ -213,7 +213,7 @@ void CodeGen::instGen(instruction ins)
+ // static inline
+ bool CodeGenInterface::instIsFP(instruction ins)
+ {
+-    assert((unsigned)ins < sizeof(instInfo) / sizeof(instInfo[0]));
++    assert((unsigned)ins < _countof(instInfo));
+ 
+     return (instInfo[ins] & INST_FP) != 0;
+ }
+diff --git a/src/jit/jithashtable.h b/src/jit/jithashtable.h
+index 96ac2e9..e47fa04 100644
+--- a/src/jit/jithashtable.h
++++ b/src/jit/jithashtable.h
+@@ -738,7 +738,7 @@ private:
+     //
+     static JitPrimeInfo NextPrime(unsigned number)
+     {
+-        for (int i = 0; i < (int)(sizeof(jitPrimeInfo) / sizeof(jitPrimeInfo[0])); i++)
++        for (int i = 0; i < (int)(_countof(jitPrimeInfo)); i++)
+         {
+             if (jitPrimeInfo[i].prime >= number)
+             {
+diff --git a/src/jit/lclvars.cpp b/src/jit/lclvars.cpp
+index 959cd6e..2ca5cde 100644
+--- a/src/jit/lclvars.cpp
++++ b/src/jit/lclvars.cpp
+@@ -5753,7 +5753,7 @@ void Compiler::lvaAssignVirtualFrameOffsetsToLocals()
+ 
+     alloc_order[cur] = 0;
+ 
+-    noway_assert(cur < sizeof(alloc_order) / sizeof(alloc_order[0]));
++    noway_assert(cur < _countof(alloc_order));
+ 
+     // Force first pass to happen
+     UINT assignMore             = 0xFFFFFFFF;
+diff --git a/src/jit/regalloc.cpp b/src/jit/regalloc.cpp
+index 6be476a..399962c 100644
+--- a/src/jit/regalloc.cpp
++++ b/src/jit/regalloc.cpp
+@@ -219,7 +219,7 @@ const regNumber* Compiler::raGetRegVarOrder(var_types regType, unsigned* wbVarOr
+     if (varTypeIsFloating(regType))
+     {
+         static const regNumber raRegVarOrderFlt[]   = {REG_VAR_ORDER_FLT};
+-        const unsigned         raRegVarOrderFltSize = sizeof(raRegVarOrderFlt) / sizeof(raRegVarOrderFlt[0]);
++        const unsigned         raRegVarOrderFltSize = _countof(raRegVarOrderFlt);
+ 
+         if (wbVarOrderSize != NULL)
+             *wbVarOrderSize = raRegVarOrderFltSize;
+@@ -230,7 +230,7 @@ const regNumber* Compiler::raGetRegVarOrder(var_types regType, unsigned* wbVarOr
+ #endif
+     {
+         static const regNumber raRegVarOrder[]   = {REG_VAR_ORDER};
+-        const unsigned         raRegVarOrderSize = sizeof(raRegVarOrder) / sizeof(raRegVarOrder[0]);
++        const unsigned         raRegVarOrderSize = _countof(raRegVarOrder);
+ 
+         if (wbVarOrderSize != NULL)
+             *wbVarOrderSize = raRegVarOrderSize;
+@@ -392,7 +392,7 @@ inline regMaskTP Compiler::genReturnRegForTree(GenTreePtr tree)
+         RBM_ILLEGAL,   // TYP_UNKNOWN,
+     };
+ 
+-    assert((unsigned)type < sizeof(returnMap) / sizeof(returnMap[0]));
++    assert((unsigned)type < _countof(returnMap));
+     assert(returnMap[TYP_LONG] == RBM_LNGRET);
+     assert(returnMap[TYP_DOUBLE] == RBM_DOUBLERET);
+     assert(returnMap[TYP_REF] == RBM_INTRET);
+@@ -1064,7 +1064,7 @@ inline regMaskTP Compiler::rpPredictRegMask(rpPredictReg predictReg, var_types t
+     if (rpHasVarIndexForPredict(predictReg))
+         predictReg = PREDICT_REG;
+ 
+-    noway_assert((unsigned)predictReg < sizeof(rpPredictMap) / sizeof(rpPredictMap[0]));
++    noway_assert((unsigned)predictReg < _countof(rpPredictMap));
+     noway_assert(rpPredictMap[predictReg] != RBM_ILLEGAL);
+ 
+     regMaskTP regAvailForType = rpPredictMap[predictReg];
+diff --git a/src/jit/regset.cpp b/src/jit/regset.cpp
+index a42a6ce..f671fa1 100644
+--- a/src/jit/regset.cpp
++++ b/src/jit/regset.cpp
+@@ -3601,7 +3601,7 @@ bool Compiler::tmpAllFree() const
+         return false;
+     }
+ 
+-    for (unsigned i = 0; i < sizeof(tmpUsed) / sizeof(tmpUsed[0]); i++)
++    for (unsigned i = 0; i < _countof(tmpUsed); i++)
+     {
+         if (tmpUsed[i] != nullptr)
+         {
+diff --git a/src/jit/simd.cpp b/src/jit/simd.cpp
+index 3123555..568a8f7 100644
+--- a/src/jit/simd.cpp
++++ b/src/jit/simd.cpp
+@@ -234,7 +234,7 @@ var_types Compiler::getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, u
+         // TODO-Throughput: implement product shipping solution to query base type.
+         WCHAR  className[256] = {0};
+         WCHAR* pbuf           = &className[0];
+-        int    len            = sizeof(className) / sizeof(className[0]);
++        int    len            = _countof(className);
+         info.compCompHnd->appendClassName(&pbuf, &len, typeHnd, TRUE, FALSE, FALSE);
+         noway_assert(pbuf < &className[256]);
+         JITDUMP("SIMD Candidate Type %S\n", className);
+diff --git a/src/jit/smdata.cpp b/src/jit/smdata.cpp
+index 9fe00d4..182f546 100644
+--- a/src/jit/smdata.cpp
++++ b/src/jit/smdata.cpp
+@@ -270,7 +270,7 @@ const SMState g_SMStates[] =
+ };
+ // clang-format on
+ 
+-static_assert_no_msg(NUM_SM_STATES == sizeof(g_SMStates) / sizeof(g_SMStates[0]));
++static_assert_no_msg(NUM_SM_STATES == _countof(g_SMStates));
+ 
+ const SMState* gp_SMStates = g_SMStates;
+ 
+diff --git a/src/jit/smweights.cpp b/src/jit/smweights.cpp
+index f93d739..fdf50a9 100644
+--- a/src/jit/smweights.cpp
++++ b/src/jit/smweights.cpp
+@@ -269,6 +269,6 @@ const short g_StateWeights[] = {
+     DEFAULT_WEIGHT_VALUE, // state 249 [ldarga.s -> ldfld -> ldarga.s -> ldfld -> sub]
+ };
+ 
+-static_assert_no_msg(NUM_SM_STATES == sizeof(g_StateWeights) / sizeof(g_StateWeights[0]));
++static_assert_no_msg(NUM_SM_STATES == _countof(g_StateWeights));
+ 
+ const short* gp_StateWeights = g_StateWeights;
+diff --git a/src/jit/stackfp.cpp b/src/jit/stackfp.cpp
+index afdec7e..e41a79c 100644
+--- a/src/jit/stackfp.cpp
++++ b/src/jit/stackfp.cpp
+@@ -2277,7 +2277,7 @@ void CodeGen::genCodeForTreeStackFP_SmpOp(GenTreePtr tree)
+             assert(mathIns[CORINFO_INTRINSIC_Sqrt] == INS_fsqrt);
+             assert(mathIns[CORINFO_INTRINSIC_Abs] == INS_fabs);
+             assert(mathIns[CORINFO_INTRINSIC_Round] == INS_frndint);
+-            assert((unsigned)(tree->gtIntrinsic.gtIntrinsicId) < sizeof(mathIns) / sizeof(mathIns[0]));
++            assert((unsigned)(tree->gtIntrinsic.gtIntrinsicId) < _countof(mathIns));
+             instGen(mathIns[tree->gtIntrinsic.gtIntrinsicId]);
+ 
+             // mark register that holds tree
+diff --git a/src/jit/unwindarm.cpp b/src/jit/unwindarm.cpp
+index a3cb7a7..8c01648 100644
+--- a/src/jit/unwindarm.cpp
++++ b/src/jit/unwindarm.cpp
+@@ -2314,7 +2314,7 @@ void DumpUnwindInfo(Compiler*         comp,
+     else
+     {
+         printf("  --- One epilog, unwind codes at %u\n", epilogCount);
+-        assert(epilogCount < sizeof(epilogStartAt) / sizeof(epilogStartAt[0]));
++        assert(epilogCount < _countof(epilogStartAt));
+         epilogStartAt[epilogCount] = true; // the one and only epilog starts its unwind codes at this offset
+     }
+ 
+diff --git a/src/jit/utils.cpp b/src/jit/utils.cpp
+index d506e91..b8c3f51 100644
+--- a/src/jit/utils.cpp
++++ b/src/jit/utils.cpp
+@@ -120,7 +120,7 @@ const char* varTypeName(var_types vt)
+ #undef DEF_TP
+     };
+ 
+-    assert((unsigned)vt < sizeof(varTypeNames) / sizeof(varTypeNames[0]));
++    assert((unsigned)vt < _countof(varTypeNames));
+ 
+     return varTypeNames[vt];
+ }
+diff --git a/src/jit/valuenum.cpp b/src/jit/valuenum.cpp
+index f41e7fc..77134b2 100644
+--- a/src/jit/valuenum.cpp
++++ b/src/jit/valuenum.cpp
+@@ -4133,8 +4133,7 @@ void ValueNumStore::InitValueNumStoreStatics()
+ #include "valuenumfuncs.h"
+ #undef ValueNumFuncDef
+ 
+-    unsigned n = sizeof(genTreeOpsIllegalAsVNFunc) / sizeof(genTreeOps);
+-    for (unsigned i = 0; i < n; i++)
++    for (unsigned i = 0; i < _countof(genTreeOpsIllegalAsVNFunc); i++)
+     {
+         vnfOpAttribs[genTreeOpsIllegalAsVNFunc[i]] |= VNFOA_IllegalGenTreeOp;
+     }
+-- 
+2.7.4
+

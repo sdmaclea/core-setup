@@ -1,0 +1,39 @@
+From 484ba9b02ae7fc9d08e0823504005c06d582b406 Mon Sep 17 00:00:00 2001
+From: Mike Danes <onemihaid@hotmail.com>
+Date: Tue, 12 Dec 2017 19:22:13 +0200
+Subject: [PATCH] Update GTF_VAR_USEASG documentation
+
+---
+ Documentation/botr/ryujit-overview.md | 2 +-
+ Documentation/botr/ryujit-tutorial.md | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/Documentation/botr/ryujit-overview.md b/Documentation/botr/ryujit-overview.md
+index 94eeb06..68110e2 100644
+--- a/Documentation/botr/ryujit-overview.md
++++ b/Documentation/botr/ryujit-overview.md
+@@ -103,7 +103,7 @@ The liveness analysis determines the set of defs, as well as the uses that are u
+ 
+ * The live-in and live-out sets are captured in the `bbLiveIn` and `bbLiveOut` fields of the `BasicBlock`.
+ * The `GTF_VAR_DEF` flag is set on a lclVar node (all of which are of type `GenTreeLclVarCommon`) that is a definition.
+-* The `GTF_VAR_USEASG` flag is set (in addition to the `GTF_VAR_DEF` flag) for the target of an update (e.g. +=).
++* The `GTF_VAR_USEASG` flag is set (in addition to the `GTF_VAR_DEF` flag) on partial definitions of a local variable (i.e. `GT_LCL_FLD` nodes that do not define the entire variable).
+ 
+ ## SSA
+ 
+diff --git a/Documentation/botr/ryujit-tutorial.md b/Documentation/botr/ryujit-tutorial.md
+index 97e64f1..ec8037f 100644
+--- a/Documentation/botr/ryujit-tutorial.md
++++ b/Documentation/botr/ryujit-tutorial.md
+@@ -299,7 +299,7 @@ They are also the lclVars for which GC ranges will be reported. Although the CLR
+ ### Liveness Analysis
+ - The live-in and live-out sets are captured in the bbLiveIn and bbLiveOut fields of the BasicBlock.
+   - The GTF_VAR_DEF flag is set on a lclVar GenTree node that is a definition.
+-  - The GTF_VAR_USEASG flag is set (in addition to the GTF_VAR_DEF flag) for the target of an update (e.g. +=).
++  - The GTF_VAR_USEASG flag is set (in addition to the GTF_VAR_DEF flag) on partial definitions of a local variable (i.e. `GT_LCL_FLD` nodes that do not define the entire variable).
+   - GTF_VAR_DEATH is set to indicate the last uses.
+ - The bitvector implementation is abstracted and can be changed to a variable sized set.
+ 
+-- 
+2.7.4
+

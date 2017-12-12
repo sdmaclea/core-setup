@@ -1,0 +1,46 @@
+From 9b22e1a767dee38f351001c5601f56d78766a43e Mon Sep 17 00:00:00 2001
+From: Sergey Andreenko <seandree@microsoft.com>
+Date: Mon, 11 Dec 2017 19:05:15 -0800
+Subject: [PATCH] fix CoreCLR build errors with clang5.0. (#15477)
+
+* spmi: delete the explicit call to the constructor.
+
+MethodContext was already initialized through `new MethodContext();`
+
+* add an artificial using of lambda param.
+
+the define `#define PAL_EXCEPT(dispositionExpression)`
+can declare expression that has zero or one param. If it has zero param, then `__param` in the lambda is unused, prevent clang complains by adding this change.
+---
+ src/ToolBox/superpmi/superpmi-shared/methodcontext.cpp | 2 --
+ src/pal/inc/pal.h                                      | 1 +
+ 2 files changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/ToolBox/superpmi/superpmi-shared/methodcontext.cpp b/src/ToolBox/superpmi/superpmi-shared/methodcontext.cpp
+index 581b228..601f738 100644
+--- a/src/ToolBox/superpmi/superpmi-shared/methodcontext.cpp
++++ b/src/ToolBox/superpmi/superpmi-shared/methodcontext.cpp
+@@ -299,8 +299,6 @@ void MethodContext::MethodInitHelperFile(HANDLE hFile)
+ 
+ void MethodContext::MethodInitHelper(unsigned char* buff2, unsigned int totalLen)
+ {
+-    MethodContext::MethodContext();
+-
+     unsigned int   buffIndex = 0;
+     unsigned int   localsize = 0;
+     unsigned char  canary    = 0xff;
+diff --git a/src/pal/inc/pal.h b/src/pal/inc/pal.h
+index 8f6bc12..e8fdab5 100644
+--- a/src/pal/inc/pal.h
++++ b/src/pal/inc/pal.h
+@@ -5921,6 +5921,7 @@ public:
+     EXCEPTION_DISPOSITION disposition = EXCEPTION_CONTINUE_EXECUTION;           \
+     auto exceptionFilter = [&disposition, &__param](PAL_SEHException& ex)       \
+     {                                                                           \
++        (void)__param;                                                          \
+         disposition = dispositionExpression;                                    \
+         _ASSERTE(disposition != EXCEPTION_CONTINUE_EXECUTION);                  \
+         return disposition;                                                     \
+-- 
+2.7.4
+

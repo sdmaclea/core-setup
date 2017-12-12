@@ -1,0 +1,117 @@
+From 1724c75e6edff5d9008a5696f0eff586f3d93761 Mon Sep 17 00:00:00 2001
+From: Konstantin Baladurin <k.baladurin@partner.samsung.com>
+Date: Sat, 9 Dec 2017 13:57:20 +0300
+Subject: [PATCH] Fix build with Asan (#15372)
+
+- verify_dependencies: disable checking dependencies for Asan build
+  because in this case shared libraries can have undefined symbols
+  (if static linking with compiler-rt is used).
+
+- enablesanitizers.sh: remove excess quotes for ASAN_OPTIONS and
+  UBSAN_OPTIONS environment variable because otherwise Asan cannot
+  parse flags. Also doesn't export ASAN_SYMBOLIZER_PATH for clang > 3.6.
+---
+ enablesanitizers.sh | 28 +++++++++++++++++++++++-----
+ functions.cmake     | 16 +++++++++++++++-
+ 2 files changed, 38 insertions(+), 6 deletions(-)
+
+diff --git a/enablesanitizers.sh b/enablesanitizers.sh
+index 70555aa..2937b0b 100755
+--- a/enablesanitizers.sh
++++ b/enablesanitizers.sh
+@@ -26,6 +26,7 @@ else
+     __EnableLSan=0
+     __TurnOff=0
+     __Options=
++    __ExportSymbolizerPath=1
+ 
+     for i in "$@"
+         do
+@@ -60,6 +61,17 @@ else
+             clang3.7)
+                 __ClangMajorVersion=3
+                 __ClangMinorVersion=7
++                __ExportSymbolizerPath=0
++                ;;
++            clang3.8)
++                __ClangMajorVersion=3
++                __ClangMinorVersion=8
++                __ExportSymbolizerPath=0
++                ;;
++            clang3.9)
++                __ClangMajorVersion=3
++                __ClangMinorVersion=9
++                __ExportSymbolizerPath=0
+                 ;;
+             *)
+                 echo "Unknown arg: $i"
+@@ -83,7 +95,9 @@ else
+             __Options="$__Options ubsan"
+         fi
+         if [ $__EnableLSan == 1 ]; then
+-            ASAN_OPTIONS="$ASAN_OPTIONS detect_leaks"
++            ASAN_OPTIONS="$ASAN_OPTIONS detect_leaks=1"
++        else
++            ASAN_OPTIONS="$ASAN_OPTIONS detect_leaks=0"
+         fi
+ 
+         # passed to build.sh
+@@ -92,18 +106,22 @@ else
+         echo "Setting DEBUG_SANITIZERS=$DEBUG_SANITIZERS"
+ 
+         # used by ASan at run-time
+-        ASAN_OPTIONS="\"$ASAN_OPTIONS\""
+         export ASAN_OPTIONS
+-        echo "Setting ASAN_OPTIONS=$ASAN_OPTIONS"
++        echo "Setting ASAN_OPTIONS=\"$ASAN_OPTIONS\""
+ 
+-        UBSAN_OPTIONS="\"$UBSAN_OPTIONS\""
+         export UBSAN_OPTIONS
+-        echo "Setting UBSAN_OPTIONS=$UBSAN_OPTIONS"
++        echo "Setting UBSAN_OPTIONS=\"$UBSAN_OPTIONS\""
+ 
++        # for compiler-rt > 3.6 Asan check that binary name is 'llvm-symbolizer', 'addr2line' or
++        # 'atos' (for Darwin) otherwise it returns error
++        if [ $__ExportSymbolizerPath == 1 ]; then
+             # used by ASan at run-time
+             ASAN_SYMBOLIZER_PATH="/usr/bin/llvm-symbolizer-$__ClangMajorVersion.$__ClangMinorVersion"
+             export ASAN_SYMBOLIZER_PATH
+             echo "Setting ASAN_SYMBOLIZER_PATH=$ASAN_SYMBOLIZER_PATH"
++        else
++            unset ASAN_SYMBOLIZER_PATH
++        fi
+         echo "Done. You can now run: build.sh Debug clang$__ClangMajorVersion.$__ClangMinorVersion"
+     fi
+ 
+diff --git a/functions.cmake b/functions.cmake
+index afa3d6e..15d0cd9 100644
+--- a/functions.cmake
++++ b/functions.cmake
+@@ -242,9 +242,23 @@ function(_install)
+ endfunction()
+ 
+ function(verify_dependencies targetName errorMessage)
++    set(SANITIZER_BUILD OFF)
++
++    if (CLR_CMAKE_PLATFORM_UNIX)
++        if (UPPERCASE_CMAKE_BUILD_TYPE STREQUAL DEBUG OR UPPERCASE_CMAKE_BUILD_TYPE STREQUAL CHECKED)
++            string(FIND "$ENV{DEBUG_SANITIZERS}" "asan" __ASAN_POS)
++            string(FIND "$ENV{DEBUG_SANITIZERS}" "ubsan" __UBSAN_POS)
++            if ((${__ASAN_POS} GREATER -1) OR (${__UBSAN_POS} GREATER -1))
++                set(SANITIZER_BUILD ON)
++            endif()
++        endif()
++    endif()
++
+     # We don't need to verify dependencies on OSX, since missing dependencies
+     # result in link error over there.
+-    if (NOT CLR_CMAKE_PLATFORM_DARWIN AND NOT CLR_CMAKE_PLATFORM_ANDROID)
++    # Also don't verify dependencies for Asan build because in this case shared
++    # libraries can contain undefined symbols
++    if (NOT CLR_CMAKE_PLATFORM_DARWIN AND NOT CLR_CMAKE_PLATFORM_ANDROID AND NOT SANITIZER_BUILD)
+         add_custom_command(
+             TARGET ${targetName}
+             POST_BUILD
+-- 
+2.7.4
+

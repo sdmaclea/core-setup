@@ -1,4 +1,4 @@
-From 79ade4830fcc598f4d65d33ebc3eb59152bb9ec3 Mon Sep 17 00:00:00 2001
+From 31197318767f1b0d1b496c50da231d4f899b3f0b Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 6 Dec 2017 13:40:15 -0500
 Subject: [PATCH] [Arm64] Define ISA feature flags

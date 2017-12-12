@@ -1,0 +1,30 @@
+From c903f7bffdf606b728cab45e4fe14530d82d2ac8 Mon Sep 17 00:00:00 2001
+From: Sergey Andreenko <seandree@microsoft.com>
+Date: Mon, 11 Dec 2017 13:48:55 -0800
+Subject: [PATCH] [RyuJit][x86] another forgotten case with unused flag in
+ decomposition.
+
+rotate nodes are rare, so it why we did not see it.
+---
+ src/jit/decomposelongs.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/jit/decomposelongs.cpp b/src/jit/decomposelongs.cpp
+index de5c089..7654c13 100644
+--- a/src/jit/decomposelongs.cpp
++++ b/src/jit/decomposelongs.cpp
+@@ -1553,6 +1553,11 @@ GenTree* DecomposeLongs::DecomposeRotate(LIR::Use& use)
+         gtLong->gtOp.gtOp1 = loResult;
+         gtLong->gtOp.gtOp2 = hiResult;
+ 
++        if (tree->IsUnusedValue())
++        {
++            gtLong->SetUnusedValue();
++        }
++
+         GenTree* next = tree->gtNext;
+         // Remove tree and don't do anything else.
+         Range().Remove(tree);
+-- 
+2.7.4
+
