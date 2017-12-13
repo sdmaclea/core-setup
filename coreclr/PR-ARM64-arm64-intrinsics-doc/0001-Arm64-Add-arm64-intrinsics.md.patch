@@ -1,4 +1,4 @@
-From add754768c4f2b1c5f66175b6128037968a49de6 Mon Sep 17 00:00:00 2001
+From 28d9be1969c86a4fdb7ef1eb3748772c2f67aa21 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 1 Dec 2017 19:35:28 -0500
 Subject: [PATCH] [Arm64] Add arm64-intrinsics.md

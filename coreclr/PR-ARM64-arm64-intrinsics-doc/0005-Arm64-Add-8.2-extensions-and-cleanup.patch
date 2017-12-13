@@ -1,4 +1,4 @@
-From bc6343a2ba5443b8394c73fac735670459d50e6a Mon Sep 17 00:00:00 2001
+From b7eb6727af5ff6f2e05345ddd40ad9f19d37729b Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 6 Dec 2017 14:57:46 -0500
 Subject: [PATCH] [Arm64] Add 8.2 extensions and cleanup

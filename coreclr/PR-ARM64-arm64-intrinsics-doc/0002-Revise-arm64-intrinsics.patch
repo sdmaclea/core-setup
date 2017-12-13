@@ -1,4 +1,4 @@
-From c663f9f0ba10fb7bdad7a0fd9b87d340da12fbb4 Mon Sep 17 00:00:00 2001
+From 70ebc4d3a6aee935927eab4140bd0e1479b68fcd Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 5 Dec 2017 14:27:27 -0500
 Subject: [PATCH] Revise arm64-intrinsics
