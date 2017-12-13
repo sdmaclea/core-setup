@@ -1,4 +1,4 @@
-From 7d93b979a63129de1ad1c5b511ea295e88cf4437 Mon Sep 17 00:00:00 2001
+From 7c169d9d74127e85d6a3d8b71a438929d02f02a3 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 13 Dec 2017 15:32:02 -0500
 Subject: [PATCH] [Arm64] Simd Api sample for review
@@ -8,7 +8,7 @@ Subject: [PATCH] [Arm64] Simd Api sample for review
  1 file changed, 119 insertions(+), 1 deletion(-)
 
 diff --git a/Documentation/design-docs/arm64-intrinsics.md b/Documentation/design-docs/arm64-intrinsics.md
-index 36d15c5..2cfac08 100644
+index 36d15c5..0ddb17d 100644
 --- a/Documentation/design-docs/arm64-intrinsics.md
 +++ b/Documentation/design-docs/arm64-intrinsics.md
 @@ -386,7 +386,125 @@ TBD Not approved
@@ -31,13 +31,13 @@ index 36d15c5..2cfac08 100644
 +        /// <summary>
 +        /// IsSupported property indicates whether any method provided 
 +        /// by this class is supported by the current runtime.
-+        /// </summary
++        /// </summary>
 +        public static bool IsSupported { get; }
 +
 +        /// <summary>
 +        /// Vector absolute value
 +        /// Corresponds to vector forms of ARM64 ABS & FABS
-+        /// </summary
++        /// </summary>
 +        public static Vector64<byte>    Abs(Vector64<sbyte>   value);
 +        public static Vector64<ushort>  Abs(Vector64<short>   value);
 +        public static Vector64<uint>    Abs(Vector64<int>     value);
@@ -53,7 +53,7 @@ index 36d15c5..2cfac08 100644
 +        /// <summary>
 +        /// Vector add
 +        /// Corresponds to vector forms of ARM64 ADD & FADD
-+        /// </summary
++        /// </summary>
 +        public static Vector64<byte>    Add(Vector64<byte>    left, Vector64<byte>    right);
 +        public static Vector64<sbyte>   Add(Vector64<sbyte>   left, Vector64<sbyte>   right);
 +        public static Vector64<ushort>  Add(Vector64<ushort>  left, Vector64<ushort>  right);
@@ -81,7 +81,7 @@ index 36d15c5..2cfac08 100644
 +        /// Zero upper half of destination
 +        ///
 +        /// Corresponds to vector forms of ARM64 ADDHN
-+        /// </summary
++        /// </summary>
 +        public static Vector128<byte>   AddHighNarrowLower(Vector128<ushort> left, Vector128<ushort> right);
 +        public static Vector128<sbyte>  AddHighNarrowLower(Vector128<short>  left, Vector128<short>  right);
 +        public static Vector128<ushort> AddHighNarrowLower(Vector128<uint>   left, Vector128<uint>   right);
@@ -96,7 +96,7 @@ index 36d15c5..2cfac08 100644
 +        /// Or with lower half of destination
 +        ///
 +        /// Corresponds to vector forms of ARM64 ADDHN2
-+        /// </summary
++        /// </summary>
 +        public static Vector128<byte>   AddHighNarrowUpper(Vector128<ushort> left, Vector128<ushort> right, Vector128<ushort> lower);
 +        public static Vector128<sbyte>  AddHighNarrowUpper(Vector128<short>  left, Vector128<short>  right, Vector128<short>  lower);
 +        public static Vector128<ushort> AddHighNarrowUpper(Vector128<uint>   left, Vector128<uint>   right, Vector128<uint>   lower);
@@ -113,7 +113,7 @@ index 36d15c5..2cfac08 100644
 +        /// Pairs formed from the right operand will form the lower half to the result.  Left will form the upper
 +        ///
 +        /// Corresponds to vector forms of ARM64 ADDP & FADDP
-+        /// </summary
++        /// </summary>
 +        public static Vector64<byte>    AddPairwise(Vector64<byte>    left, Vector64<byte>    right);
 +        public static Vector64<sbyte>   AddPairwise(Vector64<sbyte>   left, Vector64<sbyte>   right);
 +        public static Vector64<ushort>  AddPairwise(Vector64<ushort>  left, Vector64<ushort>  right);
