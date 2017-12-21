@@ -1,0 +1,247 @@
+From b9d4ae39a06b0b4325ee60392458c0d6a691272c Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 19 Dec 2017 17:53:17 -0500
+Subject: [PATCH] [Arm64] getBaseTypeAndSizeOfSIMDType
+
+Remove XARCH platform dependencies
+Disable Vector256 support on Arm64 until needed
+---
+ src/jit/compiler.cpp |  2 ++
+ src/jit/compiler.h   |  4 +++-
+ src/jit/simd.cpp     | 65 ++++++++++++++++++++++++++++++++--------------------
+ 3 files changed, 45 insertions(+), 26 deletions(-)
+
+diff --git a/src/jit/compiler.cpp b/src/jit/compiler.cpp
+index c496de5..68bd8bf 100644
+--- a/src/jit/compiler.cpp
++++ b/src/jit/compiler.cpp
+@@ -2126,6 +2126,7 @@ void Compiler::compInit(ArenaAllocator* pAlloc, InlineInfo* inlineInfo)
+     Vector128ByteHandle   = nullptr;
+     Vector128LongHandle   = nullptr;
+     Vector128UIntHandle   = nullptr;
++#if defined(_TARGET_XARCH_)
+     Vector256FloatHandle  = nullptr;
+     Vector256DoubleHandle = nullptr;
+     Vector256IntHandle    = nullptr;
+@@ -2135,6 +2136,7 @@ void Compiler::compInit(ArenaAllocator* pAlloc, InlineInfo* inlineInfo)
+     Vector256ByteHandle   = nullptr;
+     Vector256LongHandle   = nullptr;
+     Vector256UIntHandle   = nullptr;
++#endif // defined(_TARGET_XARCH_)
+ #endif // FEATURE_HW_INTRINSICS
+ #endif // FEATURE_SIMD
+ 
+diff --git a/src/jit/compiler.h b/src/jit/compiler.h
+index 1fd5d83..f217953 100644
+--- a/src/jit/compiler.h
++++ b/src/jit/compiler.h
+@@ -7406,6 +7406,7 @@ private:
+     CORINFO_CLASS_HANDLE Vector128LongHandle;
+     CORINFO_CLASS_HANDLE Vector128UIntHandle;
+     CORINFO_CLASS_HANDLE Vector128ULongHandle;
++#if defined(_TARGET_XARCH_)
+     CORINFO_CLASS_HANDLE Vector256FloatHandle;
+     CORINFO_CLASS_HANDLE Vector256DoubleHandle;
+     CORINFO_CLASS_HANDLE Vector256IntHandle;
+@@ -7416,7 +7417,8 @@ private:
+     CORINFO_CLASS_HANDLE Vector256LongHandle;
+     CORINFO_CLASS_HANDLE Vector256UIntHandle;
+     CORINFO_CLASS_HANDLE Vector256ULongHandle;
+-#endif
++#endif // defined(_TARGET_XARCH_)
++#endif // FEATURE_HW_INTRINSICS
+ 
+     // Get the handle for a SIMD type.
+     CORINFO_CLASS_HANDLE gtGetStructHandleForSIMD(var_types simdType, var_types simdBaseType)
+diff --git a/src/jit/simd.cpp b/src/jit/simd.cpp
+index 02b81ab..b907b52 100644
+--- a/src/jit/simd.cpp
++++ b/src/jit/simd.cpp
+@@ -351,124 +351,136 @@ var_types Compiler::getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, u
+ #if FEATURE_HW_INTRINSICS
+     else if (isIntrinsicType(typeHnd))
+     {
++        enum
++        {
++            Vector256Size = 256 / 8,
++            Vector128Size = 128 / 8,
++        };
++
++#if defined(_TARGET_XARCH_)
++        static_assert_no_msg(YMM_REGSIZE_BYTES == Vector256Size);
++        static_assert_no_msg(XMM_REGSIZE_BYTES == Vector128Size);
++
+         if (typeHnd == Vector256FloatHandle)
+         {
+             simdBaseType = TYP_FLOAT;
+-            size         = YMM_REGSIZE_BYTES;
++            size         = Vector256Size;
+             JITDUMP("  Known type Vector256<float>\n");
+         }
+         else if (typeHnd == Vector256DoubleHandle)
+         {
+             simdBaseType = TYP_DOUBLE;
+-            size         = YMM_REGSIZE_BYTES;
++            size         = Vector256Size;
+             JITDUMP("  Known type Vector256<double>\n");
+         }
+         else if (typeHnd == Vector256IntHandle)
+         {
+             simdBaseType = TYP_INT;
+-            size         = YMM_REGSIZE_BYTES;
++            size         = Vector256Size;
+             JITDUMP("  Known type Vector256<int>\n");
+         }
+         else if (typeHnd == Vector256UIntHandle)
+         {
+             simdBaseType = TYP_UINT;
+-            size         = YMM_REGSIZE_BYTES;
++            size         = Vector256Size;
+             JITDUMP("  Known type Vector256<uint>\n");
+         }
+         else if (typeHnd == Vector256ShortHandle)
+         {
+             simdBaseType = TYP_SHORT;
+-            size         = YMM_REGSIZE_BYTES;
++            size         = Vector256Size;
+             JITDUMP("  Known type Vector256<short>\n");
+         }
+         else if (typeHnd == Vector256UShortHandle)
+         {
+             simdBaseType = TYP_USHORT;
+-            size         = YMM_REGSIZE_BYTES;
++            size         = Vector256Size;
+             JITDUMP("  Known type Vector256<ushort>\n");
+         }
+         else if (typeHnd == Vector256ByteHandle)
+         {
+             simdBaseType = TYP_BYTE;
+-            size         = YMM_REGSIZE_BYTES;
++            size         = Vector256Size;
+             JITDUMP("  Known type Vector256<sbyte>\n");
+         }
+         else if (typeHnd == Vector256UByteHandle)
+         {
+             simdBaseType = TYP_UBYTE;
+-            size         = YMM_REGSIZE_BYTES;
++            size         = Vector256Size;
+             JITDUMP("  Known type Vector256<byte>\n");
+         }
+         else if (typeHnd == Vector256LongHandle)
+         {
+             simdBaseType = TYP_LONG;
+-            size         = YMM_REGSIZE_BYTES;
++            size         = Vector256Size;
+             JITDUMP("  Known type Vector256<long>\n");
+         }
+         else if (typeHnd == Vector256ULongHandle)
+         {
+             simdBaseType = TYP_ULONG;
+-            size         = YMM_REGSIZE_BYTES;
++            size         = Vector256Size;
+             JITDUMP("  Known type Vector256<ulong>\n");
+         }
+         else if (typeHnd == Vector256FloatHandle)
+         {
+             simdBaseType = TYP_FLOAT;
+-            size         = YMM_REGSIZE_BYTES;
+-            JITDUMP("  Known type Vector128<float>\n");
++            size         = Vector256Size;
++            JITDUMP("  Known type Vector256<float>\n");
+         }
+-        else if (typeHnd == Vector128DoubleHandle)
++        else
++#endif // defined(_TARGET_XARCH)
++            if (typeHnd == Vector128DoubleHandle)
+         {
+             simdBaseType = TYP_DOUBLE;
+-            size         = XMM_REGSIZE_BYTES;
++            size         = Vector128Size;
+             JITDUMP("  Known type Vector128<double>\n");
+         }
+         else if (typeHnd == Vector128IntHandle)
+         {
+             simdBaseType = TYP_INT;
+-            size         = XMM_REGSIZE_BYTES;
++            size         = Vector128Size;
+             JITDUMP("  Known type Vector128<int>\n");
+         }
+         else if (typeHnd == Vector128UIntHandle)
+         {
+             simdBaseType = TYP_UINT;
+-            size         = XMM_REGSIZE_BYTES;
++            size         = Vector128Size;
+             JITDUMP("  Known type Vector128<uint>\n");
+         }
+         else if (typeHnd == Vector128ShortHandle)
+         {
+             simdBaseType = TYP_SHORT;
+-            size         = XMM_REGSIZE_BYTES;
++            size         = Vector128Size;
+             JITDUMP("  Known type Vector128<short>\n");
+         }
+         else if (typeHnd == Vector128UShortHandle)
+         {
+             simdBaseType = TYP_USHORT;
+-            size         = XMM_REGSIZE_BYTES;
++            size         = Vector128Size;
+             JITDUMP("  Known type Vector128<ushort>\n");
+         }
+         else if (typeHnd == Vector128ByteHandle)
+         {
+             simdBaseType = TYP_BYTE;
+-            size         = XMM_REGSIZE_BYTES;
++            size         = Vector128Size;
+             JITDUMP("  Known type Vector128<sbyte>\n");
+         }
+         else if (typeHnd == Vector128UByteHandle)
+         {
+             simdBaseType = TYP_UBYTE;
+-            size         = XMM_REGSIZE_BYTES;
++            size         = Vector128Size;
+             JITDUMP("  Known type Vector128<byte>\n");
+         }
+         else if (typeHnd == Vector128LongHandle)
+         {
+             simdBaseType = TYP_LONG;
+-            size         = XMM_REGSIZE_BYTES;
++            size         = Vector128Size;
+             JITDUMP("  Known type Vector128<long>\n");
+         }
+         else if (typeHnd == Vector128ULongHandle)
+         {
+             simdBaseType = TYP_ULONG;
+-            size         = XMM_REGSIZE_BYTES;
++            size         = Vector128Size;
+             JITDUMP("  Known type Vector128<ulong>\n");
+         }
+ 
+@@ -486,9 +498,10 @@ var_types Compiler::getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, u
+                 JITDUMP("HW Intrinsic SIMD Candidate Type %s with Base Type %s\n", className,
+                         getClassNameFromMetadata(baseTypeHnd, nullptr));
+ 
++#if defined(_TARGET_XARCH_)
+                 if (strcmp(className, "Vector256`1") == 0)
+                 {
+-                    size = YMM_REGSIZE_BYTES;
++                    size = Vector256Size;
+                     switch (type)
+                     {
+                         case CORINFO_TYPE_FLOAT:
+@@ -546,9 +559,11 @@ var_types Compiler::getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, u
+                             JITDUMP("  Unknown Hardware Intrinsic SIMD Type Vector256<T>\n");
+                     }
+                 }
+-                else if (strcmp(className, "Vector128`1") == 0)
++                else
++#endif // defined(_TARGET_XARCH_)
++                    if (strcmp(className, "Vector128`1") == 0)
+                 {
+-                    size = XMM_REGSIZE_BYTES;
++                    size = Vector128Size;
+                     switch (type)
+                     {
+                         case CORINFO_TYPE_FLOAT:
+-- 
+2.7.4
+
