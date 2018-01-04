@@ -1,0 +1,236 @@
+From 44a7dc7421a0d54f502233ec501b4e194f67c357 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 3 Jan 2018 12:24:20 -0500
+Subject: [PATCH] [Arm64] Add Vector64 HW Intrinsic support
+
+---
+ src/jit/compiler.cpp                               |  10 ++
+ src/jit/compiler.h                                 |  12 +++
+ src/jit/simd.cpp                                   | 119 +++++++++++++++++++++
+ src/mscorlib/System.Private.CoreLib.csproj         |   1 +
+ .../src/System/Runtime/Intrinsics/Vector64.cs      |  13 +++
+ 5 files changed, 155 insertions(+)
+ create mode 100644 src/mscorlib/src/System/Runtime/Intrinsics/Vector64.cs
+
+diff --git a/src/jit/compiler.cpp b/src/jit/compiler.cpp
+index 68bd8bf..01b8c35 100644
+--- a/src/jit/compiler.cpp
++++ b/src/jit/compiler.cpp
+@@ -2117,6 +2117,16 @@ void Compiler::compInit(ArenaAllocator* pAlloc, InlineInfo* inlineInfo)
+     SIMDVector4Handle = nullptr;
+     SIMDVectorHandle  = nullptr;
+ #if FEATURE_HW_INTRINSICS
++#if defined(_TARGET_ARM64_)
++    Vector64FloatHandle  = nullptr;
++    Vector64DoubleHandle = nullptr;
++    Vector64IntHandle    = nullptr;
++    Vector64UShortHandle = nullptr;
++    Vector64UByteHandle  = nullptr;
++    Vector64ShortHandle  = nullptr;
++    Vector64ByteHandle   = nullptr;
++    Vector64LongHandle   = nullptr;
++#endif // defined(_TARGET_ARM64_)
+     Vector128FloatHandle  = nullptr;
+     Vector128DoubleHandle = nullptr;
+     Vector128IntHandle    = nullptr;
+diff --git a/src/jit/compiler.h b/src/jit/compiler.h
+index 2ce0b01..5cc9263 100644
+--- a/src/jit/compiler.h
++++ b/src/jit/compiler.h
+@@ -7401,6 +7401,18 @@ private:
+     CORINFO_CLASS_HANDLE SIMDVectorHandle;
+ 
+ #if FEATURE_HW_INTRINSICS
++#if defined(_TARGET_ARM64_)
++    CORINFO_CLASS_HANDLE Vector64FloatHandle;
++    CORINFO_CLASS_HANDLE Vector64DoubleHandle;
++    CORINFO_CLASS_HANDLE Vector64IntHandle;
++    CORINFO_CLASS_HANDLE Vector64UShortHandle;
++    CORINFO_CLASS_HANDLE Vector64UByteHandle;
++    CORINFO_CLASS_HANDLE Vector64ShortHandle;
++    CORINFO_CLASS_HANDLE Vector64ByteHandle;
++    CORINFO_CLASS_HANDLE Vector64LongHandle;
++    CORINFO_CLASS_HANDLE Vector64UIntHandle;
++    CORINFO_CLASS_HANDLE Vector64ULongHandle;
++#endif // defined(_TARGET_ARM64_)
+     CORINFO_CLASS_HANDLE Vector128FloatHandle;
+     CORINFO_CLASS_HANDLE Vector128DoubleHandle;
+     CORINFO_CLASS_HANDLE Vector128IntHandle;
+diff --git a/src/jit/simd.cpp b/src/jit/simd.cpp
+index 7e7fa31..b91c8e7 100644
+--- a/src/jit/simd.cpp
++++ b/src/jit/simd.cpp
+@@ -351,6 +351,7 @@ var_types Compiler::getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, u
+ #if FEATURE_HW_INTRINSICS
+     else if (isIntrinsicType(typeHnd))
+     {
++        const size_t Vector64SizeBytes  = 64 / 8;
+         const size_t Vector128SizeBytes = 128 / 8;
+         const size_t Vector256SizeBytes = 256 / 8;
+ 
+@@ -480,6 +481,62 @@ var_types Compiler::getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, u
+             size         = Vector128SizeBytes;
+             JITDUMP("  Known type Vector128<ulong>\n");
+         }
++#if defined(_TARGET_ARM64_)
++        else if (typeHnd == Vector64DoubleHandle)
++        {
++            simdBaseType = TYP_DOUBLE;
++            size         = Vector64SizeBytes;
++            JITDUMP("  Known type Vector64<double>\n");
++        }
++        else if (typeHnd == Vector64IntHandle)
++        {
++            simdBaseType = TYP_INT;
++            size         = Vector64SizeBytes;
++            JITDUMP("  Known type Vector64<int>\n");
++        }
++        else if (typeHnd == Vector64UIntHandle)
++        {
++            simdBaseType = TYP_UINT;
++            size         = Vector64SizeBytes;
++            JITDUMP("  Known type Vector64<uint>\n");
++        }
++        else if (typeHnd == Vector64ShortHandle)
++        {
++            simdBaseType = TYP_SHORT;
++            size         = Vector64SizeBytes;
++            JITDUMP("  Known type Vector64<short>\n");
++        }
++        else if (typeHnd == Vector64UShortHandle)
++        {
++            simdBaseType = TYP_USHORT;
++            size         = Vector64SizeBytes;
++            JITDUMP("  Known type Vector64<ushort>\n");
++        }
++        else if (typeHnd == Vector64ByteHandle)
++        {
++            simdBaseType = TYP_BYTE;
++            size         = Vector64SizeBytes;
++            JITDUMP("  Known type Vector64<sbyte>\n");
++        }
++        else if (typeHnd == Vector64UByteHandle)
++        {
++            simdBaseType = TYP_UBYTE;
++            size         = Vector64SizeBytes;
++            JITDUMP("  Known type Vector64<byte>\n");
++        }
++        else if (typeHnd == Vector64LongHandle)
++        {
++            simdBaseType = TYP_LONG;
++            size         = Vector64SizeBytes;
++            JITDUMP("  Known type Vector64<long>\n");
++        }
++        else if (typeHnd == Vector64ULongHandle)
++        {
++            simdBaseType = TYP_ULONG;
++            size         = Vector64SizeBytes;
++            JITDUMP("  Known type Vector64<ulong>\n");
++        }
++#endif // defined(_TARGET_ARM64_)
+ 
+         // slow path search
+         if (simdBaseType == TYP_UNKNOWN)
+@@ -618,6 +675,68 @@ var_types Compiler::getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, u
+                             JITDUMP("  Unknown Hardware Intrinsic SIMD Type Vector128<T>\n");
+                     }
+                 }
++#if defined(_TARGET_ARM64_)
++                else if (strcmp(className, "Vector64`1") == 0)
++                {
++                    size = Vector64SizeBytes;
++                    switch (type)
++                    {
++                        case CORINFO_TYPE_FLOAT:
++                            Vector64FloatHandle = typeHnd;
++                            simdBaseType        = TYP_FLOAT;
++                            JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<float>\n");
++                            break;
++                        case CORINFO_TYPE_DOUBLE:
++                            Vector64DoubleHandle = typeHnd;
++                            simdBaseType         = TYP_DOUBLE;
++                            JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<double>\n");
++                            break;
++                        case CORINFO_TYPE_INT:
++                            Vector64IntHandle = typeHnd;
++                            simdBaseType      = TYP_INT;
++                            JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<int>\n");
++                            break;
++                        case CORINFO_TYPE_UINT:
++                            Vector64UIntHandle = typeHnd;
++                            simdBaseType       = TYP_UINT;
++                            JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<uint>\n");
++                            break;
++                        case CORINFO_TYPE_SHORT:
++                            Vector64ShortHandle = typeHnd;
++                            simdBaseType        = TYP_SHORT;
++                            JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<short>\n");
++                            break;
++                        case CORINFO_TYPE_USHORT:
++                            Vector64UShortHandle = typeHnd;
++                            simdBaseType         = TYP_USHORT;
++                            JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<ushort>\n");
++                            break;
++                        case CORINFO_TYPE_LONG:
++                            Vector64LongHandle = typeHnd;
++                            simdBaseType       = TYP_LONG;
++                            JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<long>\n");
++                            break;
++                        case CORINFO_TYPE_ULONG:
++                            Vector64ULongHandle = typeHnd;
++                            simdBaseType        = TYP_ULONG;
++                            JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<ulong>\n");
++                            break;
++                        case CORINFO_TYPE_UBYTE:
++                            Vector64UByteHandle = typeHnd;
++                            simdBaseType        = TYP_UBYTE;
++                            JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<byte>\n");
++                            break;
++                        case CORINFO_TYPE_BYTE:
++                            Vector64ByteHandle = typeHnd;
++                            simdBaseType       = TYP_BYTE;
++                            JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<sbyte>\n");
++                            break;
++
++                        default:
++                            JITDUMP("  Unknown Hardware Intrinsic SIMD Type Vector64<T>\n");
++                    }
++                }
++#endif // defined(_TARGET_ARM64_)
+             }
+         }
+ 
+diff --git a/src/mscorlib/System.Private.CoreLib.csproj b/src/mscorlib/System.Private.CoreLib.csproj
+index 7dbe910..631ca12 100644
+--- a/src/mscorlib/System.Private.CoreLib.csproj
++++ b/src/mscorlib/System.Private.CoreLib.csproj
+@@ -254,6 +254,7 @@
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\InteropServices\WindowsRuntime\CLRIKeyValuePairImpl.cs" />
+   </ItemGroup>
+   <ItemGroup>
++    <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Vector64.cs" />
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Vector128.cs" />
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Vector256.cs" />
+   </ItemGroup>
+diff --git a/src/mscorlib/src/System/Runtime/Intrinsics/Vector64.cs b/src/mscorlib/src/System/Runtime/Intrinsics/Vector64.cs
+new file mode 100644
+index 0000000..42664da
+--- /dev/null
++++ b/src/mscorlib/src/System/Runtime/Intrinsics/Vector64.cs
+@@ -0,0 +1,13 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++using System.Runtime.CompilerServices;
++using System.Runtime.InteropServices;
++
++namespace System.Runtime.Intrinsics
++{
++    [Intrinsic]
++    [StructLayout(LayoutKind.Sequential, Size = 8)]
++    public struct Vector64<T> where T : struct {}
++}
+-- 
+2.7.4
+
