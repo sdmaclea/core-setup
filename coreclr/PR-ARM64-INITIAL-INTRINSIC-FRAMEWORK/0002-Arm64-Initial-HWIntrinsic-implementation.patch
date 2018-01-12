@@ -1,4 +1,4 @@
-From 3996b9557b70858fb51cc44798f9221a7b19658a Mon Sep 17 00:00:00 2001
+From 8384c3cf390d4138a8096aadda867a8a9f5a4a8a Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 19 Dec 2017 17:15:22 -0500
 Subject: [PATCH] [Arm64] Initial HWIntrinsic implementation
@@ -13,7 +13,7 @@ Subject: [PATCH] [Arm64] Initial HWIntrinsic implementation
  src/jit/hwintrinsicArm64.cpp                       | 289 +++++++++++++++++++++
  src/jit/hwintrinsicArm64.h                         |  39 +++
  src/jit/hwintrinsiclistArm64.h                     |  92 +++++--
- src/jit/importer.cpp                               |  45 ++--
+ src/jit/importer.cpp                               |  18 +-
  src/jit/lowerarmarch.cpp                           |  35 +++
  src/jit/lsraarm64.cpp                              |  27 ++
  src/jit/namedintrinsiclist.h                       |   9 +
@@ -22,7 +22,7 @@ Subject: [PATCH] [Arm64] Initial HWIntrinsic implementation
  src/mscorlib/System.Private.CoreLib.csproj         |   6 +
  .../Arm/Arm64/Simd.PlatformNotSupported.cs         |  37 +++
  .../System/Runtime/Intrinsics/Arm/Arm64/Simd.cs    |  37 +++
- 18 files changed, 737 insertions(+), 100 deletions(-)
+ 18 files changed, 736 insertions(+), 74 deletions(-)
  create mode 100644 src/jit/hwintrinsicArm64.cpp
  create mode 100644 src/jit/hwintrinsicArm64.h
  create mode 100644 src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.PlatformNotSupported.cs
@@ -778,7 +778,7 @@ index 4fac146..6d1c95b 100644
  #undef HARDWARE_INTRINSIC_CLASS
  #undef HARDWARE_INTRINSIC
 diff --git a/src/jit/importer.cpp b/src/jit/importer.cpp
-index 6fd836f..be34970 100644
+index 6fd836f..721c5c9 100644
 --- a/src/jit/importer.cpp
 +++ b/src/jit/importer.cpp
 @@ -1,4 +1,3 @@
@@ -822,47 +822,6 @@ index 6fd836f..be34970 100644
  #endif // FEATURE_HW_INTRINSICS
      return result;
  }
-@@ -15839,31 +15853,6 @@ bool Compiler::impReturnInstruction(BasicBlock* block, int prefixFlags, OPCODE&
-                     assert(info.compRetNativeType != TYP_VOID &&
-                            (fgMoreThanOneReturnBlock() || impInlineInfo->HasGcRefLocals()));
- 
--                    // If this method returns a ref type, track the actual types seen
--                    // in the returns.
--                    if (info.compRetType == TYP_REF)
--                    {
--                        bool                 isExact      = false;
--                        bool                 isNonNull    = false;
--                        CORINFO_CLASS_HANDLE returnClsHnd = gtGetClassHandle(op2, &isExact, &isNonNull);
--
--                        if (impInlineInfo->retExpr == nullptr)
--                        {
--                            // This is the first return, so best known type is the type
--                            // of this return value.
--                            impInlineInfo->retExprClassHnd        = returnClsHnd;
--                            impInlineInfo->retExprClassHndIsExact = isExact;
--                        }
--                        else if (impInlineInfo->retExprClassHnd != returnClsHnd)
--                        {
--                            // This return site type differs from earlier seen sites,
--                            // so reset the info and we'll fall back to using the method's
--                            // declared return type for the return spill temp.
--                            impInlineInfo->retExprClassHnd        = nullptr;
--                            impInlineInfo->retExprClassHndIsExact = false;
--                        }
--                    }
--
-                     // This is a bit of a workaround...
-                     // If we are inlining a call that returns a struct, where the actual "native" return type is
-                     // not a struct (for example, the struct is composed of exactly one int, and the native
-@@ -15907,7 +15896,7 @@ bool Compiler::impReturnInstruction(BasicBlock* block, int prefixFlags, OPCODE&
-                     impAssignTempGen(lvaInlineeReturnSpillTemp, op2, se.seTypeInfo.GetClassHandle(),
-                                      (unsigned)CHECK_SPILL_ALL);
- 
--                    GenTree* tmpOp2 = gtNewLclvNode(lvaInlineeReturnSpillTemp, op2->TypeGet());
-+                    GenTreePtr tmpOp2 = gtNewLclvNode(lvaInlineeReturnSpillTemp, op2->TypeGet());
- 
-                     if (restoreType)
-                     {
 diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
 index 5aa3ff1..757ac52 100644
 --- a/src/jit/lowerarmarch.cpp
