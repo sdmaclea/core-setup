@@ -1,0 +1,229 @@
+From 06055495d96093502deae21c33134338229f6554 Mon Sep 17 00:00:00 2001
+From: Carol Eidt <carol.eidt@microsoft.com>
+Date: Tue, 9 Jan 2018 15:56:25 -0800
+Subject: [PATCH] Fix change to fgMorphBlockOperand
+
+My recent fix broke the `DYN_BLK` case. In addition to checking that types match, we *still* need to check that the sizes match.
+
+This was caught by desktop testing. The test cases are somewhat complex, so I created a smaller repro.
+---
+ src/jit/morph.cpp                                 |  6 +-
+ tests/src/JIT/Methodical/xxblk/dynblk.il          | 99 +++++++++++++++++++++++
+ tests/src/JIT/Methodical/xxblk/dynblk_il_d.ilproj | 36 +++++++++
+ tests/src/JIT/Methodical/xxblk/dynblk_il_r.ilproj | 35 ++++++++
+ 4 files changed, 175 insertions(+), 1 deletion(-)
+ create mode 100644 tests/src/JIT/Methodical/xxblk/dynblk.il
+ create mode 100644 tests/src/JIT/Methodical/xxblk/dynblk_il_d.ilproj
+ create mode 100644 tests/src/JIT/Methodical/xxblk/dynblk_il_r.ilproj
+
+diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
+index f85bafb..afdc7dc 100644
+--- a/src/jit/morph.cpp
++++ b/src/jit/morph.cpp
+@@ -10208,10 +10208,14 @@ GenTree* Compiler::fgMorphBlockOperand(GenTree* tree, var_types asgType, unsigne
+         if (lclNode != nullptr)
+         {
+             LclVarDsc* varDsc = &(lvaTable[lclNode->gtLclNum]);
+-            if (varTypeIsStruct(varDsc) && (varDsc->lvType == asgType))
++            if (varTypeIsStruct(varDsc) && (varDsc->lvExactSize == blockWidth) && (varDsc->lvType == asgType))
+             {
+ #ifndef LEGACY_BACKEND
++                if (effectiveVal != lclNode)
++                {
++                    JITDUMP("Replacing block node [%06d] with lclVar V%02u\n", dspTreeID(tree), lclNode->gtLclNum);
+                     effectiveVal = lclNode;
++                }
+                 needsIndirection = false;
+ #endif // !LEGACY_BACKEND
+             }
+diff --git a/tests/src/JIT/Methodical/xxblk/dynblk.il b/tests/src/JIT/Methodical/xxblk/dynblk.il
+new file mode 100644
+index 0000000..b0acbb4
+--- /dev/null
++++ b/tests/src/JIT/Methodical/xxblk/dynblk.il
+@@ -0,0 +1,99 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++// Test for a bug involving an initblk with a non-constant size,
++// for which the DYN_BLK(ADDR(lcl)) can't be optimized away.
++
++.assembly extern legacy library mscorlib {}
++.assembly extern System.Console
++{
++  .publickeytoken = (B0 3F 5F 7F 11 D5 0A 3A )
++  .ver 4:0:0:0
++}
++
++.assembly dynblk {}
++
++.class public sequential ansi sealed beforefieldinit S8
++       extends [mscorlib]System.ValueType
++{
++  .field public uint64 val
++} // end of class S8
++
++.class private auto ansi beforefieldinit Program
++       extends [mscorlib]System.Object
++{
++  .method public hidebysig static int32  GetSize3() cil managed noinlining
++  {
++          ldc.i4     3
++          ret
++  } // end of method Program::Init
++
++  .method public hidebysig static int32  GetSize5() cil managed noinlining
++  {
++          ldc.i4     5
++          ret
++  } // end of method Program::Init
++
++  .method private hidebysig static int32 
++          Main() cil managed
++  {
++    .entrypoint
++    .locals init (valuetype S8 S, int32 retVal, int32 size)
++              ldloca.s   S
++              ldc.i4     0
++              ldc.i4     8
++              initblk
++
++              call       int32 Program::GetSize5()
++              stloc.s    size
++
++              ldloca.s   S
++              ldc.i4     0x55
++              ldloc.s    size
++              initblk
++
++              call       int32 Program::GetSize3()
++              stloc.s    size
++
++              ldloca.s   S
++              ldc.i4     0x33
++              ldloc.s    size
++              initblk
++
++              ldloca.s   S
++              ldfld      uint64 S8::val
++              ldc.i8     0x5555333333
++              ceq
++              brtrue.s  L1
++
++              ldstr      "Fail"
++              call       void [mscorlib]System.Console::WriteLine(string)
++              nop
++              ldc.i4.m1
++              stloc.s    retVal
++              br.s       L2
++
++    L1:       ldstr      "Pass"
++              call       void [mscorlib]System.Console::WriteLine(string)
++              nop
++              ldc.i4.s   100
++              stloc.s    retVal
++
++    L2:       ldloc.s    retVal
++              ret
++  } // end of method Program::Main
++
++  .method public hidebysig specialname rtspecialname 
++          instance void  .ctor() cil managed
++  {
++    // Code size       8 (0x8)
++    .maxstack  8
++              ldarg.0
++              call       instance void [mscorlib]System.Object::.ctor()
++              nop
++              ret
++  } // end of method Program::.ctor
++
++} // end of class Program
++
+diff --git a/tests/src/JIT/Methodical/xxblk/dynblk_il_d.ilproj b/tests/src/JIT/Methodical/xxblk/dynblk_il_d.ilproj
+new file mode 100644
+index 0000000..1c81e9a
+--- /dev/null
++++ b/tests/src/JIT/Methodical/xxblk/dynblk_il_d.ilproj
+@@ -0,0 +1,36 @@
++<?xml version="1.0" encoding="utf-8"?>
++<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
++  <PropertyGroup>
++    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
++    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
++    <AssemblyName>$(MSBuildProjectName)</AssemblyName>
++    <SchemaVersion>2.0</SchemaVersion>
++    <ProjectGuid>{95DFC527-4DC1-495E-97D7-E94EE1F7140D}</ProjectGuid>
++    <OutputType>Exe</OutputType>
++    <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
++    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
++  </PropertyGroup>
++  <!-- Default configurations to help VS understand the configurations -->
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
++  </PropertyGroup>
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
++  </PropertyGroup>
++  <ItemGroup>
++    <CodeAnalysisDependentAssemblyPaths Condition=" '$(VS100COMNTOOLS)' != '' " Include="$(VS100COMNTOOLS)..\IDE\PrivateAssemblies">
++      <Visible>False</Visible>
++    </CodeAnalysisDependentAssemblyPaths>
++  </ItemGroup>
++  <PropertyGroup>
++    <DebugType>Full</DebugType>
++  </PropertyGroup>
++  <ItemGroup>
++    <Compile Include="dynblk.il" />
++  </ItemGroup>
++  <ItemGroup>
++    <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
++  </ItemGroup>
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
++  <PropertyGroup Condition=" '$(MsBuildProjectDirOverride)' != '' ">
++  </PropertyGroup> 
++</Project>
+diff --git a/tests/src/JIT/Methodical/xxblk/dynblk_il_r.ilproj b/tests/src/JIT/Methodical/xxblk/dynblk_il_r.ilproj
+new file mode 100644
+index 0000000..fb41dd6
+--- /dev/null
++++ b/tests/src/JIT/Methodical/xxblk/dynblk_il_r.ilproj
+@@ -0,0 +1,35 @@
++<?xml version="1.0" encoding="utf-8"?>
++<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
++  <PropertyGroup>
++    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
++    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
++    <AssemblyName>$(MSBuildProjectName)</AssemblyName>
++    <SchemaVersion>2.0</SchemaVersion>
++    <ProjectGuid>{95DFC527-4DC1-495E-97D7-E94EE1F7140D}</ProjectGuid>
++    <OutputType>Exe</OutputType>
++    <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
++    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
++  </PropertyGroup>
++  <!-- Default configurations to help VS understand the configurations -->
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' "></PropertyGroup>
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' "></PropertyGroup>
++  <PropertyGroup>
++    <DebugType>PdbOnly</DebugType>
++    <Optimize>False</Optimize>
++  </PropertyGroup>
++  <ItemGroup>
++    <CodeAnalysisDependentAssemblyPaths Condition=" '$(VS100COMNTOOLS)' != '' " Include="$(VS100COMNTOOLS)..\IDE\PrivateAssemblies">
++      <Visible>False</Visible>
++    </CodeAnalysisDependentAssemblyPaths>
++  </ItemGroup>
++  <PropertyGroup></PropertyGroup>
++  <ItemGroup>
++    <Compile Include="dynblk.il" />
++  </ItemGroup>
++  <ItemGroup>
++    <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
++  </ItemGroup>
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
++  <PropertyGroup Condition=" '$(MsBuildProjectDirOverride)' != '' "></PropertyGroup>
++</Project>
+-- 
+2.7.4
+

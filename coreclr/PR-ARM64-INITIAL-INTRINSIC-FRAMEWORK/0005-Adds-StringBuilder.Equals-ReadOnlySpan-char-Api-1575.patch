@@ -1,0 +1,53 @@
+From 55bb222db872ef42ae771967ba45d94326f34d73 Mon Sep 17 00:00:00 2001
+From: Anirudh Agnihotry <anirudhagnihotry098@gmail.com>
+Date: Tue, 9 Jan 2018 15:30:29 -0800
+Subject: [PATCH] Adds StringBuilder.Equals(ReadOnlySpan<char>) Api (#15759)
+
+Adds StringBuilder.Equals(ReadOnlySpan<char>)  Api
+---
+ src/mscorlib/shared/System/Text/StringBuilder.cs | 29 ++++++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/src/mscorlib/shared/System/Text/StringBuilder.cs b/src/mscorlib/shared/System/Text/StringBuilder.cs
+index d9da937..f7374e4 100644
+--- a/src/mscorlib/shared/System/Text/StringBuilder.cs
++++ b/src/mscorlib/shared/System/Text/StringBuilder.cs
+@@ -1646,6 +1646,35 @@ namespace System.Text
+         }
+ 
+         /// <summary>
++        /// Determines if the contents of this builder are equal to the contents of ReadOnlySpan<char>.
++        /// </summary>
++        /// <param name="value">The ReadOnlySpan{char}.</param>
++        public bool Equals(ReadOnlySpan<char> value)
++        {
++            if (value.Length != Length)
++                return false;
++
++            StringBuilder sbChunk = this;
++            int offset = 0;
++
++            do
++            {
++                int chunk_length = sbChunk.m_ChunkLength;
++                offset += chunk_length;
++
++                ReadOnlySpan<char> chunk = new ReadOnlySpan<char>(sbChunk.m_ChunkChars, 0, chunk_length);
++
++                if (!chunk.Equals(value.Slice(value.Length - offset, chunk_length)))
++                    return false;
++
++                sbChunk = sbChunk.m_ChunkPrevious;
++            } while (sbChunk != null);
++
++            Debug.Assert(offset == Length);
++            return true;
++        }
++
++        /// <summary>
+         /// Replaces all instances of one string with another in part of this builder.
+         /// </summary>
+         /// <param name="oldValue">The string to replace.</param>
+-- 
+2.7.4
+

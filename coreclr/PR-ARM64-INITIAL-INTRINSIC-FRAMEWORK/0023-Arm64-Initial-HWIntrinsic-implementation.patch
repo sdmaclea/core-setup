@@ -1,0 +1,1177 @@
+From 3996b9557b70858fb51cc44798f9221a7b19658a Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 19 Dec 2017 17:15:22 -0500
+Subject: [PATCH] [Arm64] Initial HWIntrinsic implementation
+
+---
+ src/jit/CMakeLists.txt                             |   7 +-
+ src/jit/codegenarm64.cpp                           | 130 +++++++++
+ src/jit/codegenarmarch.cpp                         |   6 +
+ src/jit/codegenlinear.h                            |  14 +-
+ src/jit/compiler.cpp                               |   5 +-
+ src/jit/compiler.h                                 |  23 +-
+ src/jit/hwintrinsicArm64.cpp                       | 289 +++++++++++++++++++++
+ src/jit/hwintrinsicArm64.h                         |  39 +++
+ src/jit/hwintrinsiclistArm64.h                     |  92 +++++--
+ src/jit/importer.cpp                               |  45 ++--
+ src/jit/lowerarmarch.cpp                           |  35 +++
+ src/jit/lsraarm64.cpp                              |  27 ++
+ src/jit/namedintrinsiclist.h                       |   9 +
+ src/jit/protononjit/CMakeLists.txt                 |   3 +-
+ src/jit/simd.cpp                                   |  33 ---
+ src/mscorlib/System.Private.CoreLib.csproj         |   6 +
+ .../Arm/Arm64/Simd.PlatformNotSupported.cs         |  37 +++
+ .../System/Runtime/Intrinsics/Arm/Arm64/Simd.cs    |  37 +++
+ 18 files changed, 737 insertions(+), 100 deletions(-)
+ create mode 100644 src/jit/hwintrinsicArm64.cpp
+ create mode 100644 src/jit/hwintrinsicArm64.h
+ create mode 100644 src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.PlatformNotSupported.cs
+ create mode 100644 src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.cs
+
+diff --git a/src/jit/CMakeLists.txt b/src/jit/CMakeLists.txt
+index 9464312..fa5bbc1 100644
+--- a/src/jit/CMakeLists.txt
++++ b/src/jit/CMakeLists.txt
+@@ -4,15 +4,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+ include_directories("./jitstd")
+ include_directories("../inc")
+ 
+-if (CLR_CMAKE_TARGET_ARCH_AMD64 OR (CLR_CMAKE_TARGET_ARCH_I386 AND NOT CLR_CMAKE_PLATFORM_UNIX))
++if (CLR_CMAKE_TARGET_ARCH_AMD64 OR CLR_CMAKE_TARGET_ARCH_ARM64 OR (CLR_CMAKE_TARGET_ARCH_I386 AND NOT CLR_CMAKE_PLATFORM_UNIX))
+   add_definitions(-DFEATURE_SIMD)
+   add_definitions(-DFEATURE_HW_INTRINSICS)
+ endif ()
+ 
+-if (CLR_CMAKE_TARGET_ARCH_ARM64)
+-  add_definitions(-DFEATURE_SIMD)
+-endif ()
+-
+ # JIT_BUILD disables certain PAL_TRY debugging features
+ add_definitions(-DJIT_BUILD=1)
+ 
+@@ -265,6 +261,7 @@ set( JIT_ARM64_SOURCES
+   targetarm64.cpp
+   unwindarm.cpp
+   unwindarm64.cpp
++  hwintrinsicArm64.cpp
+ )
+ 
+ if(CLR_CMAKE_TARGET_ARCH_AMD64)
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 974d2a9..17eab7f 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -4966,6 +4966,136 @@ void CodeGen::genStoreLclTypeSIMD12(GenTree* treeNode)
+ 
+ #endif // FEATURE_SIMD
+ 
++#if FEATURE_HW_INTRINSICS
++#include "hwintrinsicArm64.h"
++
++instruction CodeGen::getOpForHWIntrinsic(GenTreeHWIntrinsic* node, var_types instrType)
++{
++    NamedIntrinsic intrinsicID = node->gtHWIntrinsicId;
++
++    unsigned int instrTypeIndex = varTypeIsFloating(instrType) ? 0 : varTypeIsUnsigned(instrType) ? 2 : 1;
++
++    return compiler->getHWIntrinsicInfo(intrinsicID).instrs[instrTypeIndex];
++}
++
++void CodeGen::genHWIntrinsic(GenTreeHWIntrinsic* node)
++{
++    NamedIntrinsic intrinsicID = node->gtHWIntrinsicId;
++
++    switch (compiler->getHWIntrinsicInfo(intrinsicID).form)
++    {
++        case HWIntrinsicInfo::UnaryOp:
++            genHWIntrinsicUnaryOp(node);
++            break;
++        case HWIntrinsicInfo::CrcOp:
++            genHWIntrinsicCrcOp(node);
++            break;
++        case HWIntrinsicInfo::SimdBinaryOp:
++            genHWIntrinsicSimdBinaryOp(node);
++            break;
++        case HWIntrinsicInfo::SimdExtractOp:
++            genHWIntrinsicSimdExtractOp(node);
++            break;
++        case HWIntrinsicInfo::SimdInsertOp:
++            genHWIntrinsicSimdInsertOp(node);
++            break;
++        case HWIntrinsicInfo::SimdSelectOp:
++            genHWIntrinsicSimdSelectOp(node);
++            break;
++        case HWIntrinsicInfo::SimdUnaryOp:
++            genHWIntrinsicSimdUnaryOp(node);
++            break;
++        default:
++            NYI("HWIntrinsic form not implemented");
++    }
++}
++
++void CodeGen::genHWIntrinsicUnaryOp(GenTreeHWIntrinsic* node)
++{
++    NYI("genHWIntrinsicUnaryOp not implemented");
++}
++
++void CodeGen::genHWIntrinsicCrcOp(GenTreeHWIntrinsic* node)
++{
++    NYI("genHWIntrinsicCrcOp not implemented");
++}
++
++void CodeGen::genHWIntrinsicSimdBinaryOp(GenTreeHWIntrinsic* node)
++{
++    GenTree*  op1       = node->gtGetOp1();
++    GenTree*  op2       = node->gtGetOp2();
++    var_types baseType  = node->gtSIMDBaseType;
++    regNumber targetReg = node->gtRegNum;
++
++    assert(targetReg != REG_NA);
++    var_types targetType = node->TypeGet();
++
++    genConsumeOperands(node);
++
++    regNumber op1Reg = op1->gtRegNum;
++    regNumber op2Reg = op2->gtRegNum;
++
++    assert(genIsValidFloatReg(op1Reg));
++    assert(genIsValidFloatReg(op2Reg));
++    assert(genIsValidFloatReg(targetReg));
++
++    instruction ins = getOpForHWIntrinsic(node, baseType);
++    assert(ins != INS_invalid);
++
++    bool     is16B = (node->gtSIMDSize > 8);
++    emitAttr attr  = is16B ? EA_16BYTE : EA_8BYTE;
++    insOpts  opt   = genGetSimdInsOpt(is16B, baseType);
++
++    getEmitter()->emitIns_R_R_R(ins, attr, targetReg, op1Reg, op2Reg, opt);
++
++    genProduceReg(node);
++}
++
++void CodeGen::genHWIntrinsicSimdExtractOp(GenTreeHWIntrinsic* node)
++{
++    NYI("HWIntrinsic form not implemented");
++}
++
++void CodeGen::genHWIntrinsicSimdInsertOp(GenTreeHWIntrinsic* node)
++{
++    NYI("genHWIntrinsicSimdExtractOp not implemented");
++}
++
++void CodeGen::genHWIntrinsicSimdSelectOp(GenTreeHWIntrinsic* node)
++{
++    NYI("genHWIntrinsicSimdSelectOp not implemented");
++}
++
++void CodeGen::genHWIntrinsicSimdUnaryOp(GenTreeHWIntrinsic* node)
++{
++    GenTree*  op1       = node->gtGetOp1();
++    var_types baseType  = node->gtSIMDBaseType;
++    regNumber targetReg = node->gtRegNum;
++
++    assert(targetReg != REG_NA);
++    var_types targetType = node->TypeGet();
++
++    genConsumeOperands(node);
++
++    regNumber op1Reg = op1->gtRegNum;
++
++    assert(genIsValidFloatReg(op1Reg));
++    assert(genIsValidFloatReg(targetReg));
++
++    instruction ins = getOpForHWIntrinsic(node, baseType);
++    assert(ins != INS_invalid);
++
++    bool     is16B = (node->gtSIMDSize > 8);
++    emitAttr attr  = is16B ? EA_16BYTE : EA_8BYTE;
++    insOpts  opt   = genGetSimdInsOpt(is16B, baseType);
++
++    getEmitter()->emitIns_R_R(ins, attr, targetReg, op1Reg, opt);
++
++    genProduceReg(node);
++}
++
++#endif // FEATURE_HW_INTRINSICS
++
+ /*****************************************************************************
+  * Unit testing of the ARM64 emitter: generate a bunch of instructions into the prolog
+  * (it's as good a place as any), then use COMPlus_JitLateDisasm=* to see if the late
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index deab3b6..5b6a85d 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -263,6 +263,12 @@ void CodeGen::genCodeForTreeNode(GenTreePtr treeNode)
+             break;
+ #endif // FEATURE_SIMD
+ 
++#if FEATURE_HW_INTRINSICS
++        case GT_HWIntrinsic:
++            genHWIntrinsic(treeNode->AsHWIntrinsic());
++            break;
++#endif // FEATURE_HW_INTRINSICS
++
+         case GT_EQ:
+         case GT_NE:
+         case GT_LT:
+diff --git a/src/jit/codegenlinear.h b/src/jit/codegenlinear.h
+index 5804fa8..b4b6c74 100644
+--- a/src/jit/codegenlinear.h
++++ b/src/jit/codegenlinear.h
+@@ -114,8 +114,9 @@ void genPutArgStkSIMD12(GenTree* treeNode);
+ #endif // _TARGET_X86_
+ #endif // FEATURE_SIMD
+ 
+-#if FEATURE_HW_INTRINSICS && defined(_TARGET_XARCH_)
++#if FEATURE_HW_INTRINSICS
+ void genHWIntrinsic(GenTreeHWIntrinsic* node);
++#if defined(_TARGET_XARCH_)
+ void genSSEIntrinsic(GenTreeHWIntrinsic* node);
+ void genSSE2Intrinsic(GenTreeHWIntrinsic* node);
+ void genSSE3Intrinsic(GenTreeHWIntrinsic* node);
+@@ -131,6 +132,17 @@ void genFMAIntrinsic(GenTreeHWIntrinsic* node);
+ void genLZCNTIntrinsic(GenTreeHWIntrinsic* node);
+ void genPCLMULQDQIntrinsic(GenTreeHWIntrinsic* node);
+ void genPOPCNTIntrinsic(GenTreeHWIntrinsic* node);
++#endif // defined(_TARGET_XARCH_)
++#if defined(_TARGET_ARM64_)
++instruction getOpForHWIntrinsic(GenTreeHWIntrinsic* node, var_types instrType);
++void genHWIntrinsicUnaryOp(GenTreeHWIntrinsic* node);
++void genHWIntrinsicCrcOp(GenTreeHWIntrinsic* node);
++void genHWIntrinsicSimdBinaryOp(GenTreeHWIntrinsic* node);
++void genHWIntrinsicSimdExtractOp(GenTreeHWIntrinsic* node);
++void genHWIntrinsicSimdInsertOp(GenTreeHWIntrinsic* node);
++void genHWIntrinsicSimdSelectOp(GenTreeHWIntrinsic* node);
++void genHWIntrinsicSimdUnaryOp(GenTreeHWIntrinsic* node);
++#endif // defined(_TARGET_XARCH_)
+ #endif // FEATURE_HW_INTRINSICS
+ 
+ #if !defined(_TARGET_64BIT_)
+diff --git a/src/jit/compiler.cpp b/src/jit/compiler.cpp
+index 876dcad..8c7f768 100644
+--- a/src/jit/compiler.cpp
++++ b/src/jit/compiler.cpp
+@@ -2119,13 +2119,12 @@ void Compiler::compInit(ArenaAllocator* pAlloc, InlineInfo* inlineInfo)
+ #if FEATURE_HW_INTRINSICS
+ #if defined(_TARGET_ARM64_)
+     Vector64FloatHandle  = nullptr;
+-    Vector64DoubleHandle = nullptr;
+-    Vector64IntHandle    = nullptr;
++    Vector64UIntHandle   = nullptr;
+     Vector64UShortHandle = nullptr;
+     Vector64UByteHandle  = nullptr;
++    Vector64IntHandle    = nullptr;
+     Vector64ShortHandle  = nullptr;
+     Vector64ByteHandle   = nullptr;
+-    Vector64LongHandle   = nullptr;
+ #endif // defined(_TARGET_ARM64_)
+     Vector128FloatHandle  = nullptr;
+     Vector128DoubleHandle = nullptr;
+diff --git a/src/jit/compiler.h b/src/jit/compiler.h
+index 4064ffe..77ccfa2 100644
+--- a/src/jit/compiler.h
++++ b/src/jit/compiler.h
+@@ -1509,6 +1509,8 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+ */
+ 
++struct HWIntrinsicInfo;
++
+ class Compiler
+ {
+     friend class emitter;
+@@ -3023,11 +3025,11 @@ protected:
+ 
+ #if FEATURE_HW_INTRINSICS
+     InstructionSet lookupHWIntrinsicISA(const char* className);
++#ifdef _TARGET_XARCH_
+     NamedIntrinsic lookupHWIntrinsic(const char* methodName, InstructionSet isa);
+     InstructionSet isaOfHWIntrinsic(NamedIntrinsic intrinsic);
+     bool isIntrinsicAnIsSupportedPropertyGetter(NamedIntrinsic intrinsic);
+     bool isFullyImplmentedISAClass(InstructionSet isa);
+-#ifdef _TARGET_XARCH_
+     GenTree* impUnsupportedHWIntrinsic(unsigned              helper,
+                                        CORINFO_METHOD_HANDLE method,
+                                        CORINFO_SIG_INFO*     sig,
+@@ -3099,6 +3101,18 @@ protected:
+     bool compSupportsHWIntrinsic(InstructionSet isa);
+     bool isScalarISA(InstructionSet isa);
+ #endif // _TARGET_XARCH_
++#ifdef _TARGET_ARM64_
++    NamedIntrinsic lookupHWIntrinsic(const char* className, const char* methodName);
++    GenTree* impHWIntrinsic(NamedIntrinsic        intrinsic,
++                            CORINFO_METHOD_HANDLE method,
++                            CORINFO_SIG_INFO*     sig,
++                            bool                  mustExpand);
++    GenTree* impUnsupportedHWIntrinsic(unsigned              helper,
++                                       CORINFO_METHOD_HANDLE method,
++                                       CORINFO_SIG_INFO*     sig,
++                                       bool                  mustExpand);
++    const HWIntrinsicInfo& getHWIntrinsicInfo(NamedIntrinsic);
++#endif // _TARGET_ARM64_
+ #endif // FEATURE_HW_INTRINSICS
+     GenTreePtr impArrayAccessIntrinsic(CORINFO_CLASS_HANDLE clsHnd,
+                                        CORINFO_SIG_INFO*    sig,
+@@ -7455,15 +7469,12 @@ private:
+ #if FEATURE_HW_INTRINSICS
+ #if defined(_TARGET_ARM64_)
+     CORINFO_CLASS_HANDLE Vector64FloatHandle;
+-    CORINFO_CLASS_HANDLE Vector64DoubleHandle;
+-    CORINFO_CLASS_HANDLE Vector64IntHandle;
++    CORINFO_CLASS_HANDLE Vector64UIntHandle;
+     CORINFO_CLASS_HANDLE Vector64UShortHandle;
+     CORINFO_CLASS_HANDLE Vector64UByteHandle;
+     CORINFO_CLASS_HANDLE Vector64ShortHandle;
+     CORINFO_CLASS_HANDLE Vector64ByteHandle;
+-    CORINFO_CLASS_HANDLE Vector64LongHandle;
+-    CORINFO_CLASS_HANDLE Vector64UIntHandle;
+-    CORINFO_CLASS_HANDLE Vector64ULongHandle;
++    CORINFO_CLASS_HANDLE Vector64IntHandle;
+ #endif // defined(_TARGET_ARM64_)
+     CORINFO_CLASS_HANDLE Vector128FloatHandle;
+     CORINFO_CLASS_HANDLE Vector128DoubleHandle;
+diff --git a/src/jit/hwintrinsicArm64.cpp b/src/jit/hwintrinsicArm64.cpp
+new file mode 100644
+index 0000000..e917723
+--- /dev/null
++++ b/src/jit/hwintrinsicArm64.cpp
+@@ -0,0 +1,289 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++#include "jitpch.h"
++#include "hwintrinsicArm64.h"
++
++#if FEATURE_HW_INTRINSICS
++
++namespace IsaFlag
++{
++enum Flag
++{
++#define HARDWARE_INTRINSIC_CLASS(flag, isa) isa = 1ULL << InstructionSet_##isa,
++#include "hwintrinsiclistArm64.h"
++    EveryISA = ~0ULL
++};
++
++Flag operator|(Flag a, Flag b)
++{
++    return Flag(uint64_t(a) | uint64_t(b));
++}
++
++Flag flag(InstructionSet isa)
++{
++    return Flag(1ULL << isa);
++}
++}
++
++// clang-format off
++static const HWIntrinsicInfo hwIntrinsicInfoArray[] = {
++    {NI_ARM64_IsSupported_True,     "get_IsSupported",                 IsaFlag::EveryISA, HWIntrinsicInfo::IsSupported, HWIntrinsicInfo::None, {}},
++    {NI_ARM64_IsSupported_False,    "::NI_ARM64_IsSupported_False",    IsaFlag::EveryISA, HWIntrinsicInfo::IsSupported, HWIntrinsicInfo::None, {}},
++    {NI_ARM64_PlatformNotSupported, "::NI_ARM64_PlatformNotSupported", IsaFlag::EveryISA, HWIntrinsicInfo::Unsupported, HWIntrinsicInfo::None, {}},
++#define HARDWARE_INTRINSIC(id, isa, name, form, i0, i1, i2, flags) \
++    {id,                            #name,                             IsaFlag::isa,      HWIntrinsicInfo::form,        HWIntrinsicInfo::flags, { i0, i1, i2 }},
++#include "hwintrinsiclistArm64.h"
++};
++// clang-format on
++
++extern const char* getHWIntrinsicName(NamedIntrinsic intrinsic)
++{
++    return hwIntrinsicInfoArray[intrinsic - NI_HW_INTRINSIC_START - 1].intrinsicName;
++}
++
++const HWIntrinsicInfo& Compiler::getHWIntrinsicInfo(NamedIntrinsic intrinsic)
++{
++    assert(intrinsic > NI_HW_INTRINSIC_START);
++    assert(intrinsic < NI_HW_INTRINSIC_END);
++
++    return hwIntrinsicInfoArray[intrinsic - NI_HW_INTRINSIC_START - 1];
++}
++
++//------------------------------------------------------------------------
++// lookupHWIntrinsicISA: map class name to InstructionSet value
++//
++// Arguments:
++//    className -- class name in System.Runtime.Intrinsics.Arm.Arm64
++//
++// Return Value:
++//    Id for the ISA class if enabled.
++//
++InstructionSet Compiler::lookupHWIntrinsicISA(const char* className)
++{
++    if (className != nullptr)
++    {
++#define HARDWARE_INTRINSIC_CLASS(flag, isa)                                                                            \
++    if (strcmp(className, #isa) == 0)                                                                                  \
++        return InstructionSet_##isa;
++#include "hwintrinsiclistArm64.h"
++    }
++
++    return InstructionSet_NONE;
++}
++
++//------------------------------------------------------------------------
++// lookupHWIntrinsic: map intrinsic name to named intrinsic value
++//
++// Arguments:
++//    methodName -- name of the intrinsic function.
++//    isa        -- instruction set of the intrinsic.
++//
++// Return Value:
++//    Id for the hardware intrinsic.
++//
++// TODO-Throughput: replace sequential search by hash lookup
++NamedIntrinsic Compiler::lookupHWIntrinsic(const char* className, const char* methodName)
++{
++    InstructionSet isa    = lookupHWIntrinsicISA(className);
++    NamedIntrinsic result = NI_Illegal;
++    if (isa != InstructionSet_NONE)
++    {
++        IsaFlag::Flag isaFlag = IsaFlag::flag(isa);
++        for (int i = 0; i < NI_HW_INTRINSIC_END - NI_HW_INTRINSIC_START; i++)
++        {
++            if ((isaFlag & hwIntrinsicInfoArray[i].isaflags) &&
++                strcmp(methodName, hwIntrinsicInfoArray[i].intrinsicName) == 0)
++            {
++                if (compSupports(isa))
++                {
++                    result = hwIntrinsicInfoArray[i].intrinsicID;
++                }
++                else
++                {
++                    result = (hwIntrinsicInfoArray[i].intrinsicID == NI_ARM64_IsSupported_True)
++                                 ? NI_ARM64_PlatformNotSupported
++                                 : NI_ARM64_IsSupported_False;
++                }
++            }
++        }
++    }
++    return result;
++}
++
++//------------------------------------------------------------------------
++// impUnsupportedHWIntrinsic: returns a node for an unsupported HWIntrinsic
++//
++// Arguments:
++//    helper     - JIT helper ID for the exception to be thrown
++//    method     - method handle of the intrinsic function.
++//    sig        - signature of the intrinsic call
++//    mustExpand - true if the intrinsic must return a GenTree*; otherwise, false
++//
++// Return Value:
++//    a gtNewMustThrowException if mustExpand is true; otherwise, nullptr
++//
++GenTree* Compiler::impUnsupportedHWIntrinsic(unsigned              helper,
++                                             CORINFO_METHOD_HANDLE method,
++                                             CORINFO_SIG_INFO*     sig,
++                                             bool                  mustExpand)
++{
++    // We've hit some error case and may need to return a node for the given error.
++    //
++    // When `mustExpand=false`, we are attempting to inline the intrinsic directly into another method. In this
++    // scenario, we need to return `nullptr` so that a GT_CALL to the intrinsic is emitted instead. This is to
++    // ensure that everything continues to behave correctly when optimizations are enabled (e.g. things like the
++    // inliner may expect the node we return to have a certain signature, and the `MustThrowException` node won't
++    // match that).
++    //
++    // When `mustExpand=true`, we are in a GT_CALL to the intrinsic and are attempting to JIT it. This will generally
++    // be in response to an indirect call (e.g. done via reflection) or in response to an earlier attempt returning
++    // `nullptr` (under `mustExpand=false`). In that scenario, we are safe to return the `MustThrowException` node.
++
++    if (mustExpand)
++    {
++        for (unsigned i = 0; i < sig->numArgs; i++)
++        {
++            impPopStack();
++        }
++
++        return gtNewMustThrowException(helper, JITtype2varType(sig->retType), sig->retTypeClass);
++    }
++    else
++    {
++        return nullptr;
++    }
++}
++
++//------------------------------------------------------------------------
++// impHWIntrinsic: dispatch hardware intrinsics to their own implementation
++// function
++//
++// Arguments:
++//    intrinsic -- id of the intrinsic function.
++//    method    -- method handle of the intrinsic function.
++//    sig       -- signature of the intrinsic call
++//
++// Return Value:
++//    the expanded intrinsic.
++//
++GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
++                                  CORINFO_METHOD_HANDLE method,
++                                  CORINFO_SIG_INFO*     sig,
++                                  bool                  mustExpand)
++{
++    GenTree*  retNode       = nullptr;
++    GenTree*  op1           = nullptr;
++    GenTree*  op2           = nullptr;
++    var_types simdType      = TYP_UNKNOWN;
++    var_types simdBaseType  = TYP_UNKNOWN;
++    unsigned  simdSizeBytes = 0;
++
++    // Instantiation type check
++    switch (getHWIntrinsicInfo(intrinsic).form)
++    {
++        case HWIntrinsicInfo::SimdBinaryOp:
++        case HWIntrinsicInfo::SimdUnaryOp:
++            simdBaseType = getBaseTypeAndSizeOfSIMDType(sig->retTypeClass, &simdSizeBytes);
++
++            if (simdBaseType == TYP_UNKNOWN)
++            {
++                // TODO-FIXME Add CORINFO_HELP_THROW_TYPE_NOT_SUPPORTED
++                unsigned CORINFO_HELP_THROW_TYPE_NOT_SUPPORTED = CORINFO_HELP_THROW_PLATFORM_NOT_SUPPORTED;
++
++                return impUnsupportedHWIntrinsic(CORINFO_HELP_THROW_TYPE_NOT_SUPPORTED, method, sig, mustExpand);
++            }
++            simdType = getSIMDTypeForSize(simdSizeBytes);
++            break;
++        default:
++            break;
++    }
++
++    switch (getHWIntrinsicInfo(intrinsic).form)
++    {
++        case HWIntrinsicInfo::IsSupported:
++            return gtNewIconNode((intrinsic == NI_ARM64_IsSupported_True) ? 1 : 0);
++
++        case HWIntrinsicInfo::Unsupported:
++            return impUnsupportedHWIntrinsic(CORINFO_HELP_THROW_PLATFORM_NOT_SUPPORTED, method, sig, mustExpand);
++
++        case HWIntrinsicInfo::SimdBinaryOp:
++            // op1 is the first operand
++            // op2 is the second operand
++            op2 = impSIMDPopStack(simdType);
++            op1 = impSIMDPopStack(simdType);
++
++            return gtNewSimdHWIntrinsicNode(simdType, op1, op2, intrinsic, simdBaseType, simdSizeBytes);
++
++        case HWIntrinsicInfo::SimdUnaryOp:
++            op1 = impSIMDPopStack(simdType);
++
++            return gtNewSimdHWIntrinsicNode(simdType, op1, nullptr, intrinsic, simdBaseType, simdSizeBytes);
++
++        default:
++            JITDUMP("Not implemented hardware intrinsic form");
++            assert(!"Unimplemented SIMD Intrinsic form");
++
++            break;
++    }
++    return retNode;
++}
++
++CORINFO_CLASS_HANDLE Compiler::gtGetStructHandleForHWSIMD(var_types simdType, var_types simdBaseType)
++{
++    if (simdType == TYP_SIMD16)
++    {
++        switch (simdBaseType)
++        {
++            case TYP_FLOAT:
++                return Vector128FloatHandle;
++            case TYP_DOUBLE:
++                return Vector128DoubleHandle;
++            case TYP_INT:
++                return Vector128IntHandle;
++            case TYP_USHORT:
++                return Vector128UShortHandle;
++            case TYP_UBYTE:
++                return Vector128UByteHandle;
++            case TYP_SHORT:
++                return Vector128ShortHandle;
++            case TYP_BYTE:
++                return Vector128ByteHandle;
++            case TYP_LONG:
++                return Vector128LongHandle;
++            case TYP_UINT:
++                return Vector128UIntHandle;
++            case TYP_ULONG:
++                return Vector128ULongHandle;
++            default:
++                assert(!"Didn't find a class handle for simdType");
++        }
++    }
++    else if (simdType == TYP_SIMD8)
++    {
++        switch (simdBaseType)
++        {
++            case TYP_FLOAT:
++                return Vector64FloatHandle;
++            case TYP_UINT:
++                return Vector64UIntHandle;
++            case TYP_USHORT:
++                return Vector64UShortHandle;
++            case TYP_UBYTE:
++                return Vector64UByteHandle;
++            case TYP_SHORT:
++                return Vector64ShortHandle;
++            case TYP_BYTE:
++                return Vector64ByteHandle;
++            case TYP_INT:
++                return Vector64IntHandle;
++            default:
++                assert(!"Didn't find a class handle for simdType");
++        }
++    }
++
++    return NO_CLASS_HANDLE;
++}
++
++#endif // FEATURE_HW_INTRINSICS
+diff --git a/src/jit/hwintrinsicArm64.h b/src/jit/hwintrinsicArm64.h
+new file mode 100644
+index 0000000..17dc448
+--- /dev/null
++++ b/src/jit/hwintrinsicArm64.h
+@@ -0,0 +1,39 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++#ifndef _HW_INTIRNSIC_ARM64_H_
++#define _HW_INTIRNSIC_ARM64_H_
++
++#if FEATURE_HW_INTRINSICS
++
++struct HWIntrinsicInfo
++{
++    enum Form
++    {
++        IsSupported,
++        Unsupported,
++        UnaryOp,
++        CrcOp,
++        SimdBinaryOp,
++        SimdExtractOp,
++        SimdInsertOp,
++        SimdSelectOp,
++        SimdUnaryOp,
++    };
++
++    enum Flags
++    {
++        None
++    };
++
++    NamedIntrinsic intrinsicID;
++    const char*    intrinsicName;
++    uint64_t       isaflags;
++    Form           form;
++    Flags          flags;
++    instruction    instrs[3];
++};
++
++#endif // FEATURE_HW_INTRINSICS
++#endif // _HW_INTIRNSIC_ARM64_H_
+diff --git a/src/jit/hwintrinsiclistArm64.h b/src/jit/hwintrinsiclistArm64.h
+index 4fac146..6d1c95b 100644
+--- a/src/jit/hwintrinsiclistArm64.h
++++ b/src/jit/hwintrinsiclistArm64.h
+@@ -12,31 +12,79 @@
+ 
+ #if defined(HARDWARE_INTRINSIC_CLASS)
+ #ifndef HARDWARE_INTRINSIC_CLASS_WITH_FLAG
+-HARDWARE_INTRINSIC_CLASS(NotApplicable                , Base     )
++HARDWARE_INTRINSIC_CLASS(NotApplicable,                 Base     )
+ #endif // HARDWARE_INTRINSIC_CLASS_WITH_FLAG
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_AES       , Aes      )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_ATOMICS   , Atomics  )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_CRC32     , Crc32    )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_DCPOP     , Dcpop    )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_DP        , Dp       )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_FCMA      , Fcma     )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_FP        , Fp       )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_FP16      , Fp16     )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_JSCVT     , Jscvt    )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_LRCPC     , Lrcpc    )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_PMULL     , Pmull    )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA1      , Sha1     )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA2      , Sha2     )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA512    , Sha512   )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA3      , Sha3     )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SIMD      , Simd     )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SIMD_V81  , Simd_v81 )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SIMD_FP16 , Simd_fp16)
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SM3       , Sm3      )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SM4       , Sm4      )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SVE       , Sve      )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_AES,        Aes      )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_ATOMICS,    Atomics  )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_CRC32,      Crc32    )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_DCPOP,      Dcpop    )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_DP,         Dp       )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_FCMA,       Fcma     )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_FP,         Fp       )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_FP16,       Fp16     )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_JSCVT,      Jscvt    )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_LRCPC,      Lrcpc    )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_PMULL,      Pmull    )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA1,       Sha1     )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA2,       Sha2     )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA512,     Sha512   )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA3,       Sha3     )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SIMD,       Simd     )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SIMD_V81,   Simd_v81 )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SIMD_FP16,  Simd_fp16)
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SM3,        Sm3      )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SM4,        Sm4      )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SVE,        Sve      )
+ #endif // defined(HARDWARE_INTRINSIC_CLASS)
+ 
++#if defined(HARDWARE_INTRINSIC)
++//                (ID                             Class     Function name                   Form           Floating,    Signed,      Unsigned,     Flags)
++//  Base
++HARDWARE_INTRINSIC(NI_ARM64_BASE_CLS,             Base,     LeadingSignCount,               UnaryOp,       INS_invalid, INS_cls,     INS_cls,      None )
++HARDWARE_INTRINSIC(NI_ARM64_BASE_CLZ,             Base,     LeadingZeroCount,               UnaryOp,       INS_invalid, INS_clz,     INS_clz,      None )
++HARDWARE_INTRINSIC(NI_ARM64_BASE_CNT,             Base,     PopCount,                       UnaryOp,       INS_invalid, INS_cnt,     INS_cnt,      None )
++#if NYI
++// Crc32
++HARDWARE_INTRINSIC(NI_ARM64_CRC32_CRC32,          Crc32,    Crc32,                          CrcOp,         INS_invalid, INS_invalid, INS_crc32,    None )
++HARDWARE_INTRINSIC(NI_ARM64_CRC32_CRC32C,         Crc32,    Crc32C,                         CrcOp,         INS_invalid, INS_invalid, INS_crc32c,   None )
++#endif
++//  Simd
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_Abs,             Simd,     Abs,                            SimdUnaryOp,   INS_fabs,    INS_invalid, INS_abs,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_Add,             Simd,     Add,                            SimdBinaryOp,  INS_fadd,    INS_add,     INS_add,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_BitwiseAnd,      Simd,     And,                            SimdBinaryOp,  INS_and,     INS_and,     INS_and,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_BitwiseAndNot,   Simd,     AndNot,                         SimdBinaryOp,  INS_bic,     INS_bic,     INS_bic,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_BitwiseOr,       Simd,     Or,                             SimdBinaryOp,  INS_orr,     INS_orr,     INS_orr,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_BitwiseOrNot,    Simd,     OrNot,                          SimdBinaryOp,  INS_orn,     INS_orn,     INS_orn,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_BitwiseNot,      Simd,     Not,                            SimdBinaryOp,  INS_not,     INS_not,     INS_not,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_BitwiseSelect,   Simd,     BitwiseSelect,                  SimdSelectOp,  INS_bsl,     INS_bsl,     INS_bsl,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_BitwiseXor,      Simd,     Xor,                            SimdBinaryOp,  INS_eor,     INS_eor,     INS_eor,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_CLS,             Simd,     LeadingSignCount,               SimdUnaryOp,   INS_invalid, INS_cls,     INS_cls,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_CLZ,             Simd,     LeadingZeroCount,               SimdUnaryOp,   INS_invalid, INS_clz,     INS_clz,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_CNT,             Simd,     PopCount,                       SimdUnaryOp,   INS_invalid, INS_cnt,     INS_cnt,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_EQ,              Simd,     CompareEqual,                   SimdBinaryOp,  INS_fcmeq,   INS_cmeq,    INS_cmeq,     None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_EQ_ZERO,         Simd,     CompareEqualZero,               SimdUnaryOp,   INS_fcmeq,   INS_cmeq,    INS_cmeq,     None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_GE,              Simd,     CompareGreaterThanOrEqual,      SimdBinaryOp,  INS_fcmge,   INS_cmge,    INS_cmhs,     None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_GE_ZERO,         Simd,     CompareGreaterThanOrEqualZero,  SimdUnaryOp,   INS_fcmge,   INS_cmge,    INS_invalid,  None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_GT,              Simd,     CompareGreaterThan,             SimdBinaryOp,  INS_fcmgt,   INS_cmgt,    INS_cmhi,     None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_GT_ZERO,         Simd,     CompareGreaterThanZero,         SimdUnaryOp,   INS_fcmgt,   INS_cmgt,    INS_invalid,  None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_LE_ZERO,         Simd,     CompareLessThanOrEqualZero,     SimdUnaryOp,   INS_fcmle,   INS_cmle,    INS_invalid,  None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_LT_ZERO,         Simd,     CompareLessThanZero,            SimdUnaryOp,   INS_fcmle,   INS_cmle,    INS_invalid,  None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_TST,             Simd,     CompareTest,                    SimdBinaryOp,  INS_ctst,    INS_ctst,    INS_ctst,     None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_Div,             Simd,     Divide,                         SimdBinaryOp,  INS_fdiv,    INS_invalid, INS_invalid,  None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_Negate,          Simd,     Negate,                         SimdUnaryOp,   INS_fneg,    INS_neg,     INS_invalid,  None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_Max,             Simd,     Max,                            SimdBinaryOp,  INS_fmax,    INS_smax,    INS_umax,     None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_Min,             Simd,     Min,                            SimdBinaryOp,  INS_fmin,    INS_smin,    INS_umin,     None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_Mul,             Simd,     Multiply,                       SimdBinaryOp,  INS_fmul,    INS_mul,     INS_mul,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_Sqrt,            Simd,     Sqrt,                           SimdUnaryOp,   INS_fsqrt,   INS_invalid, INS_invalid,  None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_Sub,             Simd,     Subtract,                       SimdBinaryOp,  INS_fsub,    INS_sub,     INS_sub,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_GetItem,         Simd,     Extract,                        SimdExtractOp, INS_mov,     INS_mov,     INS_mov,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_SetItem,         Simd,     Insert,                         SimdInsertOp,  INS_mov,     INS_mov,     INS_mov,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_SetAllVector64,  Simd,     SetAllVector64,                 SimdUnaryOp,   INS_dup,     INS_dup,     INS_dup,      None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_SetAllVector128, Simd,     SetAllVector128,                SimdUnaryOp,   INS_dup,     INS_dup,     INS_dup,      None )
++
++#endif
++
++
+ #undef HARDWARE_INTRINSIC_CLASS_WITH_FLAG
+ #undef HARDWARE_INTRINSIC_CLASS
+ #undef HARDWARE_INTRINSIC
+diff --git a/src/jit/importer.cpp b/src/jit/importer.cpp
+index 6fd836f..be34970 100644
+--- a/src/jit/importer.cpp
++++ b/src/jit/importer.cpp
+@@ -1,4 +1,3 @@
+-
+ // Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ // See the LICENSE file in the project root for more information.
+@@ -3402,6 +3401,12 @@ GenTree* Compiler::impIntrinsic(GenTree*                newobjThis,
+                 return impX86HWIntrinsic(ni, method, sig, mustExpand);
+             }
+ #endif // _TARGET_XARCH_
++#ifdef _TARGET_ARM64_
++            if (ni > NI_HW_INTRINSIC_START && ni < NI_HW_INTRINSIC_END)
++            {
++                return impHWIntrinsic(ni, method, sig, mustExpand);
++            }
++#endif // _TARGET_XARCH_
+ #endif // FEATURE_HW_INTRINSICS
+         }
+     }
+@@ -4118,12 +4123,21 @@ NamedIntrinsic Compiler::lookupNamedIntrinsic(CORINFO_METHOD_HANDLE method)
+         }
+     }
+ 
+-#if FEATURE_HW_INTRINSICS && defined(_TARGET_XARCH_)
++#if FEATURE_HW_INTRINSICS
++#if defined(_TARGET_XARCH_)
+     if ((namespaceName != nullptr) && strcmp(namespaceName, "System.Runtime.Intrinsics.X86") == 0)
+     {
+         InstructionSet isa = lookupHWIntrinsicISA(className);
+         result             = lookupHWIntrinsic(methodName, isa);
+     }
++#elif defined(_TARGET_ARM64_)
++    if ((namespaceName != nullptr) && strcmp(namespaceName, "System.Runtime.Intrinsics.Arm.Arm64") == 0)
++    {
++        result = lookupHWIntrinsic(className, methodName);
++    }
++#else // !defined(_TARGET_XARCH_) && !defined(_TARGET_ARM64_)
++#error Unsupported platform
++#endif // !defined(_TARGET_XARCH_) && !defined(_TARGET_ARM64_)
+ #endif // FEATURE_HW_INTRINSICS
+     return result;
+ }
+@@ -15839,31 +15853,6 @@ bool Compiler::impReturnInstruction(BasicBlock* block, int prefixFlags, OPCODE&
+                     assert(info.compRetNativeType != TYP_VOID &&
+                            (fgMoreThanOneReturnBlock() || impInlineInfo->HasGcRefLocals()));
+ 
+-                    // If this method returns a ref type, track the actual types seen
+-                    // in the returns.
+-                    if (info.compRetType == TYP_REF)
+-                    {
+-                        bool                 isExact      = false;
+-                        bool                 isNonNull    = false;
+-                        CORINFO_CLASS_HANDLE returnClsHnd = gtGetClassHandle(op2, &isExact, &isNonNull);
+-
+-                        if (impInlineInfo->retExpr == nullptr)
+-                        {
+-                            // This is the first return, so best known type is the type
+-                            // of this return value.
+-                            impInlineInfo->retExprClassHnd        = returnClsHnd;
+-                            impInlineInfo->retExprClassHndIsExact = isExact;
+-                        }
+-                        else if (impInlineInfo->retExprClassHnd != returnClsHnd)
+-                        {
+-                            // This return site type differs from earlier seen sites,
+-                            // so reset the info and we'll fall back to using the method's
+-                            // declared return type for the return spill temp.
+-                            impInlineInfo->retExprClassHnd        = nullptr;
+-                            impInlineInfo->retExprClassHndIsExact = false;
+-                        }
+-                    }
+-
+                     // This is a bit of a workaround...
+                     // If we are inlining a call that returns a struct, where the actual "native" return type is
+                     // not a struct (for example, the struct is composed of exactly one int, and the native
+@@ -15907,7 +15896,7 @@ bool Compiler::impReturnInstruction(BasicBlock* block, int prefixFlags, OPCODE&
+                     impAssignTempGen(lvaInlineeReturnSpillTemp, op2, se.seTypeInfo.GetClassHandle(),
+                                      (unsigned)CHECK_SPILL_ALL);
+ 
+-                    GenTree* tmpOp2 = gtNewLclvNode(lvaInlineeReturnSpillTemp, op2->TypeGet());
++                    GenTreePtr tmpOp2 = gtNewLclvNode(lvaInlineeReturnSpillTemp, op2->TypeGet());
+ 
+                     if (restoreType)
+                     {
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index 5aa3ff1..757ac52 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -506,6 +506,19 @@ void Lowering::LowerSIMD(GenTreeSIMD* simdNode)
+ }
+ #endif // FEATURE_SIMD
+ 
++#ifdef FEATURE_HW_INTRINSICS
++//----------------------------------------------------------------------------------------------
++// Lowering::LowerHWIntrinsic: Perform containment analysis for a hardware intrinsic node.
++//
++//  Arguments:
++//     node - The hardware intrinsic node.
++//
++void Lowering::LowerHWIntrinsic(GenTreeHWIntrinsic* node)
++{
++    ContainCheckHWIntrinsic(node);
++}
++#endif // FEATURE_HW_INTRINSICS
++
+ //------------------------------------------------------------------------
+ // Containment analysis
+ //------------------------------------------------------------------------
+@@ -815,6 +828,28 @@ void Lowering::ContainCheckSIMD(GenTreeSIMD* simdNode)
+ }
+ #endif // FEATURE_SIMD
+ 
++#ifdef FEATURE_HW_INTRINSICS
++//----------------------------------------------------------------------------------------------
++// ContainCheckHWIntrinsic: Perform containment analysis for a hardware intrinsic node.
++//
++//  Arguments:
++//     node - The hardware intrinsic node.
++//
++void Lowering::ContainCheckHWIntrinsic(GenTreeHWIntrinsic* node)
++{
++    NamedIntrinsic intrinsicID = node->gtHWIntrinsicId;
++    GenTree*       op1         = node->gtOp.gtOp1;
++    GenTree*       op2         = node->gtOp.gtOp2;
++
++    switch (node->gtHWIntrinsicId)
++    {
++        default:
++            assert((intrinsicID > NI_HW_INTRINSIC_START) && (intrinsicID < NI_HW_INTRINSIC_END));
++            break;
++    }
++}
++#endif // FEATURE_HW_INTRINSICS
++
+ #endif // _TARGET_ARMARCH_
+ 
+ #endif // !LEGACY_BACKEND
+diff --git a/src/jit/lsraarm64.cpp b/src/jit/lsraarm64.cpp
+index 93b34d9..9a1eddd 100644
+--- a/src/jit/lsraarm64.cpp
++++ b/src/jit/lsraarm64.cpp
+@@ -285,6 +285,12 @@ void LinearScan::TreeNodeInfoInit(GenTree* tree, TreeNodeInfo* info)
+             break;
+ #endif // FEATURE_SIMD
+ 
++#if FEATURE_HW_INTRINSICS
++        case GT_HWIntrinsic:
++            TreeNodeInfoInitHWIntrinsic(tree->AsHWIntrinsic(), info);
++            break;
++#endif // FEATURE_HW_INTRINSICS
++
+         case GT_CAST:
+         {
+             // TODO-ARM64-CQ: Int-To-Int conversions - castOp cannot be a memory op and must have an assigned
+@@ -977,6 +983,27 @@ void LinearScan::TreeNodeInfoInitSIMD(GenTreeSIMD* simdTree, TreeNodeInfo* info)
+ }
+ #endif // FEATURE_SIMD
+ 
++#if FEATURE_HW_INTRINSICS
++//------------------------------------------------------------------------
++// TreeNodeInfoInitHWIntrinsic: Set the NodeInfo for a GT_HWIntrinsic tree.
++//
++// Arguments:
++//    tree       - The GT_HWIntrinsic node of interest
++//
++// Return Value:
++//    None.
++
++void LinearScan::TreeNodeInfoInitHWIntrinsic(GenTreeHWIntrinsic* intrinsicTree, TreeNodeInfo* info)
++{
++    NamedIntrinsic intrinsicID = intrinsicTree->gtHWIntrinsicId;
++    info->srcCount += GetOperandInfo(intrinsicTree->gtOp.gtOp1);
++    if (intrinsicTree->gtGetOp2IfPresent() != nullptr)
++    {
++        info->srcCount += GetOperandInfo(intrinsicTree->gtOp.gtOp2);
++    }
++}
++#endif
++
+ #endif // _TARGET_ARM64_
+ 
+ #endif // !LEGACY_BACKEND
+diff --git a/src/jit/namedintrinsiclist.h b/src/jit/namedintrinsiclist.h
+index 1144df6..44f2a6b 100644
+--- a/src/jit/namedintrinsiclist.h
++++ b/src/jit/namedintrinsiclist.h
+@@ -16,8 +16,17 @@ enum NamedIntrinsic : unsigned int
+     NI_System_Collections_Generic_EqualityComparer_get_Default = 4,
+ #if FEATURE_HW_INTRINSICS
+     NI_HW_INTRINSIC_START,
++#if defined(_TARGET_XARCH_)
+ #define HARDWARE_INTRINSIC(id, name, isa) NI_##id,
+ #include "hwintrinsiclistxarch.h"
++#elif defined(_TARGET_ARM64_)
++    NI_ARM64_IsSupported_False,
++    NI_ARM64_IsSupported_True,
++    NI_ARM64_PlatformNotSupported,
++#define HARDWARE_INTRINSIC(id, isa, name, form, ins0, ins1, ins2, flags) id,
++#include "hwintrinsiclistArm64.h"
++#endif // !defined(_TARGET_XARCH_) && !defined(_TARGET_ARM64_)
++#undef HARDWARE_INTRINSIC
+     NI_HW_INTRINSIC_END
+ #endif
+ };
+diff --git a/src/jit/protononjit/CMakeLists.txt b/src/jit/protononjit/CMakeLists.txt
+index 1d82086..cb1c42c 100644
+--- a/src/jit/protononjit/CMakeLists.txt
++++ b/src/jit/protononjit/CMakeLists.txt
+@@ -5,8 +5,6 @@ add_definitions(-DFEATURE_NO_HOST)
+ add_definitions(-DSELF_NO_HOST)
+ remove_definitions(-DFEATURE_MERGE_JIT_AND_ENGINE)
+ 
+-remove_definitions(-DFEATURE_HW_INTRINSICS)
+-
+ if(FEATURE_READYTORUN)
+   add_definitions(-DFEATURE_READYTORUN_COMPILER)
+ endif(FEATURE_READYTORUN)
+@@ -14,6 +12,7 @@ endif(FEATURE_READYTORUN)
+ if (CLR_CMAKE_PLATFORM_ARCH_I386)
+     remove_definitions(-D_TARGET_X86_=1)
+     remove_definitions(-DFEATURE_SIMD)
++    remove_definitions(-DFEATURE_HW_INTRINSICS)
+     add_definitions(-D_TARGET_ARM_)
+     set(JIT_ARCH_ALTJIT_SOURCES ${JIT_ARM_SOURCES})
+     set(JIT_ARCH_LINK_LIBRARIES gcinfo_arm)
+diff --git a/src/jit/simd.cpp b/src/jit/simd.cpp
+index b91c8e7..4e86a76 100644
+--- a/src/jit/simd.cpp
++++ b/src/jit/simd.cpp
+@@ -482,12 +482,6 @@ var_types Compiler::getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, u
+             JITDUMP("  Known type Vector128<ulong>\n");
+         }
+ #if defined(_TARGET_ARM64_)
+-        else if (typeHnd == Vector64DoubleHandle)
+-        {
+-            simdBaseType = TYP_DOUBLE;
+-            size         = Vector64SizeBytes;
+-            JITDUMP("  Known type Vector64<double>\n");
+-        }
+         else if (typeHnd == Vector64IntHandle)
+         {
+             simdBaseType = TYP_INT;
+@@ -524,18 +518,6 @@ var_types Compiler::getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, u
+             size         = Vector64SizeBytes;
+             JITDUMP("  Known type Vector64<byte>\n");
+         }
+-        else if (typeHnd == Vector64LongHandle)
+-        {
+-            simdBaseType = TYP_LONG;
+-            size         = Vector64SizeBytes;
+-            JITDUMP("  Known type Vector64<long>\n");
+-        }
+-        else if (typeHnd == Vector64ULongHandle)
+-        {
+-            simdBaseType = TYP_ULONG;
+-            size         = Vector64SizeBytes;
+-            JITDUMP("  Known type Vector64<ulong>\n");
+-        }
+ #endif // defined(_TARGET_ARM64_)
+ 
+         // slow path search
+@@ -686,11 +668,6 @@ var_types Compiler::getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, u
+                             simdBaseType        = TYP_FLOAT;
+                             JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<float>\n");
+                             break;
+-                        case CORINFO_TYPE_DOUBLE:
+-                            Vector64DoubleHandle = typeHnd;
+-                            simdBaseType         = TYP_DOUBLE;
+-                            JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<double>\n");
+-                            break;
+                         case CORINFO_TYPE_INT:
+                             Vector64IntHandle = typeHnd;
+                             simdBaseType      = TYP_INT;
+@@ -711,16 +688,6 @@ var_types Compiler::getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, u
+                             simdBaseType         = TYP_USHORT;
+                             JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<ushort>\n");
+                             break;
+-                        case CORINFO_TYPE_LONG:
+-                            Vector64LongHandle = typeHnd;
+-                            simdBaseType       = TYP_LONG;
+-                            JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<long>\n");
+-                            break;
+-                        case CORINFO_TYPE_ULONG:
+-                            Vector64ULongHandle = typeHnd;
+-                            simdBaseType        = TYP_ULONG;
+-                            JITDUMP("  Found type Hardware Intrinsic SIMD Vector64<ulong>\n");
+-                            break;
+                         case CORINFO_TYPE_UBYTE:
+                             Vector64UByteHandle = typeHnd;
+                             simdBaseType        = TYP_UBYTE;
+diff --git a/src/mscorlib/System.Private.CoreLib.csproj b/src/mscorlib/System.Private.CoreLib.csproj
+index 0ff3659..0928494 100644
+--- a/src/mscorlib/System.Private.CoreLib.csproj
++++ b/src/mscorlib/System.Private.CoreLib.csproj
+@@ -293,6 +293,12 @@
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\X86\Sse42.PlatformNotSupported.cs" />
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\X86\Ssse3.PlatformNotSupported.cs" />
+   </ItemGroup>
++  <ItemGroup Condition="'$(Platform)' == 'arm64'">
++    <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Simd.cs" />
++  </ItemGroup>
++  <ItemGroup Condition="'$(Platform)' != 'arm64'">
++    <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Simd.PlatformNotSupported.cs" />
++  </ItemGroup>
+   <ItemGroup>
+     <Compile Include="$(BclSourcesRoot)\System\AppContext\AppContext.cs" />
+     <Compile Include="$(BclSourcesRoot)\System\AppContext\AppContextSwitches.cs" />
+diff --git a/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.PlatformNotSupported.cs b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.PlatformNotSupported.cs
+new file mode 100644
+index 0000000..b18dd00
+--- /dev/null
++++ b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.PlatformNotSupported.cs
+@@ -0,0 +1,37 @@
++using System.Runtime.CompilerServices;
++using System.Runtime.Intrinsics;
++
++
++namespace System.Runtime.Intrinsics.Arm.Arm64
++{
++    /// <summary>
++    /// This class provides access to the Arm64 AdvSIMD intrinsics
++    ///
++    /// Arm64 CPU indicate support for this feature by setting
++    /// ID_AA64PFR0_EL1.AdvSIMD == 0 or better.
++    /// </summary>
++    [CLSCompliant(false)]
++    public static class Simd
++    {
++        /// <summary>
++        /// IsSupported property indicates whether any method provided
++        /// by this class is supported by the current runtime.
++        /// </summary>
++        public static bool IsSupported { get { return false; }}
++
++        /// <summary>
++        /// Vector add
++        /// Corresponds to vector forms of ARM64 ADD & FADD
++        /// </summary>
++        public static Vector128<byte>   Add(Vector128<byte>   left, Vector128<byte>   right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<sbyte>  Add(Vector128<sbyte>  left, Vector128<sbyte>  right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<ushort> Add(Vector128<ushort> left, Vector128<ushort> right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<short>  Add(Vector128<short>  left, Vector128<short>  right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<uint>   Add(Vector128<uint>   left, Vector128<uint>   right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<int>    Add(Vector128<int>    left, Vector128<int>    right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<ulong>  Add(Vector128<ulong>  left, Vector128<ulong>  right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<long>   Add(Vector128<long>   left, Vector128<long>   right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<float>  Add(Vector128<float>  left, Vector128<float>  right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<double> Add(Vector128<double> left, Vector128<double> right) { throw new PlatformNotSupportedException(); }
++    }
++}
+diff --git a/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.cs b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.cs
+new file mode 100644
+index 0000000..7c5b12a
+--- /dev/null
++++ b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.cs
+@@ -0,0 +1,37 @@
++using System.Runtime.CompilerServices;
++using System.Runtime.Intrinsics;
++
++
++namespace System.Runtime.Intrinsics.Arm.Arm64
++{
++    /// <summary>
++    /// This class provides access to the Arm64 AdvSIMD intrinsics
++    ///
++    /// Arm64 CPU indicate support for this feature by setting
++    /// ID_AA64PFR0_EL1.AdvSIMD == 0 or better.
++    /// </summary>
++    [CLSCompliant(false)]
++    public static class Simd
++    {
++        /// <summary>
++        /// IsSupported property indicates whether any method provided
++        /// by this class is supported by the current runtime.
++        /// </summary>
++        public static bool IsSupported { get => IsSupported; }
++
++        /// <summary>
++        /// Vector add
++        /// Corresponds to vector forms of ARM64 ADD & FADD
++        /// </summary>
++        public static Vector128<byte>   Add(Vector128<byte>   left, Vector128<byte>   right) => Add(left, right);
++        public static Vector128<sbyte>  Add(Vector128<sbyte>  left, Vector128<sbyte>  right) => Add(left, right);
++        public static Vector128<ushort> Add(Vector128<ushort> left, Vector128<ushort> right) => Add(left, right);
++        public static Vector128<short>  Add(Vector128<short>  left, Vector128<short>  right) => Add(left, right);
++        public static Vector128<uint>   Add(Vector128<uint>   left, Vector128<uint>   right) => Add(left, right);
++        public static Vector128<int>    Add(Vector128<int>    left, Vector128<int>    right) => Add(left, right);
++        public static Vector128<ulong>  Add(Vector128<ulong>  left, Vector128<ulong>  right) => Add(left, right);
++        public static Vector128<long>   Add(Vector128<long>   left, Vector128<long>   right) => Add(left, right);
++        public static Vector128<float>  Add(Vector128<float>  left, Vector128<float>  right) => Add(left, right);
++        public static Vector128<double> Add(Vector128<double> left, Vector128<double> right) => Add(left, right);
++    }
++}
+-- 
+2.7.4
+

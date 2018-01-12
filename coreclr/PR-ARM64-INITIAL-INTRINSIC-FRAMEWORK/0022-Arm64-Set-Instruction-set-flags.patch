@@ -1,0 +1,143 @@
+From 386732b2e6b02ad0006c51c1ceb04cbb5cb32c0b Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 9 Jan 2018 16:01:03 -0500
+Subject: [PATCH] [Arm64] Set Instruction set flags
+
+---
+ src/jit/compiler.cpp           | 10 ++++++++++
+ src/jit/compiler.h             |  4 ++--
+ src/jit/hwintrinsiclistArm64.h | 44 ++++++++++++++++++++++++++++++++++++++++++
+ src/jit/instr.h                | 23 ++++++++++++++++++++++
+ 4 files changed, 79 insertions(+), 2 deletions(-)
+ create mode 100644 src/jit/hwintrinsiclistArm64.h
+
+diff --git a/src/jit/compiler.cpp b/src/jit/compiler.cpp
+index d89a8a7..876dcad 100644
+--- a/src/jit/compiler.cpp
++++ b/src/jit/compiler.cpp
+@@ -2741,6 +2741,16 @@ void Compiler::compSetProcessor()
+         }
+     }
+ #endif
++#if defined(_TARGET_ARM64_)
++// There is no JitFlag for Base instructions handle manually
++#define HARDWARE_INTRINSIC_CLASS_WITH_FLAG
++    opts.setSupportedISA(InstructionSet_Base);
++#define HARDWARE_INTRINSIC_CLASS(flag, isa)                                                                            \
++    if (jitFlags.IsSet(JitFlags::flag))                                                                                \
++        opts.setSupportedISA(InstructionSet_##isa);
++#include "hwintrinsiclistArm64.h"
++
++#endif
+ }
+ 
+ #ifdef PROFILING_SUPPORTED
+diff --git a/src/jit/compiler.h b/src/jit/compiler.h
+index c0123f9..4064ffe 100644
+--- a/src/jit/compiler.h
++++ b/src/jit/compiler.h
+@@ -7952,7 +7952,7 @@ private:
+ 
+     bool compSupports(InstructionSet isa) const
+     {
+-#ifdef _TARGET_XARCH_
++#if defined(_TARGET_XARCH_) | defined(_TARGET_ARM64_)
+         return (opts.compSupportsISA & (1ULL << isa)) != 0;
+ #else
+         return false;
+@@ -8078,7 +8078,7 @@ public:
+         bool compCanUseSSE4; // Allow CodeGen to use SSE3, SSSE3, SSE4.1 and SSE4.2 instructions
+ #endif                       // _TARGET_XARCH_
+ 
+-#ifdef _TARGET_XARCH_
++#if defined(_TARGET_XARCH_) | defined(_TARGET_ARM64_)
+         uint64_t compSupportsISA;
+         void setSupportedISA(InstructionSet isa)
+         {
+diff --git a/src/jit/hwintrinsiclistArm64.h b/src/jit/hwintrinsiclistArm64.h
+new file mode 100644
+index 0000000..4fac146
+--- /dev/null
++++ b/src/jit/hwintrinsiclistArm64.h
+@@ -0,0 +1,44 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++
++/*****************************************************************************/
++#if !defined(HARDWARE_INTRINSIC) && !defined(HARDWARE_INTRINSIC_CLASS)
++#error Define HARDWARE_INTRINSIC and/or HARDWARE_INTRINSIC_CLASS before including this file
++#endif
++/*****************************************************************************/
++
++// clang-format off
++
++#if defined(HARDWARE_INTRINSIC_CLASS)
++#ifndef HARDWARE_INTRINSIC_CLASS_WITH_FLAG
++HARDWARE_INTRINSIC_CLASS(NotApplicable                , Base     )
++#endif // HARDWARE_INTRINSIC_CLASS_WITH_FLAG
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_AES       , Aes      )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_ATOMICS   , Atomics  )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_CRC32     , Crc32    )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_DCPOP     , Dcpop    )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_DP        , Dp       )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_FCMA      , Fcma     )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_FP        , Fp       )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_FP16      , Fp16     )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_JSCVT     , Jscvt    )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_LRCPC     , Lrcpc    )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_PMULL     , Pmull    )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA1      , Sha1     )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA2      , Sha2     )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA512    , Sha512   )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA3      , Sha3     )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SIMD      , Simd     )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SIMD_V81  , Simd_v81 )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SIMD_FP16 , Simd_fp16)
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SM3       , Sm3      )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SM4       , Sm4      )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SVE       , Sve      )
++#endif // defined(HARDWARE_INTRINSIC_CLASS)
++
++#undef HARDWARE_INTRINSIC_CLASS_WITH_FLAG
++#undef HARDWARE_INTRINSIC_CLASS
++#undef HARDWARE_INTRINSIC
++
++// clang-format on
+diff --git a/src/jit/instr.h b/src/jit/instr.h
+index ec58f61..6ed852c 100644
+--- a/src/jit/instr.h
++++ b/src/jit/instr.h
+@@ -300,6 +300,29 @@ enum InstructionSet
+     InstructionSet_POPCNT  = 38,
+ #elif defined(_TARGET_ARM_)
+     InstructionSet_NEON,
++#elif defined(_TARGET_ARM64_)
++    InstructionSet_Base,      // Base instructions available on all Arm64 platforms
++    InstructionSet_Aes,       // ID_AA64ISAR0_EL1.AES is 1 or better
++    InstructionSet_Atomics,   // ID_AA64ISAR0_EL1.Atomic is 2 or better
++    InstructionSet_Crc32,     // ID_AA64ISAR0_EL1.CRC32 is 1 or better
++    InstructionSet_Dcpop,     // ID_AA64ISAR1_EL1.DPB is 1 or better
++    InstructionSet_Dp,        // ID_AA64ISAR0_EL1.DP is 1 or better
++    InstructionSet_Fcma,      // ID_AA64ISAR1_EL1.FCMA is 1 or better
++    InstructionSet_Fp,        // ID_AA64PFR0_EL1.FP is 0 or better
++    InstructionSet_Fp16,      // ID_AA64PFR0_EL1.FP is 1 or better
++    InstructionSet_Jscvt,     // ID_AA64ISAR1_EL1.JSCVT is 1 or better
++    InstructionSet_Lrcpc,     // ID_AA64ISAR1_EL1.LRCPC is 1 or better
++    InstructionSet_Pmull,     // ID_AA64ISAR0_EL1.AES is 2 or better
++    InstructionSet_Sha1,      // ID_AA64ISAR0_EL1.SHA1 is 1 or better
++    InstructionSet_Sha2,      // ID_AA64ISAR0_EL1.SHA2 is 1 or better
++    InstructionSet_Sha512,    // ID_AA64ISAR0_EL1.SHA2 is 2 or better
++    InstructionSet_Sha3,      // ID_AA64ISAR0_EL1.SHA3 is 1 or better
++    InstructionSet_Simd,      // ID_AA64PFR0_EL1.AdvSIMD is 0 or better
++    InstructionSet_Simd_v81,  // ID_AA64ISAR0_EL1.RDM is 1 or better
++    InstructionSet_Simd_fp16, // ID_AA64PFR0_EL1.AdvSIMD is 1 or better
++    InstructionSet_Sm3,       // ID_AA64ISAR0_EL1.SM3 is 1 or better
++    InstructionSet_Sm4,       // ID_AA64ISAR0_EL1.SM4 is 1 or better
++    InstructionSet_Sve,       // ID_AA64PFR0_EL1.SVE is 1 or better
+ #endif
+     InstructionSet_NONE       // No instruction set is available indicating an invalid value
+ };
+-- 
+2.7.4
+

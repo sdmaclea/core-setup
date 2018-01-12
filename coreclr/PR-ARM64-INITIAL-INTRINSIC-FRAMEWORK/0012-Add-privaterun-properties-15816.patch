@@ -1,0 +1,28 @@
+From a63990ce5eed402b24b8b7c696c499065cf4e2e5 Mon Sep 17 00:00:00 2001
+From: chcosta <chcosta@microsoft.com>
+Date: Wed, 10 Jan 2018 11:48:17 -0800
+Subject: [PATCH] Add privaterun properties (#15816)
+
+---
+ buildpipeline/pipelines.json | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/buildpipeline/pipelines.json b/buildpipeline/pipelines.json
+index 91f3eaf..2fe56bb 100644
+--- a/buildpipeline/pipelines.json
++++ b/buildpipeline/pipelines.json
+@@ -6,6 +6,11 @@
+     "BaseUrl":  "https://devdiv.visualstudio.com/DefaultCollection",
+     "SkipBranchAndVersionOverrides": "false"
+   },
++  "PrivateRun": {
++    "property-overrides": {
++      "PB_PublishType": ""
++    }
++  },
+   "DefinitionGroups": [
+     {
+       "Name": "Product-Build",
+-- 
+2.7.4
+
