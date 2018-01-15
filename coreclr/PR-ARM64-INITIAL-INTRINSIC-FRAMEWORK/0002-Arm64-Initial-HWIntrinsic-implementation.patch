@@ -1,4 +1,4 @@
-From 8384c3cf390d4138a8096aadda867a8a9f5a4a8a Mon Sep 17 00:00:00 2001
+From 5d428035864ba5c9004fa697d1e97b2ca4917a87 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 19 Dec 2017 17:15:22 -0500
 Subject: [PATCH] [Arm64] Initial HWIntrinsic implementation
@@ -58,7 +58,7 @@ index 9464312..fa5bbc1 100644
  
  if(CLR_CMAKE_TARGET_ARCH_AMD64)
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index 974d2a9..17eab7f 100644
+index 974d2a9..5ecdde5 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
 @@ -4966,6 +4966,136 @@ void CodeGen::genStoreLclTypeSIMD12(GenTree* treeNode)
@@ -141,9 +141,9 @@ index 974d2a9..17eab7f 100644
 +    instruction ins = getOpForHWIntrinsic(node, baseType);
 +    assert(ins != INS_invalid);
 +
-+    bool     is16B = (node->gtSIMDSize > 8);
-+    emitAttr attr  = is16B ? EA_16BYTE : EA_8BYTE;
-+    insOpts  opt   = genGetSimdInsOpt(is16B, baseType);
++    bool     is16Byte = (node->gtSIMDSize > 8);
++    emitAttr attr     = is16Byte ? EA_16BYTE : EA_8BYTE;
++    insOpts  opt      = genGetSimdInsOpt(is16Byte, baseType);
 +
 +    getEmitter()->emitIns_R_R_R(ins, attr, targetReg, op1Reg, op2Reg, opt);
 +
@@ -184,9 +184,9 @@ index 974d2a9..17eab7f 100644
 +    instruction ins = getOpForHWIntrinsic(node, baseType);
 +    assert(ins != INS_invalid);
 +
-+    bool     is16B = (node->gtSIMDSize > 8);
-+    emitAttr attr  = is16B ? EA_16BYTE : EA_8BYTE;
-+    insOpts  opt   = genGetSimdInsOpt(is16B, baseType);
++    bool     is16Byte = (node->gtSIMDSize > 8);
++    emitAttr attr     = is16Byte ? EA_16BYTE : EA_8BYTE;
++    insOpts  opt      = genGetSimdInsOpt(is16Byte, baseType);
 +
 +    getEmitter()->emitIns_R_R(ins, attr, targetReg, op1Reg, opt);
 +
@@ -216,7 +216,7 @@ index deab3b6..5b6a85d 100644
          case GT_NE:
          case GT_LT:
 diff --git a/src/jit/codegenlinear.h b/src/jit/codegenlinear.h
-index 5804fa8..b4b6c74 100644
+index 91ee30c..e41e074 100644
 --- a/src/jit/codegenlinear.h
 +++ b/src/jit/codegenlinear.h
 @@ -114,8 +114,9 @@ void genPutArgStkSIMD12(GenTree* treeNode);
@@ -227,10 +227,10 @@ index 5804fa8..b4b6c74 100644
 +#if FEATURE_HW_INTRINSICS
  void genHWIntrinsic(GenTreeHWIntrinsic* node);
 +#if defined(_TARGET_XARCH_)
+ void genHWIntrinsic_R_R_RM(GenTreeHWIntrinsic* node, instruction ins);
  void genSSEIntrinsic(GenTreeHWIntrinsic* node);
  void genSSE2Intrinsic(GenTreeHWIntrinsic* node);
- void genSSE3Intrinsic(GenTreeHWIntrinsic* node);
-@@ -131,6 +132,17 @@ void genFMAIntrinsic(GenTreeHWIntrinsic* node);
+@@ -132,6 +133,17 @@ void genFMAIntrinsic(GenTreeHWIntrinsic* node);
  void genLZCNTIntrinsic(GenTreeHWIntrinsic* node);
  void genPCLMULQDQIntrinsic(GenTreeHWIntrinsic* node);
  void genPOPCNTIntrinsic(GenTreeHWIntrinsic* node);
