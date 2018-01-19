@@ -1,0 +1,75 @@
+From 37f018815bdc8bac0680eb8fe0cb082a5d919a2e Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 18 Jan 2018 16:45:25 -0500
+Subject: [PATCH] [Arm64] Add compare vector to zero emitters
+
+---
+ src/jit/emitarm64.cpp | 52 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 52 insertions(+)
+
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index cd5d0fe..d9ce9d9 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -4234,6 +4234,58 @@ void emitter::emitIns_R_R(
+             fmt = IF_DV_2J;
+             break;
+ 
++        case INS_cmeq:
++        case INS_cmge:
++        case INS_cmgt:
++        case INS_cmle:
++        case INS_cmlt:
++            assert(isVectorRegister(reg1));
++            assert(isVectorRegister(reg2));
++
++            if (isValidVectorDatasize(size))
++            {
++                // Vector operation
++                assert(insOptsAnyArrangement(opt));
++                assert(isValidArrangement(size, opt));
++                elemsize = optGetElemsize(opt);
++                fmt      = IF_DV_2M;
++            }
++            else
++            {
++                NYI("Untested");
++                // Scalar operation
++                assert(size == EA_8BYTE); // Only Double supported
++                fmt = IF_DV_2L;
++            }
++            break;
++
++        case INS_fcmeq:
++        case INS_fcmge:
++        case INS_fcmgt:
++        case INS_fcmle:
++        case INS_fcmlt:
++            assert(isVectorRegister(reg1));
++            assert(isVectorRegister(reg2));
++
++            if (isValidVectorDatasize(size))
++            {
++                // Vector operation
++                assert(insOptsAnyArrangement(opt));
++                assert(isValidArrangement(size, opt));
++                elemsize = optGetElemsize(opt);
++                assert((elemsize == EA_8BYTE) || (elemsize == EA_4BYTE)); // Only Double/Float supported
++                assert(opt != INS_OPTS_1D);                               // Reserved encoding
++                fmt = IF_DV_2A;
++            }
++            else
++            {
++                NYI("Untested");
++                // Scalar operation
++                assert((size == EA_8BYTE) || (size == EA_4BYTE)); // Only Double/Float supported
++                fmt = IF_DV_2G;
++            }
++            break;
++
+         default:
+             unreached();
+             break;
+-- 
+2.7.4
+
