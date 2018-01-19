@@ -1,4 +1,4 @@
-From 987468307bace0732bd75937bc1b22c0c4da465c Mon Sep 17 00:00:00 2001
+From 54b5fd094638002bdf9545df617c7d4abef59ec6 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 9 Jan 2018 16:01:03 -0500
 Subject: [PATCH] [Arm64] Set Instruction set flags
@@ -12,7 +12,7 @@ Subject: [PATCH] [Arm64] Set Instruction set flags
  create mode 100644 src/jit/hwintrinsiclistArm64.h
 
 diff --git a/src/jit/compiler.cpp b/src/jit/compiler.cpp
-index 0f3763d..f4dd96f 100644
+index 0f3763d..4661dbc 100644
 --- a/src/jit/compiler.cpp
 +++ b/src/jit/compiler.cpp
 @@ -2741,6 +2741,15 @@ void Compiler::compSetProcessor()
@@ -20,7 +20,7 @@ index 0f3763d..f4dd96f 100644
      }
  #endif
 +#if defined(_TARGET_ARM64_)
-+// There is no JitFlag for Base instructions handle manually
++    // There is no JitFlag for Base instructions handle manually
 +    opts.setSupportedISA(InstructionSet_Base);
 +#define HARDWARE_INTRINSIC_CLASS(flag, isa)                                                                            \
 +    if (jitFlags.IsSet(JitFlags::flag))                                                                                \
