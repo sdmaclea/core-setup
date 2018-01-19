@@ -1,0 +1,70 @@
+From a4d79943d8c62e9edaab0ac043784b7936a3c42c Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 19 Jan 2018 12:41:47 -0500
+Subject: [PATCH] [Arm64] Remove irregular vector not handling
+
+---
+ src/jit/emitarm64.cpp | 22 ++++++----------------
+ 1 file changed, 6 insertions(+), 16 deletions(-)
+
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index cd5d0fe..4e07087 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -3821,12 +3821,11 @@ void emitter::emitIns_R_R(
+         case INS_not:
+             assert(isVectorRegister(reg1));
+             assert(isVectorRegister(reg2));
+-            // for 'NOT' we can construct the arrangement: 8B or 16B
+-            if ((ins == INS_not) && insOptsNone(opt))
++            if (ins == INS_not)
+             {
+                 assert(isValidVectorDatasize(size));
+-                elemsize = EA_1BYTE;
+-                opt      = optMakeArrangement(size, elemsize);
++                // Bitwise behavior is independent of element size, but is always encoded as 1 Byte
++                opt = optMakeArrangement(size, EA_1BYTE);
+             }
+             if (insOptsNone(opt))
+             {
+@@ -3841,10 +3840,6 @@ void emitter::emitIns_R_R(
+                 assert(isValidVectorDatasize(size));
+                 assert(isValidArrangement(size, opt));
+                 elemsize = optGetElemsize(opt);
+-                if (ins == INS_not)
+-                {
+-                    assert(elemsize == EA_1BYTE);
+-                }
+                 fmt      = IF_DV_2M;
+             }
+             break;
+@@ -3854,12 +3849,11 @@ void emitter::emitIns_R_R(
+             if (isVectorRegister(reg1))
+             {
+                 assert(isVectorRegister(reg2));
+-                // for 'mvn' we can construct the arrangement: 8B or 16b
+-                if ((ins == INS_mvn) && insOptsNone(opt))
++                if (ins == INS_mvn)
+                 {
+                     assert(isValidVectorDatasize(size));
+-                    elemsize = EA_1BYTE;
+-                    opt      = optMakeArrangement(size, elemsize);
++                    // Bitwise behavior is independent of element size, but is always encoded as 1 Byte
++                    opt = optMakeArrangement(size, EA_1BYTE);
+                 }
+                 if (insOptsNone(opt))
+                 {
+@@ -3873,10 +3867,6 @@ void emitter::emitIns_R_R(
+                     assert(isValidVectorDatasize(size));
+                     assert(isValidArrangement(size, opt));
+                     elemsize = optGetElemsize(opt);
+-                    if (ins == INS_mvn)
+-                    {
+-                        assert(elemsize == EA_1BYTE); // Only supports 8B or 16B
+-                    }
+                     fmt      = IF_DV_2M;
+                 }
+                 break;
+-- 
+2.7.4
+
