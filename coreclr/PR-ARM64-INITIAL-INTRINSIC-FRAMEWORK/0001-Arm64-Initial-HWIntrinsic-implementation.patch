@@ -1,4 +1,4 @@
-From d5158027117624b17bca769736b906e3dd12a42e Mon Sep 17 00:00:00 2001
+From 4201eb25f10d8da1b6460aec94db646d91afe1ba Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 19 Dec 2017 17:15:22 -0500
 Subject: [PATCH] [Arm64] Initial HWIntrinsic implementation
@@ -9,7 +9,7 @@ Subject: [PATCH] [Arm64] Initial HWIntrinsic implementation
  src/jit/codegenarmarch.cpp                         |   6 +
  src/jit/codegenlinear.h                            |  16 +-
  src/jit/compiler.cpp                               |   5 +-
- src/jit/compiler.h                                 |  31 +-
+ src/jit/compiler.h                                 |  23 +-
  src/jit/hwintrinsicArm64.cpp                       | 301 +++++++++++++++++++
  src/jit/hwintrinsicArm64.h                         |  49 ++++
  src/jit/hwintrinsiccodegenxarch.cpp                |   2 +-
@@ -23,7 +23,7 @@ Subject: [PATCH] [Arm64] Initial HWIntrinsic implementation
  src/mscorlib/System.Private.CoreLib.csproj         |   6 +
  .../Arm/Arm64/Simd.PlatformNotSupported.cs         | 320 +++++++++++++++++++++
  .../System/Runtime/Intrinsics/Arm/Arm64/Simd.cs    | 320 +++++++++++++++++++++
- 19 files changed, 1329 insertions(+), 81 deletions(-)
+ 19 files changed, 1325 insertions(+), 77 deletions(-)
  create mode 100644 src/jit/hwintrinsicArm64.cpp
  create mode 100644 src/jit/hwintrinsicArm64.h
  create mode 100644 src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.PlatformNotSupported.cs
@@ -272,7 +272,7 @@ index e297faa..fd3264e 100644
      Vector128FloatHandle  = nullptr;
      Vector128DoubleHandle = nullptr;
 diff --git a/src/jit/compiler.h b/src/jit/compiler.h
-index a97530c..71c5876 100644
+index a97530c..4c4215a 100644
 --- a/src/jit/compiler.h
 +++ b/src/jit/compiler.h
 @@ -1507,6 +1507,8 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -284,21 +284,16 @@ index a97530c..71c5876 100644
  class Compiler
  {
      friend class emitter;
-@@ -3040,12 +3042,12 @@ protected:
-     NamedIntrinsic lookupNamedIntrinsic(CORINFO_METHOD_HANDLE method);
+@@ -3041,11 +3043,11 @@ protected:
  
  #ifdef FEATURE_HW_INTRINSICS
--    static InstructionSet lookupHWIntrinsicISA(const char* className);
--    static NamedIntrinsic lookupHWIntrinsic(const char* methodName, InstructionSet isa);
--    static InstructionSet isaOfHWIntrinsic(NamedIntrinsic intrinsic);
--    static bool isIntrinsicAnIsSupportedPropertyGetter(NamedIntrinsic intrinsic);
--    static bool isFullyImplmentedISAClass(InstructionSet isa);
-+    InstructionSet lookupHWIntrinsicISA(const char* className);
- #ifdef _TARGET_XARCH_
-+    NamedIntrinsic lookupHWIntrinsic(const char* methodName, InstructionSet isa);
-+    InstructionSet isaOfHWIntrinsic(NamedIntrinsic intrinsic);
-+    bool isIntrinsicAnIsSupportedPropertyGetter(NamedIntrinsic intrinsic);
-+    bool isFullyImplmentedISAClass(InstructionSet isa);
+     static InstructionSet lookupHWIntrinsicISA(const char* className);
++#ifdef _TARGET_XARCH_
+     static NamedIntrinsic lookupHWIntrinsic(const char* methodName, InstructionSet isa);
+     static InstructionSet isaOfHWIntrinsic(NamedIntrinsic intrinsic);
+     static bool isIntrinsicAnIsSupportedPropertyGetter(NamedIntrinsic intrinsic);
+     static bool isFullyImplmentedISAClass(InstructionSet isa);
+-#ifdef _TARGET_XARCH_
      GenTree* impUnsupportedHWIntrinsic(unsigned              helper,
                                         CORINFO_METHOD_HANDLE method,
                                         CORINFO_SIG_INFO*     sig,
