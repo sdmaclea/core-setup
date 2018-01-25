@@ -1,0 +1,49 @@
+From 46773a24bd8a9ffced1587ac804cce1fbbdc2cf8 Mon Sep 17 00:00:00 2001
+From: Tanner Gooding <tagoo@outlook.com>
+Date: Thu, 18 Jan 2018 15:58:40 -0800
+Subject: [PATCH] Adding the `Vector64<T>` type to the S.R.Intrinsics assembly
+
+---
+ .../{System.Runtime.Intrinsics.X86.cs => System.Runtime.Intrinsics.cs} | 3 ++-
+ src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.csproj     | 2 +-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+ rename src/System.Runtime.Intrinsics/ref/{System.Runtime.Intrinsics.X86.cs => System.Runtime.Intrinsics.cs} (99%)
+
+diff --git a/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.X86.cs b/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.cs
+similarity index 99%
+rename from src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.X86.cs
+rename to src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.cs
+index 0f3f24e..ffd2391 100644
+--- a/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.X86.cs
++++ b/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.cs
+@@ -9,12 +9,13 @@ using System.Runtime.InteropServices;
+ 
+ namespace System.Runtime.Intrinsics
+ {
++    [StructLayout(LayoutKind.Sequential, Size = 8)]
++    public struct Vector64<T> where T : struct {}
+     [StructLayout(LayoutKind.Sequential, Size = 16)]
+     public struct Vector128<T> where T : struct {}
+     [StructLayout(LayoutKind.Sequential, Size = 32)]
+     public struct Vector256<T> where T : struct {}
+ }
+-
+ namespace System.Runtime.Intrinsics.X86
+ {
+     public static class Aes 
+diff --git a/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.csproj b/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.csproj
+index 78a1f4b..f699e7a 100644
+--- a/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.csproj
++++ b/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.csproj
+@@ -9,7 +9,7 @@
+   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'netcoreapp-Debug|AnyCPU'" />
+   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'netcoreapp-Release|AnyCPU'" />
+   <ItemGroup>
+-    <Compile Include="System.Runtime.Intrinsics.X86.cs" />
++    <Compile Include="System.Runtime.Intrinsics.cs" />
+   </ItemGroup>
+   <ItemGroup>
+     <ProjectReference Include="..\..\System.Runtime\ref\System.Runtime.csproj" />
+-- 
+2.7.4
+
