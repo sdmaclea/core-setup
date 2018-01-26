@@ -1,21 +1,21 @@
-From 1a95038b99a4ec90446f32716ac10414d05ed935 Mon Sep 17 00:00:00 2001
+From ea33e7ee4e9a4beb7362452e2a220464c0e00c46 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 15 Dec 2017 20:04:06 -0500
 Subject: [PATCH] [Arm64] Add HWIntrinsic test
 
 ---
- tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs     | 1748 ++++++++++++++++++++
+ tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs     | 1693 ++++++++++++++++++++
  tests/src/JIT/HardwareIntrinsics/Arm64/Simd.csproj |   36 +
- 2 files changed, 1784 insertions(+)
+ 2 files changed, 1729 insertions(+)
  create mode 100644 tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
  create mode 100644 tests/src/JIT/HardwareIntrinsics/Arm64/Simd.csproj
 
 diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
 new file mode 100644
-index 0000000..85606d1
+index 0000000..a2fde5b
 --- /dev/null
 +++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
-@@ -0,0 +1,1748 @@
+@@ -0,0 +1,1693 @@
 +using System;
 +using System.Diagnostics;
 +using System.Runtime.CompilerServices;
@@ -321,12 +321,10 @@ index 0000000..85606d1
 +                testBinOp<short,  Vector128<short> , ushort, Vector128<ushort>>(name, (x, y) => Simd.Abs(x), (x, y) => (ushort) Math.Abs(x));
 +                testBinOp<int,    Vector128<int>   , uint,   Vector128<uint>  >(name, (x, y) => Simd.Abs(x), (x, y) => (uint)   Math.Abs(x));
 +                testBinOp<long,   Vector128<long>  , ulong,  Vector128<ulong> >(name, (x, y) => Simd.Abs(x), (x, y) => (ulong)  Math.Abs(x));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  , float,  Vector64<float>  >(name, (x, y) => Simd.Abs(x), (x, y) =>          Math.Abs(x));
 +                testBinOp<sbyte,  Vector64<sbyte>  , byte,   Vector64<byte>   >(name, (x, y) => Simd.Abs(x), (x, y) => (byte)   Math.Abs(x));
 +                testBinOp<short,  Vector64<short>  , ushort, Vector64<ushort> >(name, (x, y) => Simd.Abs(x), (x, y) => (ushort) Math.Abs(x));
 +                testBinOp<int,    Vector64<int>    , uint,   Vector64<uint>   >(name, (x, y) => Simd.Abs(x), (x, y) => (uint)   Math.Abs(x));
-+#endif
 +            }
 +            else
 +            {
@@ -361,7 +359,6 @@ index 0000000..85606d1
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.Add(x, y), (x, y) =>         (x + y));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.Add(x, y), (x, y) =>         (x + y));
 +                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.Add(x, y), (x, y) =>         (x + y));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.Add(x, y), (x, y) =>         (x + y));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.Add(x, y), (x, y) => (sbyte) (x + y));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.Add(x, y), (x, y) => (byte)  (x + y));
@@ -369,7 +366,7 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.Add(x, y), (x, y) => (ushort)(x + y));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.Add(x, y), (x, y) =>         (x + y));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.Add(x, y), (x, y) =>         (x + y));
-+#endif
++
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.Add(x, y));
 +
 +                testThrowsTypeNotSupported<Vector64<long>  >(name, (x, y) => Simd.Add(x, y));
@@ -419,7 +416,6 @@ index 0000000..85606d1
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.And(x, y), (x, y) =>             (     x  &      y ));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.And(x, y), (x, y) =>             (     x  &      y ));
 +                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.And(x, y), (x, y) =>             (     x  &      y ));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.And(x, y), (x, y) => bitsToFloat (bits(x) & bits(y)));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.And(x, y), (x, y) => (sbyte)     (     x  &      y ));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.And(x, y), (x, y) => (byte)      (     x  &      y ));
@@ -427,7 +423,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.And(x, y), (x, y) => (ushort)    (     x  &      y ));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.And(x, y), (x, y) =>             (     x  &      y ));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.And(x, y), (x, y) =>             (     x  &      y ));
-+#endif
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.And(x, y));
 +
@@ -478,7 +473,6 @@ index 0000000..85606d1
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.AndNot(x, y), (x, y) =>             (     x  & ~     y ));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.AndNot(x, y), (x, y) =>             (     x  & ~     y ));
 +                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.AndNot(x, y), (x, y) =>             (     x  & ~     y ));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.AndNot(x, y), (x, y) => bitsToFloat (bits(x) & ~bits(y)));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.AndNot(x, y), (x, y) => (sbyte)     (     x  & ~     y ));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.AndNot(x, y), (x, y) => (byte)      (     x  & ~     y ));
@@ -486,7 +480,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.AndNot(x, y), (x, y) => (ushort)    (     x  & ~     y ));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.AndNot(x, y), (x, y) =>             (     x  & ~     y ));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.AndNot(x, y), (x, y) =>             (     x  & ~     y ));
-+#endif
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.AndNot(x, y));
 +
@@ -537,7 +530,6 @@ index 0000000..85606d1
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.CompareEqual(x, y), (x, y) => boolTo<uint  >(x == y));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.CompareEqual(x, y), (x, y) => boolTo<long  >(x == y));
 +                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.CompareEqual(x, y), (x, y) => boolTo<ulong >(x == y));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.CompareEqual(x, y), (x, y) => boolTo<float >(x == y));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.CompareEqual(x, y), (x, y) => boolTo<sbyte >(x == y));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.CompareEqual(x, y), (x, y) => boolTo<byte  >(x == y));
@@ -545,7 +537,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.CompareEqual(x, y), (x, y) => boolTo<ushort>(x == y));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.CompareEqual(x, y), (x, y) => boolTo<int   >(x == y));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.CompareEqual(x, y), (x, y) => boolTo<uint  >(x == y));
-+#endif
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.CompareEqual(x, y));
 +
@@ -596,7 +587,6 @@ index 0000000..85606d1
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.CompareEqualZero(x), (x, y) => boolTo<uint  >(x == 0));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.CompareEqualZero(x), (x, y) => boolTo<long  >(x == 0));
 +                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.CompareEqualZero(x), (x, y) => boolTo<ulong >(x == 0));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.CompareEqualZero(x), (x, y) => boolTo<float >(x == 0));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.CompareEqualZero(x), (x, y) => boolTo<sbyte >(x == 0));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.CompareEqualZero(x), (x, y) => boolTo<byte  >(x == 0));
@@ -604,7 +594,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.CompareEqualZero(x), (x, y) => boolTo<ushort>(x == 0));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.CompareEqualZero(x), (x, y) => boolTo<int   >(x == 0));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.CompareEqualZero(x), (x, y) => boolTo<uint  >(x == 0));
-+#endif
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.CompareEqualZero(x));
 +
@@ -655,7 +644,6 @@ index 0000000..85606d1
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.CompareGreaterThan(x, y), (x, y) => boolTo<uint  >(x > y));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.CompareGreaterThan(x, y), (x, y) => boolTo<long  >(x > y));
 +                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.CompareGreaterThan(x, y), (x, y) => boolTo<ulong >(x > y));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.CompareGreaterThan(x, y), (x, y) => boolTo<float >(x > y));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.CompareGreaterThan(x, y), (x, y) => boolTo<sbyte >(x > y));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.CompareGreaterThan(x, y), (x, y) => boolTo<byte  >(x > y));
@@ -663,7 +651,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.CompareGreaterThan(x, y), (x, y) => boolTo<ushort>(x > y));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.CompareGreaterThan(x, y), (x, y) => boolTo<int   >(x > y));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.CompareGreaterThan(x, y), (x, y) => boolTo<uint  >(x > y));
-+#endif
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.CompareGreaterThan(x, y));
 +
@@ -714,15 +701,13 @@ index 0000000..85606d1
 +              //testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.CompareGreaterThanZero(x), (x, y) => boolTo<uint  >(x > 0));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.CompareGreaterThanZero(x), (x, y) => boolTo<long  >(x > 0));
 +              //testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.CompareGreaterThanZero(x), (x, y) => boolTo<ulong >(x > 0));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.CompareGreaterThanZero(x), (x, y) => boolTo<float >(x > 0));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.CompareGreaterThanZero(x), (x, y) => boolTo<sbyte >(x > 0));
-+                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.CompareGreaterThanZero(x), (x, y) => boolTo<byte  >(x > 0));
++              //testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.CompareGreaterThanZero(x), (x, y) => boolTo<byte  >(x > 0));
 +                testBinOp<short,  Vector64<short>  >(name, (x, y) => Simd.CompareGreaterThanZero(x), (x, y) => boolTo<short >(x > 0));
-+                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.CompareGreaterThanZero(x), (x, y) => boolTo<ushort>(x > 0));
++              //testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.CompareGreaterThanZero(x), (x, y) => boolTo<ushort>(x > 0));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.CompareGreaterThanZero(x), (x, y) => boolTo<int   >(x > 0));
-+                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.CompareGreaterThanZero(x), (x, y) => boolTo<uint  >(x > 0));
-+#endif
++              //testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.CompareGreaterThanZero(x), (x, y) => boolTo<uint  >(x > 0));
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.CompareGreaterThanZero(x));
 +
@@ -773,7 +758,6 @@ index 0000000..85606d1
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.CompareGreaterThanOrEqual(x, y), (x, y) => boolTo<uint  >(x >= y));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.CompareGreaterThanOrEqual(x, y), (x, y) => boolTo<long  >(x >= y));
 +                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.CompareGreaterThanOrEqual(x, y), (x, y) => boolTo<ulong >(x >= y));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.CompareGreaterThanOrEqual(x, y), (x, y) => boolTo<float >(x >= y));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.CompareGreaterThanOrEqual(x, y), (x, y) => boolTo<sbyte >(x >= y));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.CompareGreaterThanOrEqual(x, y), (x, y) => boolTo<byte  >(x >= y));
@@ -781,7 +765,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.CompareGreaterThanOrEqual(x, y), (x, y) => boolTo<ushort>(x >= y));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.CompareGreaterThanOrEqual(x, y), (x, y) => boolTo<int   >(x >= y));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.CompareGreaterThanOrEqual(x, y), (x, y) => boolTo<uint  >(x >= y));
-+#endif
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.CompareGreaterThanOrEqual(x, y));
 +
@@ -832,15 +815,13 @@ index 0000000..85606d1
 +              //testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.CompareGreaterThanOrEqualZero(x), (x, y) => boolTo<uint  >(x >= 0));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.CompareGreaterThanOrEqualZero(x), (x, y) => boolTo<long  >(x >= 0));
 +              //testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.CompareGreaterThanOrEqualZero(x), (x, y) => boolTo<ulong >(x >= 0));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.CompareGreaterThanOrEqualZero(x), (x, y) => boolTo<float >(x >= 0));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.CompareGreaterThanOrEqualZero(x), (x, y) => boolTo<sbyte >(x >= 0));
-+                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.CompareGreaterThanOrEqualZero(x), (x, y) => boolTo<byte  >(x >= 0));
++              //testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.CompareGreaterThanOrEqualZero(x), (x, y) => boolTo<byte  >(x >= 0));
 +                testBinOp<short,  Vector64<short>  >(name, (x, y) => Simd.CompareGreaterThanOrEqualZero(x), (x, y) => boolTo<short >(x >= 0));
-+                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.CompareGreaterThanOrEqualZero(x), (x, y) => boolTo<ushort>(x >= 0));
++              //testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.CompareGreaterThanOrEqualZero(x), (x, y) => boolTo<ushort>(x >= 0));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.CompareGreaterThanOrEqualZero(x), (x, y) => boolTo<int   >(x >= 0));
-+                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.CompareGreaterThanOrEqualZero(x), (x, y) => boolTo<uint  >(x >= 0));
-+#endif
++              //testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.CompareGreaterThanOrEqualZero(x), (x, y) => boolTo<uint  >(x >= 0));
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.CompareGreaterThanOrEqualZero(x));
 +
@@ -891,15 +872,13 @@ index 0000000..85606d1
 +              //testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.CompareLessThanZero(x), (x, y) => boolTo<uint  >(x < 0));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.CompareLessThanZero(x), (x, y) => boolTo<long  >(x < 0));
 +              //testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.CompareLessThanZero(x), (x, y) => boolTo<ulong >(x < 0));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.CompareLessThanZero(x), (x, y) => boolTo<float >(x < 0));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.CompareLessThanZero(x), (x, y) => boolTo<sbyte >(x < 0));
-+                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.CompareLessThanZero(x), (x, y) => boolTo<byte  >(x < 0));
++              //testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.CompareLessThanZero(x), (x, y) => boolTo<byte  >(x < 0));
 +                testBinOp<short,  Vector64<short>  >(name, (x, y) => Simd.CompareLessThanZero(x), (x, y) => boolTo<short >(x < 0));
-+                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.CompareLessThanZero(x), (x, y) => boolTo<ushort>(x < 0));
++              //testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.CompareLessThanZero(x), (x, y) => boolTo<ushort>(x < 0));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.CompareLessThanZero(x), (x, y) => boolTo<int   >(x < 0));
-+                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.CompareLessThanZero(x), (x, y) => boolTo<uint  >(x < 0));
-+#endif
++              //testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.CompareLessThanZero(x), (x, y) => boolTo<uint  >(x < 0));
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.CompareLessThanZero(x));
 +
@@ -950,7 +929,6 @@ index 0000000..85606d1
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.CompareLessThanOrEqualZero(x), (x, y) => boolTo<uint  >(x <= 0));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.CompareLessThanOrEqualZero(x), (x, y) => boolTo<long  >(x <= 0));
 +                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.CompareLessThanOrEqualZero(x), (x, y) => boolTo<ulong >(x <= 0));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.CompareLessThanOrEqualZero(x), (x, y) => boolTo<float >(x <= 0));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.CompareLessThanOrEqualZero(x), (x, y) => boolTo<sbyte >(x <= 0));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.CompareLessThanOrEqualZero(x), (x, y) => boolTo<byte  >(x <= 0));
@@ -958,7 +936,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.CompareLessThanOrEqualZero(x), (x, y) => boolTo<ushort>(x <= 0));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.CompareLessThanOrEqualZero(x), (x, y) => boolTo<int   >(x <= 0));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.CompareLessThanOrEqualZero(x), (x, y) => boolTo<uint  >(x <= 0));
-+#endif
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.CompareLessThanOrEqualZero(x));
 +
@@ -1009,7 +986,6 @@ index 0000000..85606d1
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.CompareTest(x, y), (x, y) => boolTo<uint  >((    (x) &     (y)) != 0));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.CompareTest(x, y), (x, y) => boolTo<long  >((    (x) &     (y)) != 0));
 +                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.CompareTest(x, y), (x, y) => boolTo<ulong >((    (x) &     (y)) != 0));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.CompareTest(x, y), (x, y) => boolTo<float >((bits(x) & bits(y)) != 0));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.CompareTest(x, y), (x, y) => boolTo<sbyte >((    (x) &     (y)) != 0));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.CompareTest(x, y), (x, y) => boolTo<byte  >((    (x) &     (y)) != 0));
@@ -1017,7 +993,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.CompareTest(x, y), (x, y) => boolTo<ushort>((    (x) &     (y)) != 0));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.CompareTest(x, y), (x, y) => boolTo<int   >((    (x) &     (y)) != 0));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.CompareTest(x, y), (x, y) => boolTo<uint  >((    (x) &     (y)) != 0));
-+#endif
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.CompareTest(x, y));
 +
@@ -1060,9 +1035,7 @@ index 0000000..85606d1
 +            {
 +                testBinOp<float,  Vector128<float> >(name, (x, y) => Simd.Divide(x, y), (x, y) =>         (x / y));
 +                testBinOp<double, Vector128<double>>(name, (x, y) => Simd.Divide(x, y), (x, y) =>         (x / y));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.Divide(x, y), (x, y) =>         (x / y));
-+#endif
 +            }
 +            else
 +            {
@@ -1083,11 +1056,9 @@ index 0000000..85606d1
 +                testBinOp<sbyte,  Vector128<sbyte> >(name, (x, y) => Simd.LeadingSignCount(x), (x, y) => leadingSign(x));
 +                testBinOp<short,  Vector128<short> >(name, (x, y) => Simd.LeadingSignCount(x), (x, y) => leadingSign(x));
 +                testBinOp<int,    Vector128<int>   >(name, (x, y) => Simd.LeadingSignCount(x), (x, y) => leadingSign(x));
-+#if ENABLE_VECTOR64
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.LeadingSignCount(x), (x, y) => leadingSign(x));
 +                testBinOp<short,  Vector64<short>  >(name, (x, y) => Simd.LeadingSignCount(x), (x, y) => leadingSign(x));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.LeadingSignCount(x), (x, y) => leadingSign(x));
-+#endif
 +            }
 +            else
 +            {
@@ -1114,14 +1085,12 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector128<ushort>>(name, (x, y) => Simd.LeadingZeroCount(x), (x, y) => leadingZero(x));
 +                testBinOp<int,    Vector128<int>   >(name, (x, y) => Simd.LeadingZeroCount(x), (x, y) => leadingZero(x));
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.LeadingZeroCount(x), (x, y) => leadingZero(x));
-+#if ENABLE_VECTOR64
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.LeadingZeroCount(x), (x, y) => leadingZero(x));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.LeadingZeroCount(x), (x, y) => leadingZero(x));
 +                testBinOp<short,  Vector64<short>  >(name, (x, y) => Simd.LeadingZeroCount(x), (x, y) => leadingZero(x));
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.LeadingZeroCount(x), (x, y) => leadingZero(x));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.LeadingZeroCount(x), (x, y) => leadingZero(x));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.LeadingZeroCount(x), (x, y) => leadingZero(x));
-+#endif
 +            }
 +            else
 +            {
@@ -1156,7 +1125,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector128<ushort>>(name, (x, y) => Simd.Max(x, y), (x, y) => (ushort)((x > y) ? x : y));
 +                testBinOp<int,    Vector128<int>   >(name, (x, y) => Simd.Max(x, y), (x, y) =>         ((x > y) ? x : y));
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.Max(x, y), (x, y) =>         ((x > y) ? x : y));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.Max(x, y), (x, y) =>         ((x > y) ? x : y));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.Max(x, y), (x, y) => (sbyte) ((x > y) ? x : y));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.Max(x, y), (x, y) => (byte)  ((x > y) ? x : y));
@@ -1164,7 +1132,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.Max(x, y), (x, y) => (ushort)((x > y) ? x : y));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.Max(x, y), (x, y) =>         ((x > y) ? x : y));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.Max(x, y), (x, y) =>         ((x > y) ? x : y));
-+#endif
 +            }
 +            else
 +            {
@@ -1175,8 +1142,6 @@ index 0000000..85606d1
 +                testThrowsPlatformNotSupported<Vector64<ushort> >(name, (x, y) => Simd.Max(x, y));
 +                testThrowsPlatformNotSupported<Vector64<int>    >(name, (x, y) => Simd.Max(x, y));
 +                testThrowsPlatformNotSupported<Vector64<uint>   >(name, (x, y) => Simd.Max(x, y));
-+                testThrowsPlatformNotSupported<Vector64<long>   >(name, (x, y) => Simd.Max(x, y));
-+                testThrowsPlatformNotSupported<Vector64<ulong>  >(name, (x, y) => Simd.Max(x, y));
 +                testThrowsPlatformNotSupported<Vector128<float> >(name, (x, y) => Simd.Max(x, y));
 +                testThrowsPlatformNotSupported<Vector128<double>>(name, (x, y) => Simd.Max(x, y));
 +                testThrowsPlatformNotSupported<Vector128<sbyte> >(name, (x, y) => Simd.Max(x, y));
@@ -1204,7 +1169,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector128<ushort>>(name, (x, y) => Simd.Min(x, y), (x, y) => (ushort)((x < y) ? x : y));
 +                testBinOp<int,    Vector128<int>   >(name, (x, y) => Simd.Min(x, y), (x, y) =>         ((x < y) ? x : y));
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.Min(x, y), (x, y) =>         ((x < y) ? x : y));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.Min(x, y), (x, y) =>         ((x < y) ? x : y));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.Min(x, y), (x, y) => (sbyte) ((x < y) ? x : y));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.Min(x, y), (x, y) => (byte)  ((x < y) ? x : y));
@@ -1212,7 +1176,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.Min(x, y), (x, y) => (ushort)((x < y) ? x : y));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.Min(x, y), (x, y) =>         ((x < y) ? x : y));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.Min(x, y), (x, y) =>         ((x < y) ? x : y));
-+#endif
 +            }
 +            else
 +            {
@@ -1250,7 +1213,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector128<ushort>>(name, (x, y) => Simd.Multiply(x, y), (x, y) => (ushort)(x * y));
 +                testBinOp<int,    Vector128<int>   >(name, (x, y) => Simd.Multiply(x, y), (x, y) =>         (x * y));
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.Multiply(x, y), (x, y) =>         (x * y));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.Multiply(x, y), (x, y) =>         (x * y));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.Multiply(x, y), (x, y) => (sbyte) (x * y));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.Multiply(x, y), (x, y) => (byte)  (x * y));
@@ -1258,7 +1220,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.Multiply(x, y), (x, y) => (ushort)(x * y));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.Multiply(x, y), (x, y) =>         (x * y));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.Multiply(x, y), (x, y) =>         (x * y));
-+#endif
 +            }
 +            else
 +            {
@@ -1294,12 +1255,10 @@ index 0000000..85606d1
 +                testBinOp<short,  Vector128<short> >(name, (x, y) => Simd.Negate(x), (x, y) => (short) (-x));
 +                testBinOp<int,    Vector128<int>   >(name, (x, y) => Simd.Negate(x), (x, y) =>         (-x));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.Negate(x), (x, y) =>         (-x));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.Negate(x), (x, y) =>         (-x));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.Negate(x), (x, y) => (sbyte) (-x));
 +                testBinOp<short,  Vector64<short>  >(name, (x, y) => Simd.Negate(x), (x, y) => (short) (-x));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.Negate(x), (x, y) =>         (-x));
-+#endif
 +            }
 +            else
 +            {
@@ -1334,7 +1293,6 @@ index 0000000..85606d1
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.Not(x), (x, y) =>             (~     x ));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.Not(x), (x, y) =>             (~     x ));
 +                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.Not(x), (x, y) =>             (~     x ));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.Not(x), (x, y) => bitsToFloat (~bits(x)));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.Not(x), (x, y) => (sbyte)     (~     x ));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.Not(x), (x, y) => (byte)      (~     x ));
@@ -1342,7 +1300,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.Not(x), (x, y) => (ushort)    (~     x ));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.Not(x), (x, y) =>             (~     x ));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.Not(x), (x, y) =>             (~     x ));
-+#endif
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.Not(x));
 +
@@ -1393,7 +1350,6 @@ index 0000000..85606d1
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.Or(x, y), (x, y) =>             (     x  |      y ));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.Or(x, y), (x, y) =>             (     x  |      y ));
 +                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.Or(x, y), (x, y) =>             (     x  |      y ));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.Or(x, y), (x, y) => bitsToFloat (bits(x) | bits(y)));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.Or(x, y), (x, y) => (sbyte)     (     x  |      y ));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.Or(x, y), (x, y) => (byte)      (     x  |      y ));
@@ -1401,7 +1357,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.Or(x, y), (x, y) => (ushort)    (     x  |      y ));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.Or(x, y), (x, y) =>             (     x  |      y ));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.Or(x, y), (x, y) =>             (     x  |      y ));
-+#endif
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.Or(x, y));
 +
@@ -1452,7 +1407,6 @@ index 0000000..85606d1
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.OrNot(x, y), (x, y) =>             (     x  | ~     y ));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.OrNot(x, y), (x, y) =>             (     x  | ~     y ));
 +                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.OrNot(x, y), (x, y) =>             (     x  | ~     y ));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.OrNot(x, y), (x, y) => bitsToFloat (bits(x) | ~bits(y)));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.OrNot(x, y), (x, y) => (sbyte)     (     x  | ~     y ));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.OrNot(x, y), (x, y) => (byte)      (     x  | ~     y ));
@@ -1460,7 +1414,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.OrNot(x, y), (x, y) => (ushort)    (     x  | ~     y ));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.OrNot(x, y), (x, y) =>             (     x  | ~     y ));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.OrNot(x, y), (x, y) =>             (     x  | ~     y ));
-+#endif
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.OrNot(x, y));
 +
@@ -1503,10 +1456,8 @@ index 0000000..85606d1
 +            {
 +                testBinOp<sbyte,  Vector128<sbyte> >(name, (x, y) => Simd.PopCount(x), (x, y) => popCount(x));
 +                testBinOp<byte,   Vector128<byte>  >(name, (x, y) => Simd.PopCount(x), (x, y) => popCount(x));
-+#if ENABLE_VECTOR64
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.PopCount(x), (x, y) => popCount(x));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.PopCount(x), (x, y) => popCount(x));
-+#endif
 +            }
 +            else
 +            {
@@ -1527,9 +1478,7 @@ index 0000000..85606d1
 +            {
 +                testBinOp<float,  Vector128<float> >(name, (x, y) => Simd.Sqrt(x), (x, y) =>         ((float) Math.Sqrt(x)));
 +                testBinOp<double, Vector128<double>>(name, (x, y) => Simd.Sqrt(x), (x, y) =>         (        Math.Sqrt(x)));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.Sqrt(x), (x, y) =>         ((float) Math.Sqrt(x)));
-+#endif
 +            }
 +            else
 +            {
@@ -1557,7 +1506,6 @@ index 0000000..85606d1
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.Subtract(x, y), (x, y) =>         (x - y));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.Subtract(x, y), (x, y) =>         (x - y));
 +                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.Subtract(x, y), (x, y) =>         (x - y));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.Subtract(x, y), (x, y) =>         (x - y));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.Subtract(x, y), (x, y) => (sbyte) (x - y));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.Subtract(x, y), (x, y) => (byte)  (x - y));
@@ -1565,7 +1513,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.Subtract(x, y), (x, y) => (ushort)(x - y));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.Subtract(x, y), (x, y) =>         (x - y));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.Subtract(x, y), (x, y) =>         (x - y));
-+#endif
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.Subtract(x, y));
 +
@@ -1617,7 +1564,6 @@ index 0000000..85606d1
 +                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.Xor(x, y), (x, y) =>             (     x  ^      y ));
 +                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.Xor(x, y), (x, y) =>             (     x  ^      y ));
 +                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.Xor(x, y), (x, y) =>             (     x  ^      y ));
-+#if ENABLE_VECTOR64
 +                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.Xor(x, y), (x, y) => bitsToFloat (bits(x) ^ bits(y)));
 +                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.Xor(x, y), (x, y) => (sbyte)     (     x  ^      y ));
 +                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.Xor(x, y), (x, y) => (byte)      (     x  ^      y ));
@@ -1625,7 +1571,6 @@ index 0000000..85606d1
 +                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.Xor(x, y), (x, y) => (ushort)    (     x  ^      y ));
 +                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.Xor(x, y), (x, y) =>             (     x  ^      y ));
 +                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.Xor(x, y), (x, y) =>             (     x  ^      y ));
-+#endif
 +
 +                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.Xor(x, y));
 +
