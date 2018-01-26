@@ -1,4 +1,4 @@
-From 0198a07fb4a672a8bfe03cb4f4add205f3f18350 Mon Sep 17 00:00:00 2001
+From 27173f52888ad1318f30e01d3a12ab1f8f4267cb Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 19 Dec 2017 17:15:22 -0500
 Subject: [PATCH] [Arm64] Initial HWIntrinsic implementation
@@ -834,7 +834,7 @@ index e71ac6c..a6ec892 100644
  #undef HARDWARE_INTRINSIC
  
 diff --git a/src/jit/importer.cpp b/src/jit/importer.cpp
-index 0321bc2..378e49b 100644
+index 0321bc2..e242d3f 100644
 --- a/src/jit/importer.cpp
 +++ b/src/jit/importer.cpp
 @@ -1,4 +1,3 @@
@@ -889,7 +889,7 @@ index 0321bc2..378e49b 100644
 +    {
 +        // TODO-ARM64-FIXME Implement ARM64 ABI for Short Vectors properly
 +        // assert(op->gtType == info.compRetNativeType)
-+        if(op->gtType != info.compRetNativeType)
++        if (op->gtType != info.compRetNativeType)
 +        {
 +            // Insert a register move to keep target type of SIMD intrinsic intact
 +            op = gtNewScalarHWIntrinsicNode(info.compRetNativeType, op, NI_ARM64_NONE_MOV);
