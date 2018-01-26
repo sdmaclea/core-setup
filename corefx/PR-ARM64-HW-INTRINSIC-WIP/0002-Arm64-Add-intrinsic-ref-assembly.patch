@@ -1,17 +1,17 @@
-From 8933799ff2955c260456ddd85649e4ebde2b908e Mon Sep 17 00:00:00 2001
+From 27976a0abbb17707591b68e9b2e7adc84d45ff6e Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 20 Dec 2017 14:04:47 -0500
 Subject: [PATCH] [Arm64] Add intrinsic ref assembly
 
 ---
- .../ref/System.Runtime.Intrinsics.cs               | 812 +++++++++++++++++++++
- 1 file changed, 812 insertions(+)
+ .../ref/System.Runtime.Intrinsics.cs               | 826 +++++++++++++++++++++
+ 1 file changed, 826 insertions(+)
 
 diff --git a/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.cs b/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.cs
-index ffd2391..2d65f8f 100644
+index ffd2391..935120e 100644
 --- a/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.cs
 +++ b/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.cs
-@@ -16,6 +16,818 @@ namespace System.Runtime.Intrinsics
+@@ -16,6 +16,832 @@ namespace System.Runtime.Intrinsics
      [StructLayout(LayoutKind.Sequential, Size = 32)]
      public struct Vector256<T> where T : struct {}
  }
@@ -217,6 +217,46 @@ index ffd2391..2d65f8f 100644
 +        public static Vector128<long>   LeadingZeroCount(Vector128<long>   value) { throw null; }
 +
 +        /// <summary>
++        /// Vector max
++        /// Corresponds to vector forms of ARM64 SMAX, UMAX & FMAX
++        /// </summary>
++        public static Vector64<byte>    Max(Vector64<byte>    left, Vector64<byte>    right) { throw null; }
++        public static Vector64<sbyte>   Max(Vector64<sbyte>   left, Vector64<sbyte>   right) { throw null; }
++        public static Vector64<ushort>  Max(Vector64<ushort>  left, Vector64<ushort>  right) { throw null; }
++        public static Vector64<short>   Max(Vector64<short>   left, Vector64<short>   right) { throw null; }
++        public static Vector64<uint>    Max(Vector64<uint>    left, Vector64<uint>    right) { throw null; }
++        public static Vector64<int>     Max(Vector64<int>     left, Vector64<int>     right) { throw null; }
++        public static Vector64<float>   Max(Vector64<float>   left, Vector64<float>   right) { throw null; }
++        public static Vector128<byte>   Max(Vector128<byte>   left, Vector128<byte>   right) { throw null; }
++        public static Vector128<sbyte>  Max(Vector128<sbyte>  left, Vector128<sbyte>  right) { throw null; }
++        public static Vector128<ushort> Max(Vector128<ushort> left, Vector128<ushort> right) { throw null; }
++        public static Vector128<short>  Max(Vector128<short>  left, Vector128<short>  right) { throw null; }
++        public static Vector128<uint>   Max(Vector128<uint>   left, Vector128<uint>   right) { throw null; }
++        public static Vector128<int>    Max(Vector128<int>    left, Vector128<int>    right) { throw null; }
++        public static Vector128<float>  Max(Vector128<float>  left, Vector128<float>  right) { throw null; }
++        public static Vector128<double> Max(Vector128<double> left, Vector128<double> right) { throw null; }
++
++        /// <summary>
++        /// Vector min
++        /// Corresponds to vector forms of ARM64 SMIN, UMIN & FMIN
++        /// </summary>
++        public static Vector64<byte>    Min(Vector64<byte>    left, Vector64<byte>    right) { throw null; }
++        public static Vector64<sbyte>   Min(Vector64<sbyte>   left, Vector64<sbyte>   right) { throw null; }
++        public static Vector64<ushort>  Min(Vector64<ushort>  left, Vector64<ushort>  right) { throw null; }
++        public static Vector64<short>   Min(Vector64<short>   left, Vector64<short>   right) { throw null; }
++        public static Vector64<uint>    Min(Vector64<uint>    left, Vector64<uint>    right) { throw null; }
++        public static Vector64<int>     Min(Vector64<int>     left, Vector64<int>     right) { throw null; }
++        public static Vector64<float>   Min(Vector64<float>   left, Vector64<float>   right) { throw null; }
++        public static Vector128<byte>   Min(Vector128<byte>   left, Vector128<byte>   right) { throw null; }
++        public static Vector128<sbyte>  Min(Vector128<sbyte>  left, Vector128<sbyte>  right) { throw null; }
++        public static Vector128<ushort> Min(Vector128<ushort> left, Vector128<ushort> right) { throw null; }
++        public static Vector128<short>  Min(Vector128<short>  left, Vector128<short>  right) { throw null; }
++        public static Vector128<uint>   Min(Vector128<uint>   left, Vector128<uint>   right) { throw null; }
++        public static Vector128<int>    Min(Vector128<int>    left, Vector128<int>    right) { throw null; }
++        public static Vector128<float>  Min(Vector128<float>  left, Vector128<float>  right) { throw null; }
++        public static Vector128<double> Min(Vector128<double> left, Vector128<double> right) { throw null; }
++
++        /// <summary>
 +        /// Vector multiply
 +        ///
 +        /// For each element result[elem] = left[elem] * right[elem]
@@ -236,24 +276,8 @@ index ffd2391..2d65f8f 100644
 +        public static Vector128<short>  Multiply(Vector128<short>  left, Vector128<short>  right) { throw null; }
 +        public static Vector128<uint>   Multiply(Vector128<uint>   left, Vector128<uint>   right) { throw null; }
 +        public static Vector128<int>    Multiply(Vector128<int>    left, Vector128<int>    right) { throw null; }
-+        public static Vector128<ulong>  Multiply(Vector128<ulong>  left, Vector128<ulong>  right) { throw null; }
-+        public static Vector128<long>   Multiply(Vector128<long>   left, Vector128<long>   right) { throw null; }
 +        public static Vector128<float>  Multiply(Vector128<float>  left, Vector128<float>  right) { throw null; }
 +        public static Vector128<double> Multiply(Vector128<double> left, Vector128<double> right) { throw null; }
-+
-+        /// <summary>
-+        /// Vector max
-+        /// Corresponds to vector forms of ARM64 SMAX, UMAX & FMAX
-+        /// </summary>
-+        public static Vector64<T>  Max<T>(Vector64<T>  left, Vector64<T>  right) where T : struct { throw null; }
-+        public static Vector128<T> Max<T>(Vector128<T> left, Vector128<T> right) where T : struct { throw null; }
-+
-+        /// <summary>
-+        /// Vector min
-+        /// Corresponds to vector forms of ARM64 SMIN, UMIN & FMIN
-+        /// </summary>
-+        public static Vector64<T>  Min<T>(Vector64<T>  left, Vector64<T>  right) where T : struct { throw null; }
-+        public static Vector128<T> Min<T>(Vector128<T> left, Vector128<T> right) where T : struct { throw null; }
 +
 +        /// <summary>
 +        /// Vector negate
@@ -297,18 +321,8 @@ index ffd2391..2d65f8f 100644
 +        /// </summary>
 +        public static Vector64<byte>    PopCount(Vector64<byte>    value) { throw null; }
 +        public static Vector64<sbyte>   PopCount(Vector64<sbyte>   value) { throw null; }
-+        public static Vector64<ushort>  PopCount(Vector64<ushort>  value) { throw null; }
-+        public static Vector64<short>   PopCount(Vector64<short>   value) { throw null; }
-+        public static Vector64<uint>    PopCount(Vector64<uint>    value) { throw null; }
-+        public static Vector64<int>     PopCount(Vector64<int>     value) { throw null; }
 +        public static Vector128<byte>   PopCount(Vector128<byte>   value) { throw null; }
 +        public static Vector128<sbyte>  PopCount(Vector128<sbyte>  value) { throw null; }
-+        public static Vector128<ushort> PopCount(Vector128<ushort> value) { throw null; }
-+        public static Vector128<short>  PopCount(Vector128<short>  value) { throw null; }
-+        public static Vector128<uint>   PopCount(Vector128<uint>   value) { throw null; }
-+        public static Vector128<int>    PopCount(Vector128<int>    value) { throw null; }
-+        public static Vector128<ulong>  PopCount(Vector128<ulong>  value) { throw null; }
-+        public static Vector128<long>   PopCount(Vector128<long>   value) { throw null; }
 +
 +        /// <summary>
 +        /// SetVector* Fill vector elements by replicating element value

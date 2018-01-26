@@ -1,4 +1,4 @@
-From 46773a24bd8a9ffced1587ac804cce1fbbdc2cf8 Mon Sep 17 00:00:00 2001
+From ef8323f455681afbff773ef674d3c12faa870978 Mon Sep 17 00:00:00 2001
 From: Tanner Gooding <tagoo@outlook.com>
 Date: Thu, 18 Jan 2018 15:58:40 -0800
 Subject: [PATCH] Adding the `Vector64<T>` type to the S.R.Intrinsics assembly
