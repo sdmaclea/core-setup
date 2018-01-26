@@ -1,29 +1,29 @@
-From 4201eb25f10d8da1b6460aec94db646d91afe1ba Mon Sep 17 00:00:00 2001
+From 0198a07fb4a672a8bfe03cb4f4add205f3f18350 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 19 Dec 2017 17:15:22 -0500
 Subject: [PATCH] [Arm64] Initial HWIntrinsic implementation
 
 ---
  src/jit/CMakeLists.txt                             |   7 +-
- src/jit/codegenarm64.cpp                           | 130 +++++++++
+ src/jit/codegenarm64.cpp                           | 146 +++++++++
  src/jit/codegenarmarch.cpp                         |   6 +
  src/jit/codegenlinear.h                            |  16 +-
  src/jit/compiler.cpp                               |   5 +-
- src/jit/compiler.h                                 |  23 +-
- src/jit/hwintrinsicArm64.cpp                       | 301 +++++++++++++++++++
- src/jit/hwintrinsicArm64.h                         |  49 ++++
+ src/jit/compiler.h                                 |  24 +-
+ src/jit/hwintrinsicArm64.cpp                       | 302 ++++++++++++++++++
+ src/jit/hwintrinsicArm64.h                         |  49 +++
  src/jit/hwintrinsiccodegenxarch.cpp                |   2 +-
- src/jit/hwintrinsiclistArm64.h                     |  89 ++++--
- src/jit/importer.cpp                               |  20 +-
+ src/jit/hwintrinsiclistArm64.h                     |  92 ++++--
+ src/jit/importer.cpp                               |  32 +-
  src/jit/lowerarmarch.cpp                           |  35 +++
  src/jit/lsraarm64.cpp                              |  27 ++
  src/jit/namedintrinsiclist.h                       |  10 +-
  src/jit/protononjit/CMakeLists.txt                 |   3 +-
- src/jit/simd.cpp                                   |  33 ---
+ src/jit/simd.cpp                                   |  33 --
  src/mscorlib/System.Private.CoreLib.csproj         |   6 +
- .../Arm/Arm64/Simd.PlatformNotSupported.cs         | 320 +++++++++++++++++++++
- .../System/Runtime/Intrinsics/Arm/Arm64/Simd.cs    | 320 +++++++++++++++++++++
- 19 files changed, 1325 insertions(+), 77 deletions(-)
+ .../Arm/Arm64/Simd.PlatformNotSupported.cs         | 344 +++++++++++++++++++++
+ .../System/Runtime/Intrinsics/Arm/Arm64/Simd.cs    | 344 +++++++++++++++++++++
+ 19 files changed, 1406 insertions(+), 77 deletions(-)
  create mode 100644 src/jit/hwintrinsicArm64.cpp
  create mode 100644 src/jit/hwintrinsicArm64.h
  create mode 100644 src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.PlatformNotSupported.cs
@@ -59,10 +59,10 @@ index 9464312..fa5bbc1 100644
  
  if(CLR_CMAKE_TARGET_ARCH_AMD64)
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index 695c55e..57554d4 100644
+index 8515103..0928b6f 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
-@@ -4966,6 +4966,136 @@ void CodeGen::genStoreLclTypeSIMD12(GenTree* treeNode)
+@@ -4958,6 +4958,152 @@ void CodeGen::genStoreLclTypeSIMD12(GenTree* treeNode)
  
  #endif // FEATURE_SIMD
  
@@ -112,7 +112,23 @@ index 695c55e..57554d4 100644
 +
 +void CodeGen::genHWIntrinsicUnaryOp(GenTreeHWIntrinsic* node)
 +{
-+    NYI("genHWIntrinsicUnaryOp not implemented");
++    GenTree*  op1       = node->gtGetOp1();
++    regNumber targetReg = node->gtRegNum;
++    emitAttr  attr      = emitActualTypeSize(node);
++
++    assert(targetReg != REG_NA);
++    var_types targetType = node->TypeGet();
++
++    genConsumeOperands(node);
++
++    regNumber op1Reg = op1->gtRegNum;
++
++    instruction ins = getOpForHWIntrinsic(node, node->TypeGet());
++    assert(ins != INS_invalid);
++
++    getEmitter()->emitIns_R_R(ins, attr, targetReg, op1Reg);
++
++    genProduceReg(node);
 +}
 +
 +void CodeGen::genHWIntrinsicCrcOp(GenTreeHWIntrinsic* node)
@@ -272,7 +288,7 @@ index e297faa..fd3264e 100644
      Vector128FloatHandle  = nullptr;
      Vector128DoubleHandle = nullptr;
 diff --git a/src/jit/compiler.h b/src/jit/compiler.h
-index a97530c..4c4215a 100644
+index a97530c..5146d4f 100644
 --- a/src/jit/compiler.h
 +++ b/src/jit/compiler.h
 @@ -1507,6 +1507,8 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -284,11 +300,12 @@ index a97530c..4c4215a 100644
  class Compiler
  {
      friend class emitter;
-@@ -3041,11 +3043,11 @@ protected:
+@@ -3040,12 +3042,12 @@ protected:
+     NamedIntrinsic lookupNamedIntrinsic(CORINFO_METHOD_HANDLE method);
  
  #ifdef FEATURE_HW_INTRINSICS
-     static InstructionSet lookupHWIntrinsicISA(const char* className);
 +#ifdef _TARGET_XARCH_
+     static InstructionSet lookupHWIntrinsicISA(const char* className);
      static NamedIntrinsic lookupHWIntrinsic(const char* methodName, InstructionSet isa);
      static InstructionSet isaOfHWIntrinsic(NamedIntrinsic intrinsic);
      static bool isIntrinsicAnIsSupportedPropertyGetter(NamedIntrinsic intrinsic);
@@ -297,11 +314,12 @@ index a97530c..4c4215a 100644
      GenTree* impUnsupportedHWIntrinsic(unsigned              helper,
                                         CORINFO_METHOD_HANDLE method,
                                         CORINFO_SIG_INFO*     sig,
-@@ -3124,6 +3126,18 @@ protected:
+@@ -3124,6 +3126,19 @@ protected:
      GenTree* getArgForHWIntrinsic(var_types argType, CORINFO_CLASS_HANDLE argClass);
      GenTreeArgList* buildArgList(CORINFO_SIG_INFO* sig);
  #endif // _TARGET_XARCH_
 +#ifdef _TARGET_ARM64_
++    InstructionSet lookupHWIntrinsicISA(const char* className);
 +    NamedIntrinsic lookupHWIntrinsic(const char* className, const char* methodName);
 +    GenTree* impHWIntrinsic(NamedIntrinsic        intrinsic,
 +                            CORINFO_METHOD_HANDLE method,
@@ -316,7 +334,7 @@ index a97530c..4c4215a 100644
  #endif // FEATURE_HW_INTRINSICS
      GenTreePtr impArrayAccessIntrinsic(CORINFO_CLASS_HANDLE clsHnd,
                                         CORINFO_SIG_INFO*    sig,
-@@ -7476,15 +7490,12 @@ private:
+@@ -7476,15 +7491,12 @@ private:
  #ifdef FEATURE_HW_INTRINSICS
  #if defined(_TARGET_ARM64_)
      CORINFO_CLASS_HANDLE Vector64FloatHandle;
@@ -336,10 +354,10 @@ index a97530c..4c4215a 100644
      CORINFO_CLASS_HANDLE Vector128DoubleHandle;
 diff --git a/src/jit/hwintrinsicArm64.cpp b/src/jit/hwintrinsicArm64.cpp
 new file mode 100644
-index 0000000..ce426b6
+index 0000000..3a49ff9
 --- /dev/null
 +++ b/src/jit/hwintrinsicArm64.cpp
-@@ -0,0 +1,301 @@
+@@ -0,0 +1,302 @@
 +// Licensed to the .NET Foundation under one or more agreements.
 +// The .NET Foundation licenses this file to you under the MIT license.
 +// See the LICENSE file in the project root for more information.
@@ -355,6 +373,7 @@ index 0000000..ce426b6
 +{
 +#define HARDWARE_INTRINSIC_CLASS(flag, isa) isa = 1ULL << InstructionSet_##isa,
 +#include "hwintrinsiclistArm64.h"
++    None     = 0,
 +    Base     = 1ULL << InstructionSet_Base,
 +    EveryISA = ~0ULL
 +};
@@ -710,10 +729,10 @@ index 69b3cf5..c9ff3ed 100644
  #include "emit.h"
  #include "codegen.h"
 diff --git a/src/jit/hwintrinsiclistArm64.h b/src/jit/hwintrinsiclistArm64.h
-index e71ac6c..203720052 100644
+index e71ac6c..a6ec892 100644
 --- a/src/jit/hwintrinsiclistArm64.h
 +++ b/src/jit/hwintrinsiclistArm64.h
-@@ -11,29 +11,76 @@
+@@ -11,29 +11,79 @@
  // clang-format off
  
  #if defined(HARDWARE_INTRINSIC_CLASS)
@@ -763,6 +782,8 @@ index e71ac6c..203720052 100644
  
 +#if defined(HARDWARE_INTRINSIC)
 +//                (ID                             Class     Function name                   Form           Floating,    Signed,      Unsigned,     Flags)
++//  None (For internal use only)
++HARDWARE_INTRINSIC(NI_ARM64_NONE_MOV,             None,     None,                           UnaryOp,       INS_mov,     INS_mov,     INS_mov,      None )
 +//  Base
 +HARDWARE_INTRINSIC(NI_ARM64_BASE_CLS,             Base,     LeadingSignCount,               UnaryOp,       INS_invalid, INS_cls,     INS_cls,      None )
 +HARDWARE_INTRINSIC(NI_ARM64_BASE_CLZ,             Base,     LeadingZeroCount,               UnaryOp,       INS_invalid, INS_clz,     INS_clz,      None )
@@ -799,6 +820,7 @@ index e71ac6c..203720052 100644
 +HARDWARE_INTRINSIC(NI_ARM64_SIMD_Min,             Simd,     Min,                            SimdBinaryOp,  INS_fmin,    INS_smin,    INS_umin,     None )
 +HARDWARE_INTRINSIC(NI_ARM64_SIMD_Mul,             Simd,     Multiply,                       SimdBinaryOp,  INS_fmul,    INS_mul,     INS_mul,      None )
 +HARDWARE_INTRINSIC(NI_ARM64_SIMD_Sqrt,            Simd,     Sqrt,                           SimdUnaryOp,   INS_fsqrt,   INS_invalid, INS_invalid,  None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_StaticCast,      Simd,     StaticCast,                     SimdUnaryOp,   INS_mov,     INS_mov,     INS_mov,      None )
 +HARDWARE_INTRINSIC(NI_ARM64_SIMD_Sub,             Simd,     Subtract,                       SimdBinaryOp,  INS_fsub,    INS_sub,     INS_sub,      None )
 +HARDWARE_INTRINSIC(NI_ARM64_SIMD_GetItem,         Simd,     Extract,                        SimdExtractOp, INS_mov,     INS_mov,     INS_mov,      None )
 +HARDWARE_INTRINSIC(NI_ARM64_SIMD_SetItem,         Simd,     Insert,                         SimdInsertOp,  INS_mov,     INS_mov,     INS_mov,      None )
@@ -812,7 +834,7 @@ index e71ac6c..203720052 100644
  #undef HARDWARE_INTRINSIC
  
 diff --git a/src/jit/importer.cpp b/src/jit/importer.cpp
-index 0321bc2..69c1c6f 100644
+index 0321bc2..378e49b 100644
 --- a/src/jit/importer.cpp
 +++ b/src/jit/importer.cpp
 @@ -1,4 +1,3 @@
@@ -858,6 +880,25 @@ index 0321bc2..69c1c6f 100644
      return result;
  }
  
+@@ -8739,6 +8753,18 @@ REDO_RETURN_NODE:
+             return op;
+         }
+     }
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++    else if ((op->gtOper == GT_HWIntrinsic) && varTypeIsSIMD(op->gtType))
++    {
++        // TODO-ARM64-FIXME Implement ARM64 ABI for Short Vectors properly
++        // assert(op->gtType == info.compRetNativeType)
++        if(op->gtType != info.compRetNativeType)
++        {
++            // Insert a register move to keep target type of SIMD intrinsic intact
++            op = gtNewScalarHWIntrinsicNode(info.compRetNativeType, op, NI_ARM64_NONE_MOV);
++        }
++    }
++#endif
+     else if (op->gtOper == GT_COMMA)
+     {
+         op->gtOp.gtOp2 = impFixupStructReturnType(op->gtOp.gtOp2, retClsHnd);
 diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
 index 5aa3ff1..757ac52 100644
 --- a/src/jit/lowerarmarch.cpp
@@ -912,7 +953,7 @@ index 5aa3ff1..757ac52 100644
  
  #endif // !LEGACY_BACKEND
 diff --git a/src/jit/lsraarm64.cpp b/src/jit/lsraarm64.cpp
-index 93b34d9..da836cc 100644
+index abfdcb9..e549976 100644
 --- a/src/jit/lsraarm64.cpp
 +++ b/src/jit/lsraarm64.cpp
 @@ -285,6 +285,12 @@ void LinearScan::TreeNodeInfoInit(GenTree* tree, TreeNodeInfo* info)
@@ -928,7 +969,7 @@ index 93b34d9..da836cc 100644
          case GT_CAST:
          {
              // TODO-ARM64-CQ: Int-To-Int conversions - castOp cannot be a memory op and must have an assigned
-@@ -977,6 +983,27 @@ void LinearScan::TreeNodeInfoInitSIMD(GenTreeSIMD* simdTree, TreeNodeInfo* info)
+@@ -975,6 +981,27 @@ void LinearScan::TreeNodeInfoInitSIMD(GenTreeSIMD* simdTree, TreeNodeInfo* info)
  }
  #endif // FEATURE_SIMD
  
@@ -1003,7 +1044,7 @@ index 1d82086..cb1c42c 100644
      set(JIT_ARCH_ALTJIT_SOURCES ${JIT_ARM_SOURCES})
      set(JIT_ARCH_LINK_LIBRARIES gcinfo_arm)
 diff --git a/src/jit/simd.cpp b/src/jit/simd.cpp
-index e6936c5..3334150 100644
+index 520d624..e676623 100644
 --- a/src/jit/simd.cpp
 +++ b/src/jit/simd.cpp
 @@ -482,12 +482,6 @@ var_types Compiler::getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, u
@@ -1086,10 +1127,10 @@ index 904bb48..ec57b2a 100644
      <Compile Include="$(BclSourcesRoot)\System\AppContext\AppContextSwitches.cs" />
 diff --git a/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.PlatformNotSupported.cs b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.PlatformNotSupported.cs
 new file mode 100644
-index 0000000..9d6146e
+index 0000000..4b37790
 --- /dev/null
 +++ b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.PlatformNotSupported.cs
-@@ -0,0 +1,320 @@
+@@ -0,0 +1,344 @@
 +using System.Runtime.CompilerServices;
 +using System.Runtime.Intrinsics;
 +
@@ -1296,15 +1337,41 @@ index 0000000..9d6146e
 +        /// Vector max
 +        /// Corresponds to vector forms of ARM64 SMAX, UMAX & FMAX
 +        /// </summary>
-+        public static Vector64<T>  Max<T>(Vector64<T>  left, Vector64<T>  right) where T : struct { throw new PlatformNotSupportedException(); }
-+        public static Vector128<T> Max<T>(Vector128<T> left, Vector128<T> right) where T : struct { throw new PlatformNotSupportedException(); }
++        public static Vector64<byte>    Max(Vector64<byte>    left, Vector64<byte>    right) { throw new PlatformNotSupportedException(); }
++        public static Vector64<sbyte>   Max(Vector64<sbyte>   left, Vector64<sbyte>   right) { throw new PlatformNotSupportedException(); }
++        public static Vector64<ushort>  Max(Vector64<ushort>  left, Vector64<ushort>  right) { throw new PlatformNotSupportedException(); }
++        public static Vector64<short>   Max(Vector64<short>   left, Vector64<short>   right) { throw new PlatformNotSupportedException(); }
++        public static Vector64<uint>    Max(Vector64<uint>    left, Vector64<uint>    right) { throw new PlatformNotSupportedException(); }
++        public static Vector64<int>     Max(Vector64<int>     left, Vector64<int>     right) { throw new PlatformNotSupportedException(); }
++        public static Vector64<float>   Max(Vector64<float>   left, Vector64<float>   right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<byte>   Max(Vector128<byte>   left, Vector128<byte>   right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<sbyte>  Max(Vector128<sbyte>  left, Vector128<sbyte>  right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<ushort> Max(Vector128<ushort> left, Vector128<ushort> right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<short>  Max(Vector128<short>  left, Vector128<short>  right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<uint>   Max(Vector128<uint>   left, Vector128<uint>   right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<int>    Max(Vector128<int>    left, Vector128<int>    right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<float>  Max(Vector128<float>  left, Vector128<float>  right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<double> Max(Vector128<double> left, Vector128<double> right) { throw new PlatformNotSupportedException(); }
 +
 +        /// <summary>
 +        /// Vector min
 +        /// Corresponds to vector forms of ARM64 SMIN, UMIN & FMIN
 +        /// </summary>
-+        public static Vector64<T>  Min<T>(Vector64<T>  left, Vector64<T>  right) where T : struct { throw new PlatformNotSupportedException(); }
-+        public static Vector128<T> Min<T>(Vector128<T> left, Vector128<T> right) where T : struct { throw new PlatformNotSupportedException(); }
++        public static Vector64<byte>    Min(Vector64<byte>    left, Vector64<byte>    right) { throw new PlatformNotSupportedException(); }
++        public static Vector64<sbyte>   Min(Vector64<sbyte>   left, Vector64<sbyte>   right) { throw new PlatformNotSupportedException(); }
++        public static Vector64<ushort>  Min(Vector64<ushort>  left, Vector64<ushort>  right) { throw new PlatformNotSupportedException(); }
++        public static Vector64<short>   Min(Vector64<short>   left, Vector64<short>   right) { throw new PlatformNotSupportedException(); }
++        public static Vector64<uint>    Min(Vector64<uint>    left, Vector64<uint>    right) { throw new PlatformNotSupportedException(); }
++        public static Vector64<int>     Min(Vector64<int>     left, Vector64<int>     right) { throw new PlatformNotSupportedException(); }
++        public static Vector64<float>   Min(Vector64<float>   left, Vector64<float>   right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<byte>   Min(Vector128<byte>   left, Vector128<byte>   right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<sbyte>  Min(Vector128<sbyte>  left, Vector128<sbyte>  right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<ushort> Min(Vector128<ushort> left, Vector128<ushort> right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<short>  Min(Vector128<short>  left, Vector128<short>  right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<uint>   Min(Vector128<uint>   left, Vector128<uint>   right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<int>    Min(Vector128<int>    left, Vector128<int>    right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<float>  Min(Vector128<float>  left, Vector128<float>  right) { throw new PlatformNotSupportedException(); }
++        public static Vector128<double> Min(Vector128<double> left, Vector128<double> right) { throw new PlatformNotSupportedException(); }
 +
 +        /// TBD MOV, FMOV
 +
@@ -1328,8 +1395,6 @@ index 0000000..9d6146e
 +        public static Vector128<short>  Multiply(Vector128<short>  left, Vector128<short>  right) { throw new PlatformNotSupportedException(); }
 +        public static Vector128<uint>   Multiply(Vector128<uint>   left, Vector128<uint>   right) { throw new PlatformNotSupportedException(); }
 +        public static Vector128<int>    Multiply(Vector128<int>    left, Vector128<int>    right) { throw new PlatformNotSupportedException(); }
-+        public static Vector128<ulong>  Multiply(Vector128<ulong>  left, Vector128<ulong>  right) { throw new PlatformNotSupportedException(); }
-+        public static Vector128<long>   Multiply(Vector128<long>   left, Vector128<long>   right) { throw new PlatformNotSupportedException(); }
 +        public static Vector128<float>  Multiply(Vector128<float>  left, Vector128<float>  right) { throw new PlatformNotSupportedException(); }
 +        public static Vector128<double> Multiply(Vector128<double> left, Vector128<double> right) { throw new PlatformNotSupportedException(); }
 +
@@ -1412,10 +1477,10 @@ index 0000000..9d6146e
 +}
 diff --git a/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.cs b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.cs
 new file mode 100644
-index 0000000..a6726f0
+index 0000000..f162483
 --- /dev/null
 +++ b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Simd.cs
-@@ -0,0 +1,320 @@
+@@ -0,0 +1,344 @@
 +using System.Runtime.CompilerServices;
 +using System.Runtime.Intrinsics;
 +
@@ -1622,15 +1687,41 @@ index 0000000..a6726f0
 +        /// Vector max
 +        /// Corresponds to vector forms of ARM64 SMAX, UMAX & FMAX
 +        /// </summary>
-+        public static Vector64<T>  Max<T>(Vector64<T>  left, Vector64<T>  right) where T : struct => Max(left, right);
-+        public static Vector128<T> Max<T>(Vector128<T> left, Vector128<T> right) where T : struct => Max(left, right);
++        public static Vector64<byte>    Max(Vector64<byte>    left, Vector64<byte>    right) => Max(left, right);
++        public static Vector64<sbyte>   Max(Vector64<sbyte>   left, Vector64<sbyte>   right) => Max(left, right);
++        public static Vector64<ushort>  Max(Vector64<ushort>  left, Vector64<ushort>  right) => Max(left, right);
++        public static Vector64<short>   Max(Vector64<short>   left, Vector64<short>   right) => Max(left, right);
++        public static Vector64<uint>    Max(Vector64<uint>    left, Vector64<uint>    right) => Max(left, right);
++        public static Vector64<int>     Max(Vector64<int>     left, Vector64<int>     right) => Max(left, right);
++        public static Vector64<float>   Max(Vector64<float>   left, Vector64<float>   right) => Max(left, right);
++        public static Vector128<byte>   Max(Vector128<byte>   left, Vector128<byte>   right) => Max(left, right);
++        public static Vector128<sbyte>  Max(Vector128<sbyte>  left, Vector128<sbyte>  right) => Max(left, right);
++        public static Vector128<ushort> Max(Vector128<ushort> left, Vector128<ushort> right) => Max(left, right);
++        public static Vector128<short>  Max(Vector128<short>  left, Vector128<short>  right) => Max(left, right);
++        public static Vector128<uint>   Max(Vector128<uint>   left, Vector128<uint>   right) => Max(left, right);
++        public static Vector128<int>    Max(Vector128<int>    left, Vector128<int>    right) => Max(left, right);
++        public static Vector128<float>  Max(Vector128<float>  left, Vector128<float>  right) => Max(left, right);
++        public static Vector128<double> Max(Vector128<double> left, Vector128<double> right) => Max(left, right);
 +
 +        /// <summary>
 +        /// Vector min
 +        /// Corresponds to vector forms of ARM64 SMIN, UMIN & FMIN
 +        /// </summary>
-+        public static Vector64<T>  Min<T>(Vector64<T>  left, Vector64<T>  right) where T : struct => Min(left, right);
-+        public static Vector128<T> Min<T>(Vector128<T> left, Vector128<T> right) where T : struct => Min(left, right);
++        public static Vector64<byte>    Min(Vector64<byte>    left, Vector64<byte>    right) => Min(left, right);
++        public static Vector64<sbyte>   Min(Vector64<sbyte>   left, Vector64<sbyte>   right) => Min(left, right);
++        public static Vector64<ushort>  Min(Vector64<ushort>  left, Vector64<ushort>  right) => Min(left, right);
++        public static Vector64<short>   Min(Vector64<short>   left, Vector64<short>   right) => Min(left, right);
++        public static Vector64<uint>    Min(Vector64<uint>    left, Vector64<uint>    right) => Min(left, right);
++        public static Vector64<int>     Min(Vector64<int>     left, Vector64<int>     right) => Min(left, right);
++        public static Vector64<float>   Min(Vector64<float>   left, Vector64<float>   right) => Min(left, right);
++        public static Vector128<byte>   Min(Vector128<byte>   left, Vector128<byte>   right) => Min(left, right);
++        public static Vector128<sbyte>  Min(Vector128<sbyte>  left, Vector128<sbyte>  right) => Min(left, right);
++        public static Vector128<ushort> Min(Vector128<ushort> left, Vector128<ushort> right) => Min(left, right);
++        public static Vector128<short>  Min(Vector128<short>  left, Vector128<short>  right) => Min(left, right);
++        public static Vector128<uint>   Min(Vector128<uint>   left, Vector128<uint>   right) => Min(left, right);
++        public static Vector128<int>    Min(Vector128<int>    left, Vector128<int>    right) => Min(left, right);
++        public static Vector128<float>  Min(Vector128<float>  left, Vector128<float>  right) => Min(left, right);
++        public static Vector128<double> Min(Vector128<double> left, Vector128<double> right) => Min(left, right);
 +
 +        /// TBD MOV, FMOV
 +
@@ -1654,8 +1745,6 @@ index 0000000..a6726f0
 +        public static Vector128<short>  Multiply(Vector128<short>  left, Vector128<short>  right) => Multiply(left, right);
 +        public static Vector128<uint>   Multiply(Vector128<uint>   left, Vector128<uint>   right) => Multiply(left, right);
 +        public static Vector128<int>    Multiply(Vector128<int>    left, Vector128<int>    right) => Multiply(left, right);
-+        public static Vector128<ulong>  Multiply(Vector128<ulong>  left, Vector128<ulong>  right) => Multiply(left, right);
-+        public static Vector128<long>   Multiply(Vector128<long>   left, Vector128<long>   right) => Multiply(left, right);
 +        public static Vector128<float>  Multiply(Vector128<float>  left, Vector128<float>  right) => Multiply(left, right);
 +        public static Vector128<double> Multiply(Vector128<double> left, Vector128<double> right) => Multiply(left, right);
 +
