@@ -1,0 +1,412 @@
+From 7b486bfaa00cec6d3cb703456e9b4dc6bac1bb07 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 29 Jan 2018 13:00:26 -0500
+Subject: [PATCH] [Arm64] Add Extract element tests
+
+---
+ tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs | 356 ++++++++++++++++++++++++-
+ 1 file changed, 350 insertions(+), 6 deletions(-)
+
+diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
+index a2fde5b..a07472c 100644
+--- a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
++++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
+@@ -142,6 +142,74 @@ namespace Arm64intrisicsTest
+             }
+         }
+ 
++        static void testExtractOp<TBaseType, TVectorType>(String testCaseDescription,
++                                                      Func<TVectorType, TBaseType> extractOp,
++                                                      Func<TBaseType[], TBaseType> check)
++            where TBaseType : struct, IComparable
++            where TVectorType : new()
++        {
++            bool failed = false;
++            try
++            {
++                var vLeft  = DataSet<TBaseType, TVectorType>.vectorX;
++
++                var vResult = extractOp(vLeft);
++
++                var left   = DataSet<TBaseType, TVectorType>.arrayX;
++
++                var expected = check(left);
++
++                if (vResult.CompareTo(expected) != 0)
++                {
++                    if(!failed)
++                    {
++                        Console.WriteLine($"testExtractOp<{typeof(TBaseType).Name}, {typeof(TVectorType).Name} >{testCaseDescription}: Check Failed");
++                    }
++                    Console.WriteLine($"check(left) : vResult = {vResult}, expected {expected}");
++                    failed = true;
++                }
++            }
++            catch
++            {
++                Console.WriteLine($"testBinOp<{typeof(TBaseType).Name}, {typeof(TVectorType).Name} >{testCaseDescription}: Unexpected exception");
++                throw;
++            }
++
++            if (failed)
++            {
++                throw new Exception($"testBinOp<{typeof(TBaseType).Name}, {typeof(TVectorType).Name} >{testCaseDescription}: Failed");
++            }
++        }
++
++        static void testThrowsArgumentOutOfRangeException<TBaseType, TVectorType>(String testCaseDescription,
++                                                                Func<TVectorType, TVectorType, TBaseType> binOp)
++            where TBaseType : struct
++            where TVectorType : struct
++        {
++            var v = DataSet<TBaseType, TVectorType>.vectorX;
++
++            bool caughtArgRangeEx = false;
++
++            try
++            {
++                binOp(v,v);
++            }
++            catch (ArgumentOutOfRangeException)
++            {
++                caughtArgRangeEx = true;
++            }
++            catch
++            {
++                Console.WriteLine($"testThrowsArgumentOutOfRangeException: Unexpected exception");
++                throw;
++            }
++
++            if (caughtArgRangeEx == false)
++            {
++                throw new Exception($"testThrowsArgumentOutOfRangeException<{typeof(TBaseType).Name}, {typeof(TVectorType).Name} >{testCaseDescription}: Failed");
++            }
++        }
++
+         static void testThrowsTypeNotSupported<TVectorType>(String testCaseDescription,
+                                                                 Func<TVectorType, TVectorType, TVectorType> binOp)
+             where TVectorType : new()
+@@ -154,13 +222,19 @@ namespace Arm64intrisicsTest
+             {
+                 binOp(v,v);
+             }
+-            catch (PlatformNotSupportedException)
++            catch (PlatformNotSupportedException) // TODO-FIXME
+             {
+                 notSupported = true;
+             }
+-            finally
++            catch
++            {
++                Console.WriteLine($"testThrowsTypeNotSupported: Unexpected exception");
++                throw;
++            }
++
++            if (notSupported == false)
+             {
+-                Debug.Assert(notSupported, $"{typeof(TVectorType).Name} {testCaseDescription}: Failed to throw PlatformNotSupportedException");
++                throw new Exception($"testThrowsTypeNotSupported<{typeof(TVectorType).Name} >{testCaseDescription}: Failed");
+             }
+         }
+ 
+@@ -187,9 +261,15 @@ namespace Arm64intrisicsTest
+             {
+                 notSupported = true;
+             }
+-            finally
++            catch
++            {
++                Console.WriteLine($"testThrowsPlatformNotSupported: Unexpected exception");
++                throw;
++            }
++
++            if (notSupported == false)
+             {
+-                Debug.Assert(notSupported, $"{typeof(TVectorType).Name} {testCaseDescription}: Failed to throw TypeNotSupportedException");
++                throw new Exception($"testThrowsPlatformNotSupported<{typeof(TVectorType).Name} >{testCaseDescription}: Failed");
+             }
+         }
+ 
+@@ -1029,6 +1109,270 @@ namespace Arm64intrisicsTest
+             Console.WriteLine($"Test{name} passed");
+         }
+ 
++        [MethodImplAttribute(MethodImplOptions.NoInlining)]
++        static T simdExtract<T>(Vector64<T> vector, byte index)
++            where T : struct
++        {
++            return Simd.Extract<T>(vector, index);
++        }
++
++        [MethodImplAttribute(MethodImplOptions.NoInlining)]
++        static T simdExtract<T>(Vector128<T> vector, byte index)
++            where T : struct
++        {
++            return Simd.Extract<T>(vector, index);
++        }
++
++        static void TestExtract()
++        {
++            String name = "Extract";
++
++            if (Simd.IsSupported)
++            {
++                testExtractOp<float,  Vector128<float> >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<float,  Vector128<float> >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<float,  Vector128<float> >(name, (x) => Simd.Extract(x, 2), (x) => x[ 2]);
++                testExtractOp<float,  Vector128<float> >(name, (x) => Simd.Extract(x, 3), (x) => x[ 3]);
++                testExtractOp<double, Vector128<double>>(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<double, Vector128<double>>(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x, 2), (x) => x[ 2]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x, 3), (x) => x[ 3]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x, 4), (x) => x[ 4]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x, 5), (x) => x[ 5]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x, 6), (x) => x[ 6]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x, 7), (x) => x[ 7]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x, 8), (x) => x[ 8]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x, 9), (x) => x[ 9]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x,10), (x) => x[10]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x,11), (x) => x[11]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x,12), (x) => x[12]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x,13), (x) => x[13]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x,14), (x) => x[14]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => Simd.Extract(x,15), (x) => x[15]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x, 2), (x) => x[ 2]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x, 3), (x) => x[ 3]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x, 4), (x) => x[ 4]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x, 5), (x) => x[ 5]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x, 6), (x) => x[ 6]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x, 7), (x) => x[ 7]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x, 8), (x) => x[ 8]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x, 9), (x) => x[ 9]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x,10), (x) => x[10]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x,11), (x) => x[11]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x,12), (x) => x[12]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x,13), (x) => x[13]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x,14), (x) => x[14]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => Simd.Extract(x,15), (x) => x[15]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => Simd.Extract(x, 2), (x) => x[ 2]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => Simd.Extract(x, 3), (x) => x[ 3]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => Simd.Extract(x, 4), (x) => x[ 4]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => Simd.Extract(x, 5), (x) => x[ 5]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => Simd.Extract(x, 6), (x) => x[ 6]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => Simd.Extract(x, 7), (x) => x[ 7]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => Simd.Extract(x, 2), (x) => x[ 2]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => Simd.Extract(x, 3), (x) => x[ 3]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => Simd.Extract(x, 4), (x) => x[ 4]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => Simd.Extract(x, 5), (x) => x[ 5]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => Simd.Extract(x, 6), (x) => x[ 6]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => Simd.Extract(x, 7), (x) => x[ 7]);
++                testExtractOp<int,    Vector128<int>   >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<int,    Vector128<int>   >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<int,    Vector128<int>   >(name, (x) => Simd.Extract(x, 2), (x) => x[ 2]);
++                testExtractOp<int,    Vector128<int>   >(name, (x) => Simd.Extract(x, 3), (x) => x[ 3]);
++                testExtractOp<uint,   Vector128<uint>  >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<uint,   Vector128<uint>  >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<uint,   Vector128<uint>  >(name, (x) => Simd.Extract(x, 2), (x) => x[ 2]);
++                testExtractOp<uint,   Vector128<uint>  >(name, (x) => Simd.Extract(x, 3), (x) => x[ 3]);
++                testExtractOp<long,   Vector128<long>  >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<long,   Vector128<long>  >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<ulong,  Vector128<ulong> >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<ulong,  Vector128<ulong> >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<float,  Vector64<float>  >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<float,  Vector64<float>  >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => Simd.Extract(x, 2), (x) => x[ 2]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => Simd.Extract(x, 3), (x) => x[ 3]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => Simd.Extract(x, 4), (x) => x[ 4]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => Simd.Extract(x, 5), (x) => x[ 5]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => Simd.Extract(x, 6), (x) => x[ 6]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => Simd.Extract(x, 7), (x) => x[ 7]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => Simd.Extract(x, 2), (x) => x[ 2]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => Simd.Extract(x, 3), (x) => x[ 3]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => Simd.Extract(x, 4), (x) => x[ 4]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => Simd.Extract(x, 5), (x) => x[ 5]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => Simd.Extract(x, 6), (x) => x[ 6]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => Simd.Extract(x, 7), (x) => x[ 7]);
++                testExtractOp<short,  Vector64<short>  >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<short,  Vector64<short>  >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<short,  Vector64<short>  >(name, (x) => Simd.Extract(x, 2), (x) => x[ 2]);
++                testExtractOp<short,  Vector64<short>  >(name, (x) => Simd.Extract(x, 3), (x) => x[ 3]);
++                testExtractOp<ushort, Vector64<ushort> >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<ushort, Vector64<ushort> >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<ushort, Vector64<ushort> >(name, (x) => Simd.Extract(x, 2), (x) => x[ 2]);
++                testExtractOp<ushort, Vector64<ushort> >(name, (x) => Simd.Extract(x, 3), (x) => x[ 3]);
++                testExtractOp<int,    Vector64<int>    >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<int,    Vector64<int>    >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++                testExtractOp<uint,   Vector64<uint>   >(name, (x) => Simd.Extract(x, 0), (x) => x[ 0]);
++                testExtractOp<uint,   Vector64<uint>   >(name, (x) => Simd.Extract(x, 1), (x) => x[ 1]);
++
++                // Test non-constant call
++                testExtractOp<float,  Vector128<float> >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<float,  Vector128<float> >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<float,  Vector128<float> >(name, (x) => simdExtract(x, 2), (x) => x[ 2]);
++                testExtractOp<float,  Vector128<float> >(name, (x) => simdExtract(x, 3), (x) => x[ 3]);
++                testExtractOp<double, Vector128<double>>(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<double, Vector128<double>>(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x, 2), (x) => x[ 2]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x, 3), (x) => x[ 3]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x, 4), (x) => x[ 4]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x, 5), (x) => x[ 5]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x, 6), (x) => x[ 6]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x, 7), (x) => x[ 7]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x, 8), (x) => x[ 8]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x, 9), (x) => x[ 9]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x,10), (x) => x[10]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x,11), (x) => x[11]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x,12), (x) => x[12]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x,13), (x) => x[13]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x,14), (x) => x[14]);
++                testExtractOp<sbyte,  Vector128<sbyte> >(name, (x) => simdExtract(x,15), (x) => x[15]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x, 2), (x) => x[ 2]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x, 3), (x) => x[ 3]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x, 4), (x) => x[ 4]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x, 5), (x) => x[ 5]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x, 6), (x) => x[ 6]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x, 7), (x) => x[ 7]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x, 8), (x) => x[ 8]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x, 9), (x) => x[ 9]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x,10), (x) => x[10]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x,11), (x) => x[11]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x,12), (x) => x[12]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x,13), (x) => x[13]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x,14), (x) => x[14]);
++                testExtractOp<byte,   Vector128<byte>  >(name, (x) => simdExtract(x,15), (x) => x[15]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => simdExtract(x, 2), (x) => x[ 2]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => simdExtract(x, 3), (x) => x[ 3]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => simdExtract(x, 4), (x) => x[ 4]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => simdExtract(x, 5), (x) => x[ 5]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => simdExtract(x, 6), (x) => x[ 6]);
++                testExtractOp<short,  Vector128<short> >(name, (x) => simdExtract(x, 7), (x) => x[ 7]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => simdExtract(x, 2), (x) => x[ 2]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => simdExtract(x, 3), (x) => x[ 3]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => simdExtract(x, 4), (x) => x[ 4]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => simdExtract(x, 5), (x) => x[ 5]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => simdExtract(x, 6), (x) => x[ 6]);
++                testExtractOp<ushort, Vector128<ushort>>(name, (x) => simdExtract(x, 7), (x) => x[ 7]);
++                testExtractOp<int,    Vector128<int>   >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<int,    Vector128<int>   >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<int,    Vector128<int>   >(name, (x) => simdExtract(x, 2), (x) => x[ 2]);
++                testExtractOp<int,    Vector128<int>   >(name, (x) => simdExtract(x, 3), (x) => x[ 3]);
++                testExtractOp<uint,   Vector128<uint>  >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<uint,   Vector128<uint>  >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<uint,   Vector128<uint>  >(name, (x) => simdExtract(x, 2), (x) => x[ 2]);
++                testExtractOp<uint,   Vector128<uint>  >(name, (x) => simdExtract(x, 3), (x) => x[ 3]);
++                testExtractOp<long,   Vector128<long>  >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<long,   Vector128<long>  >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<ulong,  Vector128<ulong> >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<ulong,  Vector128<ulong> >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<float,  Vector64<float>  >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<float,  Vector64<float>  >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => simdExtract(x, 2), (x) => x[ 2]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => simdExtract(x, 3), (x) => x[ 3]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => simdExtract(x, 4), (x) => x[ 4]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => simdExtract(x, 5), (x) => x[ 5]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => simdExtract(x, 6), (x) => x[ 6]);
++                testExtractOp<sbyte,  Vector64<sbyte>  >(name, (x) => simdExtract(x, 7), (x) => x[ 7]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => simdExtract(x, 2), (x) => x[ 2]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => simdExtract(x, 3), (x) => x[ 3]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => simdExtract(x, 4), (x) => x[ 4]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => simdExtract(x, 5), (x) => x[ 5]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => simdExtract(x, 6), (x) => x[ 6]);
++                testExtractOp<byte,   Vector64<byte>   >(name, (x) => simdExtract(x, 7), (x) => x[ 7]);
++                testExtractOp<short,  Vector64<short>  >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<short,  Vector64<short>  >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<short,  Vector64<short>  >(name, (x) => simdExtract(x, 2), (x) => x[ 2]);
++                testExtractOp<short,  Vector64<short>  >(name, (x) => simdExtract(x, 3), (x) => x[ 3]);
++                testExtractOp<ushort, Vector64<ushort> >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<ushort, Vector64<ushort> >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<ushort, Vector64<ushort> >(name, (x) => simdExtract(x, 2), (x) => x[ 2]);
++                testExtractOp<ushort, Vector64<ushort> >(name, (x) => simdExtract(x, 3), (x) => x[ 3]);
++                testExtractOp<int,    Vector64<int>    >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<int,    Vector64<int>    >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++                testExtractOp<uint,   Vector64<uint>   >(name, (x) => simdExtract(x, 0), (x) => x[ 0]);
++                testExtractOp<uint,   Vector64<uint>   >(name, (x) => simdExtract(x, 1), (x) => x[ 1]);
++
++                testThrowsArgumentOutOfRangeException<float,  Vector128<float> >(name, (x, y) => Simd.Extract(x, 4));
++                testThrowsArgumentOutOfRangeException<double, Vector128<double>>(name, (x, y) => Simd.Extract(x, 2));
++                testThrowsArgumentOutOfRangeException<sbyte,  Vector128<sbyte> >(name, (x, y) => Simd.Extract(x,16));
++                testThrowsArgumentOutOfRangeException<byte,   Vector128<byte>  >(name, (x, y) => Simd.Extract(x,16));
++                testThrowsArgumentOutOfRangeException<short,  Vector128<short> >(name, (x, y) => Simd.Extract(x, 8));
++                testThrowsArgumentOutOfRangeException<ushort, Vector128<ushort>>(name, (x, y) => Simd.Extract(x, 8));
++                testThrowsArgumentOutOfRangeException<int,    Vector128<int>   >(name, (x, y) => Simd.Extract(x, 4));
++                testThrowsArgumentOutOfRangeException<uint,   Vector128<uint>  >(name, (x, y) => Simd.Extract(x, 4));
++                testThrowsArgumentOutOfRangeException<long,   Vector128<long>  >(name, (x, y) => Simd.Extract(x, 2));
++                testThrowsArgumentOutOfRangeException<ulong,  Vector128<ulong> >(name, (x, y) => Simd.Extract(x, 2));
++                testThrowsArgumentOutOfRangeException<float,  Vector64<float>  >(name, (x, y) => Simd.Extract(x, 2));
++                testThrowsArgumentOutOfRangeException<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.Extract(x, 8));
++                testThrowsArgumentOutOfRangeException<byte,   Vector64<byte>   >(name, (x, y) => Simd.Extract(x, 8));
++                testThrowsArgumentOutOfRangeException<short,  Vector64<short>  >(name, (x, y) => Simd.Extract(x, 4));
++                testThrowsArgumentOutOfRangeException<ushort, Vector64<ushort> >(name, (x, y) => Simd.Extract(x, 4));
++                testThrowsArgumentOutOfRangeException<int,    Vector64<int>    >(name, (x, y) => Simd.Extract(x, 2));
++                testThrowsArgumentOutOfRangeException<uint,   Vector64<uint>   >(name, (x, y) => Simd.Extract(x, 2));
++
++                testThrowsTypeNotSupported<Vector64<long>  >(name, (x, y) => { return Simd.Extract(x, 1) > 1 ? x : y; });
++                testThrowsTypeNotSupported<Vector64<ulong> >(name, (x, y) => { return Simd.Extract(x, 1) > 1 ? x : y; });
++                testThrowsTypeNotSupported<Vector64<double>>(name, (x, y) => { return Simd.Extract(x, 1) > 1 ? x : y; });
++            }
++            else
++            {
++                testThrowsPlatformNotSupported<Vector64<float>  , float >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector64<double> , double>(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector64<sbyte>  , sbyte >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector64<byte>   , byte  >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector64<short>  , short >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector64<ushort> , ushort>(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector64<int>    , int   >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector64<uint>   , uint  >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector64<long>   , long  >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector64<ulong>  , ulong >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector128<float> , float >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector128<double>, double>(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector128<sbyte> , sbyte >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector128<byte>  , byte  >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector128<short> , short >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector128<ushort>, ushort>(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector128<int>   , int   >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector128<uint>  , uint  >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector128<long>  , long  >(name, (x, y) => Simd.Extract(x, 1));
++                testThrowsPlatformNotSupported<Vector128<ulong> , ulong >(name, (x, y) => Simd.Extract(x, 1));
++            }
++
++            Console.WriteLine($"Test{name} passed");
++        }
++
+         static void TestLeadingSignCount()
+         {
+             String name = "LeadingSignCount";
+@@ -1650,7 +1994,7 @@ namespace Arm64intrisicsTest
+             TestCompareLessThanOrEqualZero();
+             TestCompareTest();
+             TestDivide();
+-            //TestExtract();
++            TestExtract();
+             //TestInsert();
+             TestLeadingSignCount();
+             TestLeadingZeroCount();
+-- 
+2.7.4
+
