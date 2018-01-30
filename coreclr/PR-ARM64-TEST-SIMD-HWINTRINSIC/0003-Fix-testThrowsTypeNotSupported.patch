@@ -1,0 +1,40 @@
+From cc5968f7ba4e4b278f3c707316ba729cba406dd3 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 30 Jan 2018 12:54:59 -0500
+Subject: [PATCH] Fix testThrowsTypeNotSupported
+
+---
+ tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
+index a07472c..222a178 100644
+--- a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
++++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
+@@ -222,8 +222,13 @@ namespace Arm64intrisicsTest
+             {
+                 binOp(v,v);
+             }
+-            catch (PlatformNotSupportedException) // TODO-FIXME
++            catch (NotSupportedException e)
+             {
++                if (!e.Message.Equals("Type is not supported."))
++                {
++                    Console.WriteLine($"testThrowsTypeNotSupported: Unexpected type not supported message");
++                    throw;
++                }
+                 notSupported = true;
+             }
+             catch
+@@ -257,7 +262,7 @@ namespace Arm64intrisicsTest
+             {
+                 binOp(v,v);
+             }
+-            catch (PlatformNotSupportedException) // TODO-Fixme check for Type not supported exception
++            catch (PlatformNotSupportedException)
+             {
+                 notSupported = true;
+             }
+-- 
+2.7.4
+
