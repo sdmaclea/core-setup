@@ -1,0 +1,28 @@
+From 3aafeabbb9f07cc71dca1460c1f2acea8df0965f Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 30 Jan 2018 15:20:05 -0500
+Subject: [PATCH] Fixup test TNSE
+
+---
+ tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs | 5 -----
+ 1 file changed, 5 deletions(-)
+
+diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
+index 7339cc4..6c293f2 100644
+--- a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
++++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
+@@ -224,11 +224,6 @@ namespace Arm64intrisicsTest
+             }
+             catch (NotSupportedException e)
+             {
+-                if (!e.Message.Equals("Type is not supported."))
+-                {
+-                    Console.WriteLine($"testThrowsTypeNotSupported: Unexpected type not supported message");
+-                    throw;
+-                }
+                 notSupported = true;
+             }
+             catch
+-- 
+2.7.4
+
