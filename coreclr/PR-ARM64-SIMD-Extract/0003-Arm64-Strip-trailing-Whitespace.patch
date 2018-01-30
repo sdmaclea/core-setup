@@ -1,0 +1,12 @@
+From 0dc30461af3b32ac3b937e668a8a43c0363894eb Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 26 Jan 2018 17:09:14 -0500
+Subject: [PATCH] [Arm64] Strip trailing Whitespace
+
+---
+ src/jit/codegenarm64.cpp | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+
+-- 
+2.7.4
+
