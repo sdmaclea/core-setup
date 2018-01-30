@@ -1,4 +1,4 @@
-From d4a3ca2e58edf1f87566c2e7fbd02d2cb1519e65 Mon Sep 17 00:00:00 2001
+From 0623a4f6f53c973ecea71db9d12faf193aa0bcd3 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 30 Jan 2018 12:38:31 -0500
 Subject: [PATCH] CORINFO_HELP_THROW_TYPE_NOT_SUPPORTED
@@ -92,7 +92,7 @@ index b8c3f51..fda0d67 100644
                  break;
  
 diff --git a/src/vm/jithelpers.cpp b/src/vm/jithelpers.cpp
-index 48f5df9..5bf8b0c 100644
+index 48f5df9..90c9658 100644
 --- a/src/vm/jithelpers.cpp
 +++ b/src/vm/jithelpers.cpp
 @@ -4969,6 +4969,24 @@ HCIMPL0(void, JIT_ThrowPlatformNotSupportedException)
@@ -110,7 +110,7 @@ index 48f5df9..5bf8b0c 100644
 +
 +    HELPER_METHOD_FRAME_BEGIN_ATTRIB_NOPOLL(Frame::FRAME_ATTR_EXCEPTION);    // Set up a frame
 +
-+    COMPlusThrow(kNotSupportedException, W("NotSupported_Type"));
++    COMPlusThrow(kNotSupportedException, W("Arg_TypeNotSupported"));
 +
 +    HELPER_METHOD_FRAME_END();
 +}
