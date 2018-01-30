@@ -1,4 +1,4 @@
-From cdb3850f2435256627679d2591a8eedb94bf1f5a Mon Sep 17 00:00:00 2001
+From 31f7fe5f3c91108b9ae86dac61716aaa85ae622b Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Mon, 29 Jan 2018 20:59:59 -0500
 Subject: [PATCH] Create hwintrinsic.cpp
@@ -7,10 +7,10 @@ Subject: [PATCH] Create hwintrinsic.cpp
  src/jit/CMakeLists.txt       |   1 +
  src/jit/compiler.h           |  24 +++-----
  src/jit/hwintrinsic.cpp      | 141 +++++++++++++++++++++++++++++++++++++++++++
- src/jit/hwintrinsicArm64.cpp | 115 +++++------------------------------
+ src/jit/hwintrinsicArm64.cpp | 100 ------------------------------
  src/jit/hwintrinsicxarch.cpp | 110 +--------------------------------
  src/jit/importer.cpp         |   8 ---
- 6 files changed, 167 insertions(+), 232 deletions(-)
+ 6 files changed, 152 insertions(+), 232 deletions(-)
  create mode 100644 src/jit/hwintrinsic.cpp
 
 diff --git a/src/jit/CMakeLists.txt b/src/jit/CMakeLists.txt
@@ -221,7 +221,7 @@ index 0000000..e3b36d9
 +
 +#endif // FEATURE_HW_INTRINSICS
 diff --git a/src/jit/hwintrinsicArm64.cpp b/src/jit/hwintrinsicArm64.cpp
-index 3a49ff9..094325c 100644
+index 3a49ff9..5aa5aba 100644
 --- a/src/jit/hwintrinsicArm64.cpp
 +++ b/src/jit/hwintrinsicArm64.cpp
 @@ -126,50 +126,6 @@ NamedIntrinsic Compiler::lookupHWIntrinsic(const char* className, const char* me
@@ -275,29 +275,7 @@ index 3a49ff9..094325c 100644
  // impHWIntrinsic: dispatch hardware intrinsics to their own implementation
  // function
  //
-@@ -213,6 +169,21 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
-             break;
-     }
- 
-+    // Simd instantiation type check
-+    if (simdClass != nullptr)
-+    {
-+        simdBaseType = getBaseTypeAndSizeOfSIMDType(simdClass, &simdSizeBytes);
-+
-+        if (simdBaseType == TYP_UNKNOWN)
-+        {
-+            // TODO-FIXME Add CORINFO_HELP_THROW_TYPE_NOT_SUPPORTED
-+            unsigned CORINFO_HELP_THROW_TYPE_NOT_SUPPORTED = CORINFO_HELP_THROW_PLATFORM_NOT_SUPPORTED;
-+
-+            return impUnsupportedHWIntrinsic(CORINFO_HELP_THROW_TYPE_NOT_SUPPORTED, method, sig, mustExpand);
-+        }
-+        simdType = getSIMDTypeForSize(simdSizeBytes);
-+    }
-+
-     switch (getHWIntrinsicInfo(intrinsic).form)
-     {
-         case HWIntrinsicInfo::IsSupported:
-@@ -243,60 +214,4 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
+@@ -243,60 +199,4 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
      return retNode;
  }
  
@@ -359,7 +337,7 @@ index 3a49ff9..094325c 100644
 -
  #endif // FEATURE_HW_INTRINSICS
 diff --git a/src/jit/hwintrinsicxarch.cpp b/src/jit/hwintrinsicxarch.cpp
-index 80091f1..b8356f9 100644
+index 09e3c72..795fb98 100644
 --- a/src/jit/hwintrinsicxarch.cpp
 +++ b/src/jit/hwintrinsicxarch.cpp
 @@ -384,50 +384,6 @@ static bool isTypeSupportedForIntrinsic(var_types type)
@@ -431,7 +409,7 @@ index 80091f1..b8356f9 100644
                                    CORINFO_METHOD_HANDLE method,
                                    CORINFO_SIG_INFO*     sig,
                                    bool                  mustExpand)
-@@ -631,68 +587,6 @@ GenTree* Compiler::impX86HWIntrinsic(NamedIntrinsic        intrinsic,
+@@ -641,68 +597,6 @@ GenTree* Compiler::impX86HWIntrinsic(NamedIntrinsic        intrinsic,
      }
  }
  
