@@ -1,0 +1,89 @@
+From af8cbd8e0b417fb1cdbb3021111ab95fe38d0824 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 30 Jan 2018 16:05:19 -0500
+Subject: [PATCH] Add TestBitwiseSelect
+
+---
+ tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs | 59 +++++++++++++++++++++++++-
+ 1 file changed, 58 insertions(+), 1 deletion(-)
+
+diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
+index 222a178..7339cc4 100644
+--- a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
++++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
+@@ -581,6 +581,63 @@ namespace Arm64intrisicsTest
+             Console.WriteLine($"Test{name} passed");
+         }
+ 
++        static void TestBitwiseSelect()
++        {
++            String name = "BitwiseSelect";
++
++            if (Simd.IsSupported)
++            {
++                testBinOp<float,  Vector128<float> >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) => bitsToFloat (bits(y) ^ (bits(x + y) & (bits(x) ^ bits(y)))));
++                testBinOp<double, Vector128<double>>(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) => bitsToDouble(bits(y) ^ (bits(x + y) & (bits(x) ^ bits(y)))));
++                testBinOp<sbyte,  Vector128<sbyte> >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) => (sbyte)     (    (y) ^ (    (x + y) & (    (x) ^     (y)))));
++                testBinOp<byte,   Vector128<byte>  >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) => (byte)      (    (y) ^ (    (x + y) & (    (x) ^     (y)))));
++                testBinOp<short,  Vector128<short> >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) => (short)     (    (y) ^ (    (x + y) & (    (x) ^     (y)))));
++                testBinOp<ushort, Vector128<ushort>>(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) => (ushort)    (    (y) ^ (    (x + y) & (    (x) ^     (y)))));
++                testBinOp<int,    Vector128<int>   >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) =>             (    (y) ^ (    (x + y) & (    (x) ^     (y)))));
++                testBinOp<uint,   Vector128<uint>  >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) =>             (    (y) ^ (    (x + y) & (    (x) ^     (y)))));
++                testBinOp<long,   Vector128<long>  >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) =>             (    (y) ^ (    (x + y) & (    (x) ^     (y)))));
++                testBinOp<ulong,  Vector128<ulong> >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) =>             (    (y) ^ (    (x + y) & (    (x) ^     (y)))));
++                testBinOp<float,  Vector64<float>  >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) => bitsToFloat (bits(y) ^ (bits(x + y) & (bits(x) ^ bits(y)))));
++                testBinOp<sbyte,  Vector64<sbyte>  >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) => (sbyte)     (    (y) ^ (    (x + y) & (    (x) ^     (y)))));
++                testBinOp<byte,   Vector64<byte>   >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) => (byte)      (    (y) ^ (    (x + y) & (    (x) ^     (y)))));
++                testBinOp<short,  Vector64<short>  >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) => (short)     (    (y) ^ (    (x + y) & (    (x) ^     (y)))));
++                testBinOp<ushort, Vector64<ushort> >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) => (ushort)    (    (y) ^ (    (x + y) & (    (x) ^     (y)))));
++                testBinOp<int,    Vector64<int>    >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) =>             (    (y) ^ (    (x + y) & (    (x) ^     (y)))));
++                testBinOp<uint,   Vector64<uint>   >(name, (x, y) => Simd.BitwiseSelect(Simd.Add(x,y), x, y), (x, y) =>             (    (y) ^ (    (x + y) & (    (x) ^     (y)))));
++
++                testThrowsTypeNotSupported<Vector128<Vector128<long>> >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++
++                testThrowsTypeNotSupported<Vector64<long>  >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsTypeNotSupported<Vector64<ulong> >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsTypeNotSupported<Vector64<double>>(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++            }
++            else
++            {
++                testThrowsPlatformNotSupported<Vector64<float>  >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector64<double> >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector64<sbyte>  >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector64<byte>   >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector64<short>  >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector64<ushort> >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector64<int>    >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector64<uint>   >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector64<long>   >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector64<ulong>  >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector128<float> >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector128<double>>(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector128<sbyte> >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector128<byte>  >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector128<short> >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector128<ushort>>(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector128<int>   >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector128<uint>  >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector128<long>  >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++                testThrowsPlatformNotSupported<Vector128<ulong> >(name, (x, y) => Simd.BitwiseSelect(x, x, y));
++            }
++
++            Console.WriteLine($"Test{name} passed");
++        }
++
+         static void TestCompareEqual()
+         {
+             String name = "CompareEqual";
+@@ -1988,7 +2045,7 @@ namespace Arm64intrisicsTest
+             TestAdd();
+             TestAnd();
+             TestAndNot();
+-            //TestBitwiseSelect();
++            TestBitwiseSelect();
+             TestCompareEqual();
+             TestCompareEqualZero();
+             TestCompareGreaterThan();
+-- 
+2.7.4
+
