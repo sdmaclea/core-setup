@@ -1,4 +1,4 @@
-From 7cc84d4973c464f3d1b5ec8c748a52acae42dee4 Mon Sep 17 00:00:00 2001
+From 9bab3254db1b5cb1c5afd3acaf1d6bcd505d1826 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 26 Jan 2018 17:24:54 -0500
 Subject: [PATCH] [Arm64] Implement Simd.Extract
@@ -13,7 +13,7 @@ Subject: [PATCH] [Arm64] Implement Simd.Extract
  6 files changed, 157 insertions(+), 8 deletions(-)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index 4205f95..e6ebc92 100644
+index 4205f95..e4737a5 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
 @@ -5059,9 +5059,104 @@ void CodeGen::genHWIntrinsicSimdBinaryOp(GenTreeHWIntrinsic* node)
@@ -106,7 +106,7 @@ index 4205f95..e6ebc92 100644
 +
 +    if (op2->isContainedIntOrIImmed())
 +    {
-+        int lane = (int) op2->AsIntConCommon()->IconValue();
++        int lane = (int)op2->AsIntConCommon()->IconValue();
 +
 +        emitSwCase(lane);
 +    }

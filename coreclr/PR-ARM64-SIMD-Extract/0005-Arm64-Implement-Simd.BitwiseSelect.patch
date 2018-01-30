@@ -1,4 +1,4 @@
-From e1e2bb455083615957af9c47ec7c4418b3dbd52e Mon Sep 17 00:00:00 2001
+From 10ae965b8b9f593afe121c0864cd14b252b1fad1 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 30 Jan 2018 11:21:09 -0500
 Subject: [PATCH] [Arm64] Implement Simd.BitwiseSelect
@@ -6,11 +6,11 @@ Subject: [PATCH] [Arm64] Implement Simd.BitwiseSelect
 ---
  src/jit/codegenarm64.cpp     | 54 +++++++++++++++++++++++++++++++++++++++++++-
  src/jit/hwintrinsicArm64.cpp | 11 +++++++++
- src/jit/lsraarm64.cpp        | 29 ++++++++++++++++++++----
- 3 files changed, 89 insertions(+), 5 deletions(-)
+ src/jit/lsraarm64.cpp        | 28 +++++++++++++++++++----
+ 3 files changed, 88 insertions(+), 5 deletions(-)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index e6ebc92..6a1fd3a 100644
+index e4737a5..6dbbc59 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
 @@ -5166,7 +5166,59 @@ void CodeGen::genHWIntrinsicSimdInsertOp(GenTreeHWIntrinsic* node)
@@ -104,10 +104,10 @@ index 08a59cb..1acf242 100644
              op1 = impSIMDPopStack(simdType);
  
 diff --git a/src/jit/lsraarm64.cpp b/src/jit/lsraarm64.cpp
-index e43d9e1..93f6284 100644
+index e43d9e1..300d435 100644
 --- a/src/jit/lsraarm64.cpp
 +++ b/src/jit/lsraarm64.cpp
-@@ -995,22 +995,43 @@ void LinearScan::TreeNodeInfoInitSIMD(GenTreeSIMD* simdTree, TreeNodeInfo* info)
+@@ -995,22 +995,42 @@ void LinearScan::TreeNodeInfoInitSIMD(GenTreeSIMD* simdTree, TreeNodeInfo* info)
  void LinearScan::TreeNodeInfoInitHWIntrinsic(GenTreeHWIntrinsic* intrinsicTree, TreeNodeInfo* info)
  {
      NamedIntrinsic intrinsicID = intrinsicTree->gtHWIntrinsicId;
@@ -115,17 +115,18 @@ index e43d9e1..93f6284 100644
 -    if (intrinsicTree->gtGetOp2IfPresent() != nullptr)
 +
 +    GenTreeArgList* argList = nullptr;
-+    GenTree*        op1  = intrinsicTree->gtOp.gtOp1;
-+    GenTree*        op2  = intrinsicTree->gtOp.gtOp2;
++    GenTree*        op1     = intrinsicTree->gtOp.gtOp1;
++    GenTree*        op2     = intrinsicTree->gtOp.gtOp2;
 +
 +    if (op1->OperIs(GT_LIST))
 +    {
 +        argList = op1->AsArgList();
-+        op1  = argList->Current();
-+        op2  = argList->Rest()->Current();
++        op1     = argList->Current();
++        op2     = argList->Rest()->Current();
 +
 +        for (GenTreeArgList* list = argList; list != nullptr; list = list->Rest())
-+        {
+         {
+-        info->srcCount += GetOperandInfo(intrinsicTree->gtOp.gtOp2);
 +            info->srcCount += GetOperandInfo(list->Current());
 +        }
 +    }
@@ -133,12 +134,10 @@ index e43d9e1..93f6284 100644
 +    {
 +        info->srcCount += GetOperandInfo(op1);
 +        if (op2 != nullptr)
-         {
--        info->srcCount += GetOperandInfo(intrinsicTree->gtOp.gtOp2);
++        {
 +            info->srcCount += GetOperandInfo(op2);
-         }
-+    }
-+
++        }
+     }
  
      switch (compiler->getHWIntrinsicInfo(intrinsicID).form)
      {
