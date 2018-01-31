@@ -1,0 +1,294 @@
+From 3b2cbc1f7b61261fafa431ef02c89305078fb5fa Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 26 Jan 2018 17:24:54 -0500
+Subject: [PATCH] [Arm64] Implement Simd.Extract
+
+---
+ src/jit/codegenarm64.cpp     | 97 +++++++++++++++++++++++++++++++++++++++++++-
+ src/jit/codegenlinear.h      |  2 +
+ src/jit/compiler.h           |  1 +
+ src/jit/hwintrinsicArm64.cpp | 39 +++++++++++++++---
+ src/jit/lowerarmarch.cpp     | 11 ++++-
+ src/jit/lsraarm64.cpp        | 15 +++++++
+ 6 files changed, 157 insertions(+), 8 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 4205f95..e4737a5 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -5059,9 +5059,104 @@ void CodeGen::genHWIntrinsicSimdBinaryOp(GenTreeHWIntrinsic* node)
+     genProduceReg(node);
+ }
+ 
++template <typename HWIntrinsicSwitchCaseBody>
++void CodeGen::genHWIntrinsicSwitchTable(regNumber                 swReg,
++                                        regNumber                 tmpReg,
++                                        int                       swMax,
++                                        HWIntrinsicSwitchCaseBody emitSwCase)
++{
++    assert(swMax > 0);
++    assert(swMax <= 256);
++
++    assert(genIsValidIntReg(tmpReg));
++    assert(genIsValidIntReg(swReg));
++
++    BasicBlock* labelFirst       = genCreateTempLabel();
++    BasicBlock* labelBreakTarget = genCreateTempLabel();
++
++    // Detect and throw out of range exception
++    getEmitter()->emitIns_R_I(INS_cmp, EA_4BYTE, swReg, swMax);
++
++    emitJumpKind jmpGEU = genJumpKindForOper(GT_GE, CK_UNSIGNED);
++    genJumpToThrowHlpBlk(jmpGEU, SCK_ARG_RNG_EXCPN);
++
++    // Calculate switch target
++    labelFirst->bbFlags |= BBF_JMP_TARGET;
++
++    // tmpReg = labelFirst
++    getEmitter()->emitIns_R_L(INS_adr, EA_PTRSIZE, labelFirst, tmpReg);
++
++    // tmpReg = labelFirst + swReg * 8
++    getEmitter()->emitIns_R_R_R_I(INS_add, EA_PTRSIZE, tmpReg, tmpReg, swReg, 3, INS_OPTS_LSL);
++
++    // br tmpReg
++    getEmitter()->emitIns_R(INS_br, EA_PTRSIZE, tmpReg);
++
++    genDefineTempLabel(labelFirst);
++    for (int i = 0; i < swMax; ++i)
++    {
++        emitSwCase(i);
++        inst_JMP(EJ_jmp, labelBreakTarget);
++    }
++    genDefineTempLabel(labelBreakTarget);
++}
++
+ void CodeGen::genHWIntrinsicSimdExtractOp(GenTreeHWIntrinsic* node)
+ {
+-    NYI("HWIntrinsic form not implemented");
++    GenTree*  op1        = node->gtGetOp1();
++    GenTree*  op2        = node->gtGetOp2();
++    var_types simdType   = op1->TypeGet();
++    var_types targetType = node->TypeGet();
++    regNumber targetReg  = node->gtRegNum;
++
++    assert(targetReg != REG_NA);
++
++    genConsumeOperands(node);
++
++    regNumber op1Reg = op1->gtRegNum;
++
++    assert(genIsValidFloatReg(op1Reg));
++
++    emitAttr baseTypeSize = emitTypeSize(targetType);
++
++    int lanes = emitTypeSize(simdType) / baseTypeSize;
++
++    auto emitSwCase = [&](int lane) {
++        assert(lane >= 0);
++        assert(lane < lanes);
++
++        if (varTypeIsFloating(targetType))
++        {
++            assert(genIsValidFloatReg(targetReg));
++            getEmitter()->emitIns_R_R_I_I(INS_mov, baseTypeSize, targetReg, op1Reg, 0, lane);
++        }
++        else if (varTypeIsUnsigned(targetType) || (baseTypeSize == EA_8BYTE))
++        {
++            assert(genIsValidIntReg(targetReg));
++            getEmitter()->emitIns_R_R_I(INS_umov, baseTypeSize, targetReg, op1Reg, lane);
++        }
++        else
++        {
++            assert(genIsValidIntReg(targetReg));
++            getEmitter()->emitIns_R_R_I(INS_smov, baseTypeSize, targetReg, op1Reg, lane);
++        }
++    };
++
++    if (op2->isContainedIntOrIImmed())
++    {
++        int lane = (int)op2->AsIntConCommon()->IconValue();
++
++        emitSwCase(lane);
++    }
++    else
++    {
++        regNumber laneReg = op2->gtRegNum;
++        regNumber tmpReg  = node->GetSingleTempReg();
++
++        genHWIntrinsicSwitchTable(laneReg, tmpReg, lanes, emitSwCase);
++    }
++
++    genProduceReg(node);
+ }
+ 
+ void CodeGen::genHWIntrinsicSimdInsertOp(GenTreeHWIntrinsic* node)
+diff --git a/src/jit/codegenlinear.h b/src/jit/codegenlinear.h
+index f7d43d7..7ad34cf 100644
+--- a/src/jit/codegenlinear.h
++++ b/src/jit/codegenlinear.h
+@@ -144,6 +144,8 @@ void genHWIntrinsicSimdExtractOp(GenTreeHWIntrinsic* node);
+ void genHWIntrinsicSimdInsertOp(GenTreeHWIntrinsic* node);
+ void genHWIntrinsicSimdSelectOp(GenTreeHWIntrinsic* node);
+ void genHWIntrinsicSimdUnaryOp(GenTreeHWIntrinsic* node);
++template <typename HWIntrinsicSwitchCaseBody>
++void genHWIntrinsicSwitchTable(regNumber swReg, regNumber tmpReg, int swMax, HWIntrinsicSwitchCaseBody emitSwCase);
+ #endif // defined(_TARGET_XARCH_)
+ #endif // FEATURE_HW_INTRINSICS
+ 
+diff --git a/src/jit/compiler.h b/src/jit/compiler.h
+index e612b94..769e31d 100644
+--- a/src/jit/compiler.h
++++ b/src/jit/compiler.h
+@@ -3131,6 +3131,7 @@ protected:
+ #ifdef _TARGET_ARM64_
+     InstructionSet lookupHWIntrinsicISA(const char* className);
+     NamedIntrinsic lookupHWIntrinsic(const char* className, const char* methodName);
++    bool impCheckImmediate(GenTree* immediateOp, unsigned int max);
+     const HWIntrinsicInfo& getHWIntrinsicInfo(NamedIntrinsic);
+ #endif // _TARGET_ARM64_
+ #endif // FEATURE_HW_INTRINSICS
+diff --git a/src/jit/hwintrinsicArm64.cpp b/src/jit/hwintrinsicArm64.cpp
+index 0ea77d3..08a59cb 100644
+--- a/src/jit/hwintrinsicArm64.cpp
++++ b/src/jit/hwintrinsicArm64.cpp
+@@ -126,6 +126,14 @@ NamedIntrinsic Compiler::lookupHWIntrinsic(const char* className, const char* me
+ }
+ 
+ //------------------------------------------------------------------------
++// impCheckImmediate: check if immediate is const and in range for inlining
++//
++bool Compiler::impCheckImmediate(GenTree* immediateOp, unsigned int max)
++{
++    return immediateOp->IsCnsIntOrI() && (immediateOp->AsIntConCommon()->IconValue() < max);
++}
++
++//------------------------------------------------------------------------
+ // impHWIntrinsic: dispatch hardware intrinsics to their own implementation
+ // function
+ //
+@@ -145,25 +153,35 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
+     GenTree*             retNode       = nullptr;
+     GenTree*             op1           = nullptr;
+     GenTree*             op2           = nullptr;
++    GenTree*             op3           = nullptr;
++    CORINFO_CLASS_HANDLE simdClass     = nullptr;
+     var_types            simdType      = TYP_UNKNOWN;
+     var_types            simdBaseType  = TYP_UNKNOWN;
+     unsigned             simdSizeBytes = 0;
+ 
+-    // Instantiation type check
+     switch (getHWIntrinsicInfo(intrinsic).form)
+     {
+         case HWIntrinsicInfo::SimdBinaryOp:
+         case HWIntrinsicInfo::SimdUnaryOp:
+-            simdBaseType = getBaseTypeAndSizeOfSIMDType(sig->retTypeClass, &simdSizeBytes);
++            simdClass = sig->retTypeClass;
++            break;
++        case HWIntrinsicInfo::SimdExtractOp:
++            info.compCompHnd->getArgType(sig, sig->args, &simdClass);
++            break;
++        default:
++            break;
++    }
++
++    // Simd instantiation type check
++    if (simdClass != nullptr)
++    {
++        simdBaseType = getBaseTypeAndSizeOfSIMDType(simdClass, &simdSizeBytes);
+ 
+         if (simdBaseType == TYP_UNKNOWN)
+         {
+             return impUnsupportedHWIntrinsic(CORINFO_HELP_THROW_TYPE_NOT_SUPPORTED, method, sig, mustExpand);
+         }
+         simdType = getSIMDTypeForSize(simdSizeBytes);
+-            break;
+-        default:
+-            break;
+     }
+ 
+     switch (getHWIntrinsicInfo(intrinsic).form)
+@@ -187,6 +205,17 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
+ 
+             return gtNewSimdHWIntrinsicNode(simdType, op1, nullptr, intrinsic, simdBaseType, simdSizeBytes);
+ 
++        case HWIntrinsicInfo::SimdExtractOp:
++            if (!mustExpand && !impCheckImmediate(impStackTop(0).val, getSIMDVectorLength(simdSizeBytes, simdBaseType)))
++            {
++                // Immediate lane not constant or out of range
++                return nullptr;
++            }
++            op2 = impPopStack().val;
++            op1 = impSIMDPopStack(simdType);
++
++            return gtNewScalarHWIntrinsicNode(JITtype2varType(sig->retType), op1, op2, intrinsic);
++
+         default:
+             JITDUMP("Not implemented hardware intrinsic form");
+             assert(!"Unimplemented SIMD Intrinsic form");
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index 757ac52..2a5bfa5 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -829,6 +829,7 @@ void Lowering::ContainCheckSIMD(GenTreeSIMD* simdNode)
+ #endif // FEATURE_SIMD
+ 
+ #ifdef FEATURE_HW_INTRINSICS
++#include "hwintrinsicArm64.h"
+ //----------------------------------------------------------------------------------------------
+ // ContainCheckHWIntrinsic: Perform containment analysis for a hardware intrinsic node.
+ //
+@@ -841,10 +842,16 @@ void Lowering::ContainCheckHWIntrinsic(GenTreeHWIntrinsic* node)
+     GenTree*       op1         = node->gtOp.gtOp1;
+     GenTree*       op2         = node->gtOp.gtOp2;
+ 
+-    switch (node->gtHWIntrinsicId)
++    switch (comp->getHWIntrinsicInfo(node->gtHWIntrinsicId).form)
+     {
++        case HWIntrinsicInfo::SimdExtractOp:
++            if (op2->IsCnsIntOrI())
++            {
++                MakeSrcContained(node, op2);
++            }
++            break;
++
+         default:
+-            assert((intrinsicID > NI_HW_INTRINSIC_START) && (intrinsicID < NI_HW_INTRINSIC_END));
+             break;
+     }
+ }
+diff --git a/src/jit/lsraarm64.cpp b/src/jit/lsraarm64.cpp
+index e549976..e43d9e1 100644
+--- a/src/jit/lsraarm64.cpp
++++ b/src/jit/lsraarm64.cpp
+@@ -982,6 +982,7 @@ void LinearScan::TreeNodeInfoInitSIMD(GenTreeSIMD* simdTree, TreeNodeInfo* info)
+ #endif // FEATURE_SIMD
+ 
+ #ifdef FEATURE_HW_INTRINSICS
++#include "hwintrinsicArm64.h"
+ //------------------------------------------------------------------------
+ // TreeNodeInfoInitHWIntrinsic: Set the NodeInfo for a GT_HWIntrinsic tree.
+ //
+@@ -999,6 +1000,20 @@ void LinearScan::TreeNodeInfoInitHWIntrinsic(GenTreeHWIntrinsic* intrinsicTree,
+     {
+         info->srcCount += GetOperandInfo(intrinsicTree->gtOp.gtOp2);
+     }
++
++    switch (compiler->getHWIntrinsicInfo(intrinsicID).form)
++    {
++        case HWIntrinsicInfo::SimdExtractOp:
++            if (!intrinsicTree->gtOp.gtOp2->isContained())
++            {
++                // We need a temp to create a switch table
++                info->internalIntCount = 1;
++                info->setInternalCandidates(this, allRegs(TYP_INT));
++            }
++            break;
++        default:
++            break;
++    }
+ }
+ #endif
+ 
+-- 
+2.7.4
+
