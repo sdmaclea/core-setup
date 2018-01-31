@@ -1,25 +1,87 @@
-From 98f3450fd1bf3de01df7b5f035030532f979ce51 Mon Sep 17 00:00:00 2001
+From cbc7c9c74f796f58b182b879871b81f1d253e5d5 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 26 Jan 2018 17:24:54 -0500
 Subject: [PATCH] [Arm64] Implement Simd.Extract
 
 ---
- src/jit/codegenarm64.cpp     | 97 +++++++++++++++++++++++++++++++++++++++++++-
- src/jit/codegenlinear.h      |  2 +
- src/jit/compiler.h           |  1 +
- src/jit/hwintrinsicArm64.cpp | 39 +++++++++++++++---
- src/jit/lowerarmarch.cpp     | 11 ++++-
- src/jit/lsraarm64.cpp        | 15 +++++++
- 6 files changed, 157 insertions(+), 8 deletions(-)
+ src/jit/codegenarm64.cpp     | 184 ++++++++++++++++++++++++++++++++++++++++++-
+ src/jit/codegenlinear.h      |   2 +
+ src/jit/compiler.h           |   1 +
+ src/jit/hwintrinsicArm64.cpp |  39 +++++++--
+ src/jit/lowerarmarch.cpp     |  11 ++-
+ src/jit/lsraarm64.cpp        |  15 ++++
+ 6 files changed, 244 insertions(+), 8 deletions(-)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index 0928b6f..5a5ab0a 100644
+index 0928b6f..4690499 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
-@@ -5059,9 +5059,104 @@ void CodeGen::genHWIntrinsicSimdBinaryOp(GenTreeHWIntrinsic* node)
+@@ -5059,9 +5059,191 @@ void CodeGen::genHWIntrinsicSimdBinaryOp(GenTreeHWIntrinsic* node)
      genProduceReg(node);
  }
  
++//------------------------------------------------------------------------
++// genHWIntrinsicSwitchTable:
++//
++// Generate code for an immediate switch table
++//
++// In cases where an instruction only supports const immediate operands, we
++// need to generate functionally correct code when the operand is not constant
++//
++// This is required by the HW Intrinsic design to handle:
++//   debugger calls
++//   reflection
++//   call backs
++//
++// Generated code implements a switch of this form
++//
++// switch (swReg)
++// {
++// case 0:
++//    ins0; // emitSwCase(0)
++//    break;
++// case 1:
++//    ins1; // emitSwCase(1)
++//    break;
++// ...
++// ...
++// ...
++// case swMax - 1:
++//    insLast; // emitSwCase(swMax - 1)
++//    break;
++// default:
++//    throw ArgumentOutOfRangeException
++// }
++//
++// Generated code looks like:
++//
++//     cmp swReg, #swMax
++//     b.hs ThrowArgumentOutOfRangeExceptionHelper
++//     adr tmpReg, labelFirst
++//     add tmpReg, tmpReg, swReg, LSL #3
++//     b   [tmpReg]
++// labelFirst:
++//     ins0
++//     b labelBreakTarget
++//     ins1
++//     b labelBreakTarget
++//     ...
++//     ...
++//     ...
++//     insLast
++//     b labelBreakTarget
++// labelBreakTarget:
++//
++//
++// Arguments:
++//    swReg      - register containing the switch case to execute
++//    tmpReg     - temporary integer register for calculating the switch indirect branch target
++//    swMax      - the number of switch cases.  If swReg >= swMax throw SCK_ARG_RNG_EXCPN
++//    emitSwCase - function like argument taking an immediate value and emitting one instruction
++//
++// Return Value:
++//    None.
++//
 +template <typename HWIntrinsicSwitchCaseBody>
 +void CodeGen::genHWIntrinsicSwitchTable(regNumber                 swReg,
 +                                        regNumber                 tmpReg,
@@ -56,12 +118,37 @@ index 0928b6f..5a5ab0a 100644
 +    genDefineTempLabel(labelFirst);
 +    for (int i = 0; i < swMax; ++i)
 +    {
++        unsigned prevInsCount = getEmitter()->emitInsCount;
++
 +        emitSwCase(i);
++
++        assert(getEmitter()->emitInsCount == prevInsCount + 1);
++
 +        inst_JMP(EJ_jmp, labelBreakTarget);
++
++        assert(getEmitter()->emitInsCount == prevInsCount + 2);
 +    }
 +    genDefineTempLabel(labelBreakTarget);
 +}
 +
++//------------------------------------------------------------------------
++// genHWIntrinsicSimdExtractOp:
++//
++// Produce code for a GT_HWIntrinsic node with form SimdExtractOp.
++//
++// Consumes one SIMD operand and one scalar
++//
++// The element index operand is typically a const immediate
++// When it is not, a switch table is generated
++//
++// See genHWIntrinsicSwitchTable comments
++//
++// Arguments:
++//    node - the GT_HWIntrinsic node
++//
++// Return Value:
++//    None.
++//
  void CodeGen::genHWIntrinsicSimdExtractOp(GenTreeHWIntrinsic* node)
  {
 -    NYI("HWIntrinsic form not implemented");
@@ -81,41 +168,41 @@ index 0928b6f..5a5ab0a 100644
 +
 +    emitAttr baseTypeSize = emitTypeSize(targetType);
 +
-+    int lanes = emitTypeSize(simdType) / baseTypeSize;
++    int elements = emitTypeSize(simdType) / baseTypeSize;
 +
-+    auto emitSwCase = [&](int lane) {
-+        assert(lane >= 0);
-+        assert(lane < lanes);
++    auto emitSwCase = [&](int element) {
++        assert(element >= 0);
++        assert(element < elements);
 +
 +        if (varTypeIsFloating(targetType))
 +        {
 +            assert(genIsValidFloatReg(targetReg));
-+            getEmitter()->emitIns_R_R_I_I(INS_mov, baseTypeSize, targetReg, op1Reg, 0, lane);
++            getEmitter()->emitIns_R_R_I_I(INS_mov, baseTypeSize, targetReg, op1Reg, 0, element);
 +        }
 +        else if (varTypeIsUnsigned(targetType) || (baseTypeSize == EA_8BYTE))
 +        {
 +            assert(genIsValidIntReg(targetReg));
-+            getEmitter()->emitIns_R_R_I(INS_umov, baseTypeSize, targetReg, op1Reg, lane);
++            getEmitter()->emitIns_R_R_I(INS_umov, baseTypeSize, targetReg, op1Reg, element);
 +        }
 +        else
 +        {
 +            assert(genIsValidIntReg(targetReg));
-+            getEmitter()->emitIns_R_R_I(INS_smov, baseTypeSize, targetReg, op1Reg, lane);
++            getEmitter()->emitIns_R_R_I(INS_smov, baseTypeSize, targetReg, op1Reg, element);
 +        }
 +    };
 +
 +    if (op2->isContainedIntOrIImmed())
 +    {
-+        int lane = op2->AsIntConCommon()->IconValue();
++        int element = (int)op2->AsIntConCommon()->IconValue();
 +
-+        emitSwCase(lane);
++        emitSwCase(element);
 +    }
 +    else
 +    {
-+        regNumber laneReg = op2->gtRegNum;
-+        regNumber tmpReg  = node->GetSingleTempReg();
++        regNumber elementReg = op2->gtRegNum;
++        regNumber tmpReg     = node->GetSingleTempReg();
 +
-+        genHWIntrinsicSwitchTable(laneReg, tmpReg, lanes, emitSwCase);
++        genHWIntrinsicSwitchTable(elementReg, tmpReg, elements, emitSwCase);
 +    }
 +
 +    genProduceReg(node);
@@ -136,26 +223,26 @@ index f7d43d7..7ad34cf 100644
  #endif // FEATURE_HW_INTRINSICS
  
 diff --git a/src/jit/compiler.h b/src/jit/compiler.h
-index aadd7fc..f989870 100644
+index 90ddb6d..88180c0 100644
 --- a/src/jit/compiler.h
 +++ b/src/jit/compiler.h
-@@ -3139,6 +3139,7 @@ protected:
-                                        CORINFO_METHOD_HANDLE method,
-                                        CORINFO_SIG_INFO*     sig,
-                                        bool                  mustExpand);
+@@ -3131,6 +3131,7 @@ protected:
+ #ifdef _TARGET_ARM64_
+     InstructionSet lookupHWIntrinsicISA(const char* className);
+     NamedIntrinsic lookupHWIntrinsic(const char* className, const char* methodName);
 +    bool impCheckImmediate(GenTree* immediateOp, unsigned int max);
      const HWIntrinsicInfo& getHWIntrinsicInfo(NamedIntrinsic);
  #endif // _TARGET_ARM64_
  #endif // FEATURE_HW_INTRINSICS
 diff --git a/src/jit/hwintrinsicArm64.cpp b/src/jit/hwintrinsicArm64.cpp
-index 3a49ff9..ba2017c 100644
+index 0ea77d3..08a59cb 100644
 --- a/src/jit/hwintrinsicArm64.cpp
 +++ b/src/jit/hwintrinsicArm64.cpp
-@@ -170,6 +170,14 @@ GenTree* Compiler::impUnsupportedHWIntrinsic(unsigned              helper,
+@@ -126,6 +126,14 @@ NamedIntrinsic Compiler::lookupHWIntrinsic(const char* className, const char* me
  }
  
  //------------------------------------------------------------------------
-+// impCheckImmediate: chack if immediate is const and in range for inlining
++// impCheckImmediate: check if immediate is const and in range for inlining
 +//
 +bool Compiler::impCheckImmediate(GenTree* immediateOp, unsigned int max)
 +{
@@ -166,7 +253,7 @@ index 3a49ff9..ba2017c 100644
  // impHWIntrinsic: dispatch hardware intrinsics to their own implementation
  // function
  //
-@@ -189,16 +197,29 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
+@@ -145,25 +153,35 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
      GenTree*             retNode       = nullptr;
      GenTree*             op1           = nullptr;
      GenTree*             op2           = nullptr;
@@ -198,7 +285,6 @@ index 3a49ff9..ba2017c 100644
  
          if (simdBaseType == TYP_UNKNOWN)
          {
-@@ -208,9 +229,6 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
              return impUnsupportedHWIntrinsic(CORINFO_HELP_THROW_TYPE_NOT_SUPPORTED, method, sig, mustExpand);
          }
          simdType = getSIMDTypeForSize(simdSizeBytes);
@@ -208,7 +294,7 @@ index 3a49ff9..ba2017c 100644
      }
  
      switch (getHWIntrinsicInfo(intrinsic).form)
-@@ -234,6 +252,17 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
+@@ -187,6 +205,17 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
  
              return gtNewSimdHWIntrinsicNode(simdType, op1, nullptr, intrinsic, simdBaseType, simdSizeBytes);
  

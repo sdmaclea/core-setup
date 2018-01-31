@@ -1,0 +1,126 @@
+From c940207d722c685210696afcb70ee8afd999743f Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 31 Jan 2018 12:48:13 -0500
+Subject: [PATCH] [Arm64] Implement Simd.SetAllVector*
+
+---
+ src/jit/codegenarm64.cpp     | 53 ++++++++++++++++++++++++++++++++++++++++++++
+ src/jit/codegenlinear.h      |  1 +
+ src/jit/hwintrinsicArm64.cpp |  8 ++++++-
+ 3 files changed, 61 insertions(+), 1 deletion(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index f976d75..029bd9b 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -4994,6 +4994,9 @@ void CodeGen::genHWIntrinsic(GenTreeHWIntrinsic* node)
+         case HWIntrinsicInfo::SimdSelectOp:
+             genHWIntrinsicSimdSelectOp(node);
+             break;
++        case HWIntrinsicInfo::SimdSetAllOp:
++            genHWIntrinsicSimdSetAllOp(node);
++            break;
+         case HWIntrinsicInfo::SimdUnaryOp:
+             genHWIntrinsicSimdUnaryOp(node);
+             break;
+@@ -5324,6 +5327,56 @@ void CodeGen::genHWIntrinsicSimdSelectOp(GenTreeHWIntrinsic* node)
+     genProduceReg(node);
+ }
+ 
++//------------------------------------------------------------------------
++// genHWIntrinsicSimdSetAllOp:
++//
++// Produce code for a GT_HWIntrinsic node with form SimdSetAllOp.
++//
++// Consumes single scalar operand and produces a SIMD result
++//
++// Arguments:
++//    node - the GT_HWIntrinsic node
++//
++// Return Value:
++//    None.
++//
++void CodeGen::genHWIntrinsicSimdSetAllOp(GenTreeHWIntrinsic* node)
++{
++    GenTree*  op1       = node->gtGetOp1();
++    var_types baseType  = node->gtSIMDBaseType;
++    regNumber targetReg = node->gtRegNum;
++
++    assert(targetReg != REG_NA);
++    var_types targetType = node->TypeGet();
++
++    genConsumeOperands(node);
++
++    regNumber op1Reg = op1->gtRegNum;
++
++    assert(genIsValidFloatReg(targetReg));
++    assert(genIsValidIntReg(op1Reg) || genIsValidFloatReg(op1Reg));
++
++    instruction ins = getOpForHWIntrinsic(node, baseType);
++    assert(ins != INS_invalid);
++
++    bool     is16Byte = (node->gtSIMDSize > 8);
++    emitAttr attr     = is16Byte ? EA_16BYTE : EA_8BYTE;
++    insOpts  opt      = genGetSimdInsOpt(is16Byte, baseType);
++
++    // TODO-ARM64-CQ Support contained immediate cases
++
++    if (genIsValidIntReg(op1Reg))
++    {
++        getEmitter()->emitIns_R_R(ins, attr, targetReg, op1Reg, opt);
++    }
++    else
++    {
++        getEmitter()->emitIns_R_R_I(ins, attr, targetReg, op1Reg, 0, opt);
++    }
++
++    genProduceReg(node);
++}
++
+ void CodeGen::genHWIntrinsicSimdUnaryOp(GenTreeHWIntrinsic* node)
+ {
+     GenTree*  op1       = node->gtGetOp1();
+diff --git a/src/jit/codegenlinear.h b/src/jit/codegenlinear.h
+index 7ad34cf..c9ce206d 100644
+--- a/src/jit/codegenlinear.h
++++ b/src/jit/codegenlinear.h
+@@ -143,6 +143,7 @@ void genHWIntrinsicSimdBinaryOp(GenTreeHWIntrinsic* node);
+ void genHWIntrinsicSimdExtractOp(GenTreeHWIntrinsic* node);
+ void genHWIntrinsicSimdInsertOp(GenTreeHWIntrinsic* node);
+ void genHWIntrinsicSimdSelectOp(GenTreeHWIntrinsic* node);
++void genHWIntrinsicSimdSetAllOp(GenTreeHWIntrinsic* node);
+ void genHWIntrinsicSimdUnaryOp(GenTreeHWIntrinsic* node);
+ template <typename HWIntrinsicSwitchCaseBody>
+ void genHWIntrinsicSwitchTable(regNumber swReg, regNumber tmpReg, int swMax, HWIntrinsicSwitchCaseBody emitSwCase);
+diff --git a/src/jit/hwintrinsicArm64.cpp b/src/jit/hwintrinsicArm64.cpp
+index 1acf242..2bd1c4f 100644
+--- a/src/jit/hwintrinsicArm64.cpp
++++ b/src/jit/hwintrinsicArm64.cpp
+@@ -163,6 +163,7 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
+     {
+         case HWIntrinsicInfo::SimdBinaryOp:
+         case HWIntrinsicInfo::SimdSelectOp:
++        case HWIntrinsicInfo::SimdSetAllOp:
+         case HWIntrinsicInfo::SimdUnaryOp:
+             simdClass = sig->retTypeClass;
+             break;
+@@ -211,10 +212,15 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
+ 
+             return gtNewSimdHWIntrinsicNode(simdType, op1, op2, op3, intrinsic, simdBaseType, simdSizeBytes);
+ 
++        case HWIntrinsicInfo::SimdSetAllOp:
++            op1 = impPopStack().val;
++
++            return gtNewSimdHWIntrinsicNode(simdType, op1, intrinsic, simdBaseType, simdSizeBytes);
++
+         case HWIntrinsicInfo::SimdUnaryOp:
+             op1 = impSIMDPopStack(simdType);
+ 
+-            return gtNewSimdHWIntrinsicNode(simdType, op1, nullptr, intrinsic, simdBaseType, simdSizeBytes);
++            return gtNewSimdHWIntrinsicNode(simdType, op1, intrinsic, simdBaseType, simdSizeBytes);
+ 
+         case HWIntrinsicInfo::SimdExtractOp:
+             if (!mustExpand && !impCheckImmediate(impStackTop(0).val, getSIMDVectorLength(simdSizeBytes, simdBaseType)))
+-- 
+2.7.4
+

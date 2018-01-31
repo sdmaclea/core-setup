@@ -1,0 +1,120 @@
+From 5abae39ec16d781d46b0a70bb3cf7af71aef5d8d Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 31 Jan 2018 10:51:49 -0500
+Subject: [PATCH] [Arm64] Lower Unsigned Compare Zero
+
+---
+ src/jit/hwintrinsicArm64.h     |  3 ++-
+ src/jit/hwintrinsiclistArm64.h |  8 +++----
+ src/jit/lowerarmarch.cpp       | 47 +++++++++++++++++++++++++++++++++++++++++-
+ 3 files changed, 52 insertions(+), 6 deletions(-)
+
+diff --git a/src/jit/hwintrinsicArm64.h b/src/jit/hwintrinsicArm64.h
+index 8647702..7fcde60 100644
+--- a/src/jit/hwintrinsicArm64.h
++++ b/src/jit/hwintrinsicArm64.h
+@@ -34,7 +34,8 @@ struct HWIntrinsicInfo
+     // Reduce the number of forms
+     enum Flags
+     {
+-        None
++        None          = 0,
++        LowerCmpUZero = (1UL << 0), // Unsigned zero compare form must be lowered
+     };
+ 
+     NamedIntrinsic intrinsicID;
+diff --git a/src/jit/hwintrinsiclistArm64.h b/src/jit/hwintrinsiclistArm64.h
+index a6ec892..082bfe1 100644
+--- a/src/jit/hwintrinsiclistArm64.h
++++ b/src/jit/hwintrinsiclistArm64.h
+@@ -62,11 +62,11 @@ HARDWARE_INTRINSIC(NI_ARM64_SIMD_CNT,             Simd,     PopCount,
+ HARDWARE_INTRINSIC(NI_ARM64_SIMD_EQ,              Simd,     CompareEqual,                   SimdBinaryOp,  INS_fcmeq,   INS_cmeq,    INS_cmeq,     None )
+ HARDWARE_INTRINSIC(NI_ARM64_SIMD_EQ_ZERO,         Simd,     CompareEqualZero,               SimdUnaryOp,   INS_fcmeq,   INS_cmeq,    INS_cmeq,     None )
+ HARDWARE_INTRINSIC(NI_ARM64_SIMD_GE,              Simd,     CompareGreaterThanOrEqual,      SimdBinaryOp,  INS_fcmge,   INS_cmge,    INS_cmhs,     None )
+-HARDWARE_INTRINSIC(NI_ARM64_SIMD_GE_ZERO,         Simd,     CompareGreaterThanOrEqualZero,  SimdUnaryOp,   INS_fcmge,   INS_cmge,    INS_invalid,  None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_GE_ZERO,         Simd,     CompareGreaterThanOrEqualZero,  SimdUnaryOp,   INS_fcmge,   INS_cmge,    INS_invalid,  LowerCmpUZero )
+ HARDWARE_INTRINSIC(NI_ARM64_SIMD_GT,              Simd,     CompareGreaterThan,             SimdBinaryOp,  INS_fcmgt,   INS_cmgt,    INS_cmhi,     None )
+-HARDWARE_INTRINSIC(NI_ARM64_SIMD_GT_ZERO,         Simd,     CompareGreaterThanZero,         SimdUnaryOp,   INS_fcmgt,   INS_cmgt,    INS_invalid,  None )
+-HARDWARE_INTRINSIC(NI_ARM64_SIMD_LE_ZERO,         Simd,     CompareLessThanOrEqualZero,     SimdUnaryOp,   INS_fcmle,   INS_cmle,    INS_cmeq,     None )
+-HARDWARE_INTRINSIC(NI_ARM64_SIMD_LT_ZERO,         Simd,     CompareLessThanZero,            SimdUnaryOp,   INS_fcmlt,   INS_cmlt,    INS_invalid,  None )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_GT_ZERO,         Simd,     CompareGreaterThanZero,         SimdUnaryOp,   INS_fcmgt,   INS_cmgt,    INS_invalid,  LowerCmpUZero )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_LE_ZERO,         Simd,     CompareLessThanOrEqualZero,     SimdUnaryOp,   INS_fcmle,   INS_cmle,    INS_cmeq,     LowerCmpUZero )
++HARDWARE_INTRINSIC(NI_ARM64_SIMD_LT_ZERO,         Simd,     CompareLessThanZero,            SimdUnaryOp,   INS_fcmlt,   INS_cmlt,    INS_invalid,  LowerCmpUZero )
+ HARDWARE_INTRINSIC(NI_ARM64_SIMD_TST,             Simd,     CompareTest,                    SimdBinaryOp,  INS_ctst,    INS_ctst,    INS_ctst,     None )
+ HARDWARE_INTRINSIC(NI_ARM64_SIMD_Div,             Simd,     Divide,                         SimdBinaryOp,  INS_fdiv,    INS_invalid, INS_invalid,  None )
+ HARDWARE_INTRINSIC(NI_ARM64_SIMD_Negate,          Simd,     Negate,                         SimdUnaryOp,   INS_fneg,    INS_neg,     INS_invalid,  None )
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index 2a5bfa5..1223975 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -29,6 +29,10 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+ #include "lower.h"
+ #include "lsra.h"
+ 
++#ifdef FEATURE_HW_INTRINSICS
++#include "hwintrinsicArm64.h"
++#endif
++
+ //------------------------------------------------------------------------
+ // IsCallTargetInRange: Can a call target address be encoded in-place?
+ //
+@@ -515,6 +519,48 @@ void Lowering::LowerSIMD(GenTreeSIMD* simdNode)
+ //
+ void Lowering::LowerHWIntrinsic(GenTreeHWIntrinsic* node)
+ {
++    auto intrinsicID   = node->gtHWIntrinsicId;
++    auto intrinsicInfo = comp->getHWIntrinsicInfo(node->gtHWIntrinsicId);
++
++    if ((intrinsicInfo.flags & HWIntrinsicInfo::LowerCmpUZero) && varTypeIsUnsigned(node->gtSIMDBaseType))
++    {
++        auto setAllVector = node->gtSIMDSize > 8 ? NI_ARM64_SIMD_SetAllVector128 : NI_ARM64_SIMD_SetAllVector64;
++
++        auto origOp1 = node->gtOp.gtOp1;
++
++        switch (intrinsicID)
++        {
++            case NI_ARM64_SIMD_GE_ZERO:
++                // Always true
++                node->gtHWIntrinsicId = setAllVector;
++                node->gtOp.gtOp1      = comp->gtNewLconNode(~0ULL);
++                BlockRange().InsertBefore(node, node->gtOp.gtOp1);
++                BlockRange().Remove(origOp1);
++                break;
++            case NI_ARM64_SIMD_GT_ZERO:
++                // Same as !EQ
++                node->gtOp.gtOp1 =
++                    comp->gtNewSimdHWIntrinsicNode(node->TypeGet(), node->gtOp.gtOp1, NI_ARM64_SIMD_EQ_ZERO,
++                                                   node->gtSIMDBaseType, node->gtSIMDSize);
++                node->gtHWIntrinsicId = NI_ARM64_SIMD_BitwiseNot;
++                BlockRange().InsertBefore(node, node->gtOp.gtOp1);
++                break;
++            case NI_ARM64_SIMD_LE_ZERO:
++                // Same as EQ
++                node->gtHWIntrinsicId = NI_ARM64_SIMD_EQ_ZERO;
++                break;
++            case NI_ARM64_SIMD_LT_ZERO:
++                // Always false
++                node->gtHWIntrinsicId = setAllVector;
++                node->gtOp.gtOp1      = comp->gtNewIconNode(0);
++                BlockRange().InsertBefore(node, node->gtOp.gtOp1);
++                BlockRange().Remove(origOp1);
++                break;
++            default:
++                assert(!"Unhandled LowerCmpUZero case");
++        }
++    }
++
+     ContainCheckHWIntrinsic(node);
+ }
+ #endif // FEATURE_HW_INTRINSICS
+@@ -829,7 +875,6 @@ void Lowering::ContainCheckSIMD(GenTreeSIMD* simdNode)
+ #endif // FEATURE_SIMD
+ 
+ #ifdef FEATURE_HW_INTRINSICS
+-#include "hwintrinsicArm64.h"
+ //----------------------------------------------------------------------------------------------
+ // ContainCheckHWIntrinsic: Perform containment analysis for a hardware intrinsic node.
+ //
+-- 
+2.7.4
+
