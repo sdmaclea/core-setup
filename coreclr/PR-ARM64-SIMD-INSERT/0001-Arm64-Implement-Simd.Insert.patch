@@ -1,4 +1,4 @@
-From 5be2459aa44b51c30cbe1918acf34e29326b1cbe Mon Sep 17 00:00:00 2001
+From 38c42a54a7f5779d4b085700d46054ba0cae53c9 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 30 Jan 2018 16:11:39 -0500
 Subject: [PATCH] [Arm64] Implement Simd.Insert
@@ -11,7 +11,7 @@ Subject: [PATCH] [Arm64] Implement Simd.Insert
  4 files changed, 140 insertions(+), 1 deletion(-)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index cb881cb..66a44f3 100644
+index cb881cb..610e572 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
 @@ -5301,9 +5301,107 @@ void CodeGen::genHWIntrinsicSimdExtractOp(GenTreeHWIntrinsic* node)
@@ -80,7 +80,7 @@ index cb881cb..66a44f3 100644
 +        assert(op3->gtGetOp2()->isContainedIntOrIImmed());
 +
 +        int element = (int)op2->AsIntConCommon()->IconValue();
-+        int srcLane = op3->gtGetOp2()->AsIntConCommon()->IconValue();
++        int srcLane = (int)op3->gtGetOp2()->AsIntConCommon()->IconValue();
 +
 +        getEmitter()->emitIns_R_R_I_I(INS_mov, baseTypeSize, targetReg, op3Reg, element, srcLane);
 +    }
@@ -155,7 +155,7 @@ index 2bd1c4f..394ab21 100644
              JITDUMP("Not implemented hardware intrinsic form");
              assert(!"Unimplemented SIMD Intrinsic form");
 diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
-index a914c61..f2f60b2 100644
+index a914c61..d387303 100644
 --- a/src/jit/lowerarmarch.cpp
 +++ b/src/jit/lowerarmarch.cpp
 @@ -889,9 +889,17 @@ void Lowering::ContainCheckSIMD(GenTreeSIMD* simdNode)
@@ -187,7 +187,7 @@ index a914c61..f2f60b2 100644
 +
 +                GenTree* op3 = argList->Rest()->Rest()->Current();
 +
-+                if (op3->OperIs(GT_HWIntrinsic) && (op3->AsHWIntrinsic()->gtHWIntrinsicId  == NI_ARM64_SIMD_GetItem))
++                if (op3->OperIs(GT_HWIntrinsic) && (op3->AsHWIntrinsic()->gtHWIntrinsicId == NI_ARM64_SIMD_GetItem))
 +                {
 +                    ContainCheckHWIntrinsic(op3->AsHWIntrinsic());
 +
