@@ -1,0 +1,34 @@
+From 7834f4f2c784f48cd6fb03fe3144c7977d2cab08 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Sat, 3 Feb 2018 13:45:18 -0500
+Subject: [PATCH] Disble crossgen for types containing intrinsic types
+
+---
+ src/vm/class.cpp | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/src/vm/class.cpp b/src/vm/class.cpp
+index d0b07f0..c19adf7 100644
+--- a/src/vm/class.cpp
++++ b/src/vm/class.cpp
+@@ -1731,6 +1731,17 @@ EEClass::CheckForHFA()
+         if ((strcmp(className, "Vector256`1") == 0) || (strcmp(className, "Vector128`1") == 0) ||
+             (strcmp(className, "Vector64`1") == 0))
+         {
++            if (IsCompilationProcess())
++            {
++                // Disable AOT compiling for the SIMD hardware intrinsic types. These types require special
++                // ABI handling as they represent fundamental data types (__m64, __m128, and __m256) and not
++                // aggregate or union types. See https://github.com/dotnet/coreclr/issues/15943
++                //
++                // Once they are properly handled according to the ABI requirements, we can remove this check
++                // and allow them to be used in crossgen/AOT scenarios.
++                COMPlusThrow(kTypeLoadException, IDS_EE_HWINTRINSIC_NGEN_DISALLOWED);
++            }
++
+             assert(strcmp(namespaceName, "System.Runtime.Intrinsics") == 0);
+             return false;
+         }
+-- 
+2.7.4
+
