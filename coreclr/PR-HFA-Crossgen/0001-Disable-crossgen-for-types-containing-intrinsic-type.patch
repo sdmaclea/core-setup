@@ -1,0 +1,55 @@
+From e71c40aa9ddf06b1507d2bc3915e148ebaf6b378 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Sat, 3 Feb 2018 13:45:18 -0500
+Subject: [PATCH] Disable crossgen for types containing intrinsic types
+
+---
+ src/vm/methodtablebuilder.cpp | 25 +++++++++++--------------
+ 1 file changed, 11 insertions(+), 14 deletions(-)
+
+diff --git a/src/vm/methodtablebuilder.cpp b/src/vm/methodtablebuilder.cpp
+index dfb0ec4..0ddbbbc 100644
+--- a/src/vm/methodtablebuilder.cpp
++++ b/src/vm/methodtablebuilder.cpp
+@@ -1500,20 +1500,6 @@ MethodTableBuilder::BuildMethodTableThrowing(
+         LPCUTF8 nameSpace;
+         HRESULT hr = GetMDImport()->GetNameOfTypeDef(bmtInternal->pType->GetTypeDefToken(), &className, &nameSpace);
+ 
+-        if (hr == S_OK && strcmp(nameSpace, "System.Runtime.Intrinsics") == 0)
+-        {
+-            if (IsCompilationProcess())
+-            {
+-                // Disable AOT compiling for the SIMD hardware intrinsic types. These types require special
+-                // ABI handling as they represent fundamental data types (__m64, __m128, and __m256) and not
+-                // aggregate or union types. See https://github.com/dotnet/coreclr/issues/15943
+-                //
+-                // Once they are properly handled according to the ABI requirements, we can remove this check
+-                // and allow them to be used in crossgen/AOT scenarios.
+-                COMPlusThrow(kTypeLoadException, IDS_EE_HWINTRINSIC_NGEN_DISALLOWED);
+-            }
+-        }
+-
+ #if defined(_TARGET_ARM64_)
+         // All the funtions in System.Runtime.Intrinsics.Arm.Arm64 are hardware intrinsics.
+         if (hr == S_OK && strcmp(nameSpace, "System.Runtime.Intrinsics.Arm.Arm64") == 0)
+@@ -9561,6 +9547,17 @@ void MethodTableBuilder::CheckForSystemTypes()
+                 // These __m128 and __m256 types, among other requirements, are special in that they must always
+                 // be aligned properly.
+ 
++                if (IsCompilationProcess())
++                {
++                    // Disable AOT compiling for the SIMD hardware intrinsic types. These types require special
++                    // ABI handling as they represent fundamental data types (__m64, __m128, and __m256) and not
++                    // aggregate or union types. See https://github.com/dotnet/coreclr/issues/15943
++                    //
++                    // Once they are properly handled according to the ABI requirements, we can remove this check
++                    // and allow them to be used in crossgen/AOT scenarios.
++                    COMPlusThrow(kTypeLoadException, IDS_EE_HWINTRINSIC_NGEN_DISALLOWED);
++                }
++
+                 if (strcmp(name, g_Vector64Name) == 0)
+                 {
+                     // The System V ABI for i386 defaults to 8-byte alignment for __m64, except for parameter passing,
+-- 
+2.7.4
+
