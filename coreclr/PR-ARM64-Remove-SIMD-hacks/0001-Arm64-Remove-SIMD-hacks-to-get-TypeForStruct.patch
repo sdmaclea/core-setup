@@ -1,0 +1,98 @@
+From dfecb008fc48f7fd7beff101b266da93488e7706 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 7 Feb 2018 09:47:39 -0500
+Subject: [PATCH] [Arm64] Remove SIMD hacks to get*TypeForStruct
+
+---
+ src/jit/compiler.cpp | 19 -------------------
+ src/jit/importer.cpp |  6 +++---
+ src/jit/lclvars.cpp  |  4 ++--
+ 3 files changed, 5 insertions(+), 24 deletions(-)
+
+diff --git a/src/jit/compiler.cpp b/src/jit/compiler.cpp
+index c98b612..c53dd86 100644
+--- a/src/jit/compiler.cpp
++++ b/src/jit/compiler.cpp
+@@ -919,15 +919,6 @@ var_types Compiler::getArgTypeForStruct(CORINFO_CLASS_HANDLE clsHnd,
+         *wbPassStruct = howToPassStruct;
+     }
+ 
+-#if defined(FEATURE_MULTIREG_ARGS) && defined(_TARGET_ARM64_)
+-    // Normalize struct return type for ARM64 FEATURE_MULTIREG_ARGS
+-    // This is not yet enabled for ARM32 since FEATURE_SIMD is not enabled
+-    if (varTypeIsStruct(useType))
+-    {
+-        useType = impNormStructType(clsHnd);
+-    }
+-#endif
+-
+     return useType;
+ }
+ 
+@@ -1149,16 +1140,6 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE clsHnd,
+         *wbReturnStruct = howToReturnStruct;
+     }
+ 
+-#if defined(FEATURE_MULTIREG_RET) && defined(_TARGET_ARM64_)
+-    // Normalize struct return type for ARM64 FEATURE_MULTIREG_RET
+-    // This is not yet enabled for ARM32 since FEATURE_SIMD is not enabled
+-    // This is not needed for XARCH as eeGetSystemVAmd64PassStructInRegisterDescriptor() is used
+-    if (varTypeIsStruct(useType))
+-    {
+-        useType = impNormStructType(clsHnd);
+-    }
+-#endif
+-
+     return useType;
+ }
+ 
+diff --git a/src/jit/importer.cpp b/src/jit/importer.cpp
+index 2fa5f47..720bf0f 100644
+--- a/src/jit/importer.cpp
++++ b/src/jit/importer.cpp
+@@ -1176,10 +1176,10 @@ GenTree* Compiler::impAssignStructPtr(GenTree*             destAddr,
+                     // We change this to a GT_LCL_FLD (from a GT_ADDR of a GT_LCL_VAR)
+                     lcl->ChangeOper(GT_LCL_FLD);
+                     fgLclFldAssign(lcl->gtLclVarCommon.gtLclNum);
+-                }
+-
+                     lcl->gtType = src->gtType;
+                     asgType     = src->gtType;
++                }
++
+                 dest = lcl;
+ 
+ #if defined(_TARGET_ARM_)
+@@ -15712,7 +15712,7 @@ GenTree* Compiler::impAssignMultiRegTypeToVar(GenTree* op, CORINFO_CLASS_HANDLE
+ {
+     unsigned tmpNum = lvaGrabTemp(true DEBUGARG("Return value temp for multireg return."));
+     impAssignTempGen(tmpNum, op, hClass, (unsigned)CHECK_SPILL_ALL);
+-    GenTree* ret = gtNewLclvNode(tmpNum, op->gtType);
++    GenTree* ret = gtNewLclvNode(tmpNum, lvaTable[tmpNum].lvType);
+ 
+     // TODO-1stClassStructs: Handle constant propagation and CSE-ing of multireg returns.
+     ret->gtFlags |= GTF_DONT_CSE;
+diff --git a/src/jit/lclvars.cpp b/src/jit/lclvars.cpp
+index bf9a1f9..0c6c05c 100644
+--- a/src/jit/lclvars.cpp
++++ b/src/jit/lclvars.cpp
+@@ -2224,14 +2224,14 @@ bool Compiler::lvaIsMultiregStruct(LclVarDsc* varDsc)
+ 
+         if (howToPassStruct == SPK_ByValueAsHfa)
+         {
+-            assert(varTypeIsStruct(TYP_STRUCT));
++            assert(type == TYP_STRUCT);
+             return true;
+         }
+ 
+ #if defined(FEATURE_UNIX_AMD64_STRUCT_PASSING) || defined(_TARGET_ARM64_)
+         if (howToPassStruct == SPK_ByValue)
+         {
+-            assert(varTypeIsStruct(TYP_STRUCT));
++            assert(type == TYP_STRUCT);
+             return true;
+         }
+ #endif
+-- 
+2.7.4
+
