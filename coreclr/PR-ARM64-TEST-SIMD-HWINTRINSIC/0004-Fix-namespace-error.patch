@@ -1,0 +1,26 @@
+From 32f65a0f37dba7f1c0b94c66fb969c9f73c0f4d6 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 9 Feb 2018 17:42:59 -0500
+Subject: [PATCH] Fix namespace error
+
+---
+ tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
+index 5bc85b7..901994b 100644
+--- a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
++++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
+@@ -3,7 +3,9 @@ using System.Diagnostics;
+ using System.Runtime.CompilerServices;
+ using System.Runtime.InteropServices;
+ using System.Runtime.Intrinsics;
++#if ARM64_SIMD_API_PENDING_APPROVAL_AND_OR_COREFX_MERGE
+ using System.Runtime.Intrinsics.Arm.Arm64;
++#endif // ARM64_SIMD_API_PENDING_APPROVAL_AND_OR_COREFX_MERGE
+ 
+ namespace Arm64intrisicsTest
+ {
+-- 
+2.7.4
+
