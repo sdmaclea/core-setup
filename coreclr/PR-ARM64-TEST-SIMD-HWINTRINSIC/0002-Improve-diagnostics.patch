@@ -1,0 +1,48 @@
+From 91e2514412769b0dce859512e256c10194a25769 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 8 Feb 2018 12:26:47 -0500
+Subject: [PATCH] Improve diagnostics
+
+---
+ tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
+index 25b4a83..a28d98e 100644
+--- a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
++++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
+@@ -94,6 +94,21 @@ namespace Arm64intrisicsTest
+             testBinOp<TBaseType, TVectorType, TBaseType, TVectorType>(testCaseDescription, binOp, check);
+         }
+ 
++        static void dumpVector<TBaseType, TVectorType>(String name, TVectorType vector)
++            where TBaseType : struct, IComparable
++            where TVectorType : new()
++        {
++            var result = writeVector<TBaseType, TVectorType>(vector);
++
++            Console.Write(name);
++            Console.Write(" : { ");
++            for (int i = 0; i < result.Length; i++)
++            {
++                Console.Write($"{result[i]} ");
++            }
++            Console.WriteLine("}");
++        }
++
+         static void testBinOp<TBaseType, TVectorType, TBaseReturnType, TVectorReturnType>(String testCaseDescription,
+                                                       Func<TVectorType, TVectorType, TVectorReturnType> binOp,
+                                                       Func<TBaseType, TBaseType, TBaseReturnType> check)
+@@ -124,6 +139,9 @@ namespace Arm64intrisicsTest
+                         if(!failed)
+                         {
+                             Console.WriteLine($"testBinOp<{typeof(TBaseType).Name}, {typeof(TVectorType).Name} >{testCaseDescription}: Check Failed");
++                            dumpVector<TBaseType, TVectorType>("vLeft", vLeft);
++                            dumpVector<TBaseType, TVectorType>("vRight", vRight);
++                            dumpVector<TBaseReturnType, TVectorReturnType>("vResult", vResult);
+                         }
+                         Console.WriteLine($"check({left[i]}, {right[i]}) : result[{i}] = {result[i]}, expected {expected}");
+                         failed = true;
+-- 
+2.7.4
+

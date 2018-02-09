@@ -1,4 +1,4 @@
-From b31ef64bbaa576736ad45793e1349a19839ebce7 Mon Sep 17 00:00:00 2001
+From 2afc711a6396365c19443e54c45d8d4465da2fe6 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 15 Dec 2017 20:04:06 -0500
 Subject: [PATCH] [Arm64] Add Simd HWIntrinsic test
