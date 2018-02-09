@@ -1,4 +1,4 @@
-From 2a4741b61ca02629865ed5a0f2f7a20961f47572 Mon Sep 17 00:00:00 2001
+From cf1e2d8e4191250d461ea09d40f446fc5a71a050 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 30 Jan 2018 16:11:39 -0500
 Subject: [PATCH] [Arm64] Implement Simd.Insert
@@ -11,7 +11,7 @@ Subject: [PATCH] [Arm64] Implement Simd.Insert
  4 files changed, 143 insertions(+), 1 deletion(-)
 
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index cb881cb..66a44f3 100644
+index cb881cb..610e572 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
 @@ -5301,9 +5301,107 @@ void CodeGen::genHWIntrinsicSimdExtractOp(GenTreeHWIntrinsic* node)
@@ -80,7 +80,7 @@ index cb881cb..66a44f3 100644
 +        assert(op3->gtGetOp2()->isContainedIntOrIImmed());
 +
 +        int element = (int)op2->AsIntConCommon()->IconValue();
-+        int srcLane = op3->gtGetOp2()->AsIntConCommon()->IconValue();
++        int srcLane = (int)op3->gtGetOp2()->AsIntConCommon()->IconValue();
 +
 +        getEmitter()->emitIns_R_R_I_I(INS_mov, baseTypeSize, targetReg, op3Reg, element, srcLane);
 +    }
