@@ -1,0 +1,1320 @@
+From d01a77fedce13ff6e6c3ccce0cff88b84e3c6634 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 8 Feb 2018 13:38:22 -0500
+Subject: [PATCH] [Arm64] Treat Short Vectors as HFA
+
+---
+ Documentation/design-docs/arm64-intrinsics.md | 27 +++++++--
+ src/inc/corhdr.h                              |  3 +
+ src/inc/corinfo.h                             |  1 +
+ src/jit/codegenarm64.cpp                      |  2 +-
+ src/jit/codegenarmarch.cpp                    | 14 ++++-
+ src/jit/codegencommon.cpp                     | 43 +++++++++++++-
+ src/jit/compiler.cpp                          | 44 +++++++++++++-
+ src/jit/compiler.h                            | 81 +++++++++++++------------
+ src/jit/compiler.hpp                          | 16 +++++
+ src/jit/ee_il_dll.cpp                         |  3 +-
+ src/jit/flowgraph.cpp                         |  6 +-
+ src/jit/gentree.cpp                           | 20 ++++++-
+ src/jit/gentree.h                             |  2 +-
+ src/jit/hwintrinsicArm64.cpp                  |  3 +-
+ src/jit/importer.cpp                          | 23 ++++---
+ src/jit/lclvars.cpp                           | 66 ++++++++++++++++----
+ src/jit/lsraarmarch.cpp                       |  2 +-
+ src/jit/lsrabuild.cpp                         |  8 ++-
+ src/jit/morph.cpp                             | 46 ++++++++++----
+ src/jit/regalloc.cpp                          |  4 ++
+ src/jit/register_arg_convention.h             |  8 +++
+ src/jit/scopeinfo.cpp                         |  7 +++
+ src/jit/simd.cpp                              |  8 +++
+ src/jit/target.h                              |  5 ++
+ src/vm/class.cpp                              | 86 +++++++++++++++++++++++++--
+ src/vm/jitinterface.cpp                       | 15 ++++-
+ 26 files changed, 449 insertions(+), 94 deletions(-)
+
+diff --git a/Documentation/design-docs/arm64-intrinsics.md b/Documentation/design-docs/arm64-intrinsics.md
+index 67aff02..c64108a 100644
+--- a/Documentation/design-docs/arm64-intrinsics.md
++++ b/Documentation/design-docs/arm64-intrinsics.md
+@@ -275,11 +275,30 @@ It is not clear if this is a new LSRA feature and if it is how much complexity t
+ 
+ ## ARM ABI Vector64<T> and Vector128<T>
+ 
+-For intrinsic method calls, these vector types will implicitly be treated as pass by vector register.
++These will conform to the AAPCS ARM64 procedure call standard treatment of `Short Vector` and `HVA` types.
+ 
+-For other calls, ARM64 ABI conventions must be followed.  For purposes of the ABI calling conventions, these vector
+-types will treated as composite struct type containing a contiguous array of `T`.  They will need to follow standard
+-struct argument and return passing rules.
++`Vector64<T>` will be treated as a `HVA` containing a single 8 byte `Short Vector`
++`Vector128<T>` will be treated as a `HVA` containing a single 16 byte `Short Vector`
++
++Since a `Short Vector` and a single element `HVA` are treated the same by the ABI these should correctly
++interoperate with the native ABI.
++
++### Implementation
++
++Since `HVA` is a highly similar in concept to `HFA`, we will treat an `HVA` as a `HFA` with a `Short Vector` element type.
++
++VM will mark `Vector64<T>` and `Vector128<T>` as `HFA` with `Short Vector` element type.
++
++JIT to EE interface will be extended to pass additional HFA types.  A vector modifier will be aded for these limited use types.
++
++
++| VM HFA Type Name            | Jit HFA Type Name             |
++| --------------------------- | ----------------------------- |
++| `ELEMENT_TYPE_SHORT_VECTOR` | `CORINFO_TYPE_MOD_VECTOR`     |
++| `ELEMENT_TYPE_V8`           | `TYP_SIMD8`                   |
++| `ELEMENT_TYPE_V16`          | `TYP_SIMD16`                  |
++
++JIT will be modified to correctly handle `TYP_SIMD8` & `TYP_SIMD16` as primitive and aggregate argument & return types
+ 
+ ## Half precision floating point
+ 
+diff --git a/src/inc/corhdr.h b/src/inc/corhdr.h
+index df54ab4..9d9ca30 100644
+--- a/src/inc/corhdr.h
++++ b/src/inc/corhdr.h
+@@ -913,6 +913,9 @@ typedef enum CorElementType
+     ELEMENT_TYPE_SENTINEL       = 0x01 | ELEMENT_TYPE_MODIFIER, // sentinel for varargs
+     ELEMENT_TYPE_PINNED         = 0x05 | ELEMENT_TYPE_MODIFIER,
+ 
++    ELEMENT_TYPE_SHORT_VECTOR   = 0x80,
++    ELEMENT_TYPE_V8             = 0x0c | ELEMENT_TYPE_SHORT_VECTOR, // Limited use HFA type Vector  8 byte primitive
++    ELEMENT_TYPE_V16            = 0x0d | ELEMENT_TYPE_SHORT_VECTOR, // Limited use HFA type Vector 16 byte primitive
+ } CorElementType;
+ 
+ 
+diff --git a/src/inc/corinfo.h b/src/inc/corinfo.h
+index f3b509c..5fbcc1a 100644
+--- a/src/inc/corinfo.h
++++ b/src/inc/corinfo.h
+@@ -719,6 +719,7 @@ enum CorInfoTypeWithMod
+ {
+     CORINFO_TYPE_MASK            = 0x3F,        // lower 6 bits are type mask
+     CORINFO_TYPE_MOD_PINNED      = 0x40,        // can be applied to CLASS, or BYREF to indiate pinned
++    CORINFO_TYPE_MOD_VECTOR      = 0x80,        // can be applied to FLOAT/DOUBLE to indicate HFA type SIMD8/SIMD16
+ };
+ 
+ inline CorInfoType strip(CorInfoTypeWithMod val) {
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index cb881cb..6af1863 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -1813,7 +1813,7 @@ void CodeGen::genReturn(GenTree* treeNode)
+ 
+         genConsumeReg(op1);
+ 
+-        regNumber retReg = varTypeIsFloating(treeNode) ? REG_FLOATRET : REG_INTRET;
++        regNumber retReg = (varTypeIsFloating(treeNode) || varTypeIsSIMD(treeNode)) ? REG_FLOATRET : REG_INTRET;
+ 
+         bool movRequired = (op1->gtRegNum != retReg);
+ 
+diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
+index 22eb70e..48f23b7 100644
+--- a/src/jit/codegenarmarch.cpp
++++ b/src/jit/codegenarmarch.cpp
+@@ -2345,7 +2345,11 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
+     }
+     else
+     {
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++        assert(!varTypeIsStruct(call) || varTypeIsSIMD(call));
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+         assert(!varTypeIsStruct(call));
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+ 
+         if (call->gtType == TYP_REF)
+         {
+@@ -2500,7 +2504,11 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
+             }
+             else
+ #endif // _TARGET_ARM_
+-                if (varTypeIsFloating(returnType) && !compiler->opts.compUseSoftFP)
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++                if ((varTypeIsFloating(returnType) && !compiler->opts.compUseSoftFP) || varTypeIsSIMD(returnType))
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++            if ((varTypeIsFloating(returnType) && !compiler->opts.compUseSoftFP))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             {
+                 returnReg = REG_FLOATRET;
+             }
+@@ -3654,7 +3662,11 @@ bool CodeGen::isStructReturn(GenTree* treeNode)
+     // a bool or a void, for the end of a finally block.
+     noway_assert(treeNode->OperGet() == GT_RETURN || treeNode->OperGet() == GT_RETFILT);
+ 
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++    return (treeNode->TypeGet() == TYP_STRUCT);
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     return varTypeIsStruct(treeNode);
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+ }
+ 
+ //------------------------------------------------------------------------
+diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
+index 0ffad31..7b33a8b 100644
+--- a/src/jit/codegencommon.cpp
++++ b/src/jit/codegencommon.cpp
+@@ -4312,6 +4312,13 @@ void CodeGen::genFnPrologCalleeRegArgs(regNumber xtraReg, bool* pXtraRegClobbere
+             {
+                 return varDsc.GetHfaType();
+             }
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++            else if (varTypeIsStruct(varDsc.lvType))
++            {
++                // Non HFA structs are passed in integer register
++                return TYP_I_IMPL;
++            }
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             return varDsc.lvType;
+         }
+ 
+@@ -4377,14 +4384,25 @@ void CodeGen::genFnPrologCalleeRegArgs(regNumber xtraReg, bool* pXtraRegClobbere
+         {
+             regType = varDsc->GetHfaType();
+         }
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++        else if (varTypeIsStruct(regType))
++        {
++            // Non HFA structs are passed in integer register
++            regType = TYP_I_IMPL;
++        }
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+ 
+ #if defined(FEATURE_UNIX_AMD64_STRUCT_PASSING)
+         if (!varTypeIsStruct(regType))
+ #endif // defined(FEATURE_UNIX_AMD64_STRUCT_PASSING)
+         {
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++            if ((varTypeIsFloating(regType) || varTypeIsSIMD(regType)) != doingFloat)
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             // A struct might be passed  partially in XMM register for System V calls.
+             // So a single arg might use both register files.
+             if (isFloatRegType(regType) != doingFloat)
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             {
+                 continue;
+             }
+@@ -11329,7 +11347,7 @@ bool Compiler::IsMultiRegPassedType(CORINFO_CLASS_HANDLE hClass)
+     structPassingKind howToPassStruct;
+     var_types         returnType = getArgTypeForStruct(hClass, &howToPassStruct);
+ 
+-    return (varTypeIsStruct(returnType));
++    return (returnType == TYP_STRUCT);
+ }
+ 
+ //-----------------------------------------------------------------------------------
+@@ -11351,7 +11369,7 @@ bool Compiler::IsMultiRegReturnedType(CORINFO_CLASS_HANDLE hClass)
+     structPassingKind howToReturnStruct;
+     var_types         returnType = getReturnTypeForStruct(hClass, &howToReturnStruct);
+ 
+-    return (varTypeIsStruct(returnType));
++    return (returnType == TYP_STRUCT);
+ }
+ 
+ //----------------------------------------------
+@@ -11361,7 +11379,7 @@ bool Compiler::IsMultiRegReturnedType(CORINFO_CLASS_HANDLE hClass)
+ bool Compiler::IsHfa(CORINFO_CLASS_HANDLE hClass)
+ {
+ #ifdef FEATURE_HFA
+-    return varTypeIsFloating(GetHfaType(hClass));
++    return GetHfaType(hClass) != TYP_UNDEF;
+ #else
+     return false;
+ #endif
+@@ -11399,7 +11417,26 @@ var_types Compiler::GetHfaType(CORINFO_CLASS_HANDLE hClass)
+         CorInfoType corType = info.compCompHnd->getHFAType(hClass);
+         if (corType != CORINFO_TYPE_UNDEF)
+         {
++#if defined(_TARGET_ARM64_)
++            result = JITtype2varType((CorInfoType)(corType & CORINFO_TYPE_MASK));
++
++            // Check for Short Vector / HVA types
++            // Indicated by setting modified bit
++            if (corType > CORINFO_TYPE_COUNT)
++            {
++                // TYP_FLOAT  ==> TYP_SIMD8
++                // TYP_DOUBLE ==> TYP_SIMD16
++                assert((result == TYP_FLOAT) || (result == TYP_DOUBLE));
++
++#if defined(FEATURE_HW_INTRINSICS)
++                result = (result == TYP_FLOAT) ? TYP_SIMD8 : TYP_SIMD16;
++#else  // defined(FEATURE_HW_INTRINSICS)
++                result = TYP_UNDEF;
++#endif // defined(FEATURE_HW_INTRINSICS)
++            }
++#else  // defined(_TARGET_ARM64_)
+             result                = JITtype2varType(corType);
++#endif // defined(_TARGET_ARM64_)
+         }
+ #endif // FEATURE_HFA
+     }
+diff --git a/src/jit/compiler.cpp b/src/jit/compiler.cpp
+index c53dd86..01d8151 100644
+--- a/src/jit/compiler.cpp
++++ b/src/jit/compiler.cpp
+@@ -643,8 +643,11 @@ var_types Compiler::getPrimitiveTypeForStruct(unsigned structSize, CORINFO_CLASS
+ #ifdef _TARGET_64BIT_
+                 var_types hfaType = GetHfaType(clsHnd);
+ 
+-                // A structSize of 8 with IsHfa, we have two possiblities:
+-                // An HFA of one double or an HFA of two floats
++                // A structSize of 8 with IsHfa, we have four possiblities:
++                //    An HFA of one double,
++                //    One 8 byte short vector,
++                //    An HFA(HVA) of one 8 byte short vector
++                //    An HFA of two floats
+                 //
+                 // Check and exclude the case of an HFA of two floats
+                 if (hfaType == TYP_DOUBLE)
+@@ -652,6 +655,13 @@ var_types Compiler::getPrimitiveTypeForStruct(unsigned structSize, CORINFO_CLASS
+                     // We have an HFA of one double
+                     useType = TYP_DOUBLE;
+                 }
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++                else if (hfaType == TYP_SIMD8)
++                {
++                    // We have an HFA of one short vector or one short vector
++                    useType = TYP_SIMD8;
++                }
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+                 else
+                 {
+                     assert(hfaType == TYP_FLOAT);
+@@ -674,6 +684,20 @@ var_types Compiler::getPrimitiveTypeForStruct(unsigned structSize, CORINFO_CLASS
+             }
+             break;
+ 
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++        case FP_REGSIZE_BYTES:
++            if (IsHfa(clsHnd) && (GetHfaType(clsHnd) == TYP_SIMD16))
++            {
++                // We have an HFA of one 16 byte short vector
++                useType = TYP_SIMD16;
++            }
++            else
++            {
++                useType = TYP_UNKNOWN;
++            }
++            break;
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++
+ #ifdef _TARGET_ARM_
+         case 8:
+             if (IsHfa(clsHnd))
+@@ -785,11 +809,19 @@ var_types Compiler::getArgTypeForStruct(CORINFO_CLASS_HANDLE clsHnd,
+ 
+ #else // all other targets
+ 
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++    // The largest primitive type is FP_REGSIZE_BYTES
++    // so we can skip calling getPrimitiveTypeForStruct when we
++    // have a struct that is larger than that.
++    //
++    if (structSize <= FP_REGSIZE_BYTES)
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     // The largest primitive type is 8 bytes (TYP_DOUBLE)
+     // so we can skip calling getPrimitiveTypeForStruct when we
+     // have a struct that is larger than that.
+     //
+     if (structSize <= sizeof(double))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     {
+         // We set the "primitive" useType based upon the structSize
+         // and also examine the clsHnd to see if it is an HFA of count one
+@@ -998,11 +1030,19 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE clsHnd,
+ 
+ #else // not UNIX_AMD64
+ 
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++    // The largest primitive type is FP_REGSIZE_BYTES
++    // so we can skip calling getPrimitiveTypeForStruct when we
++    // have a struct that is larger than that.
++    //
++    if (structSize <= FP_REGSIZE_BYTES)
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     // The largest primitive type is 8 bytes (TYP_DOUBLE)
+     // so we can skip calling getPrimitiveTypeForStruct when we
+     // have a struct that is larger than that.
+     //
+     if (structSize <= sizeof(double))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     {
+ #if defined LEGACY_BACKEND
+         if (!IsHfa(clsHnd))
+diff --git a/src/jit/compiler.h b/src/jit/compiler.h
+index 66476df..a485e30 100644
+--- a/src/jit/compiler.h
++++ b/src/jit/compiler.h
+@@ -302,9 +302,7 @@ public:
+ 
+ #ifdef FEATURE_HFA
+     unsigned char _lvIsHfa : 1;   // Is this a struct variable who's class handle is an HFA type
+-    unsigned char _lvIsHfaRegArg : 1;    // Is this a HFA argument variable?    // TODO-CLEANUP: Remove this and replace
+-                                         // with (lvIsRegArg && lvIsHfa())
+-    unsigned char _lvHfaTypeIsFloat : 1; // Is the HFA type float or double?
++    unsigned char _lvHfaType : 2; // HFA type float = 0, double = 1, simd8 = 2, simd16 = 3
+ #endif                            // FEATURE_HFA
+ 
+ #ifdef DEBUG
+@@ -386,56 +384,57 @@ public:
+     bool lvIsHfaRegArg() const
+     {
+ #ifdef FEATURE_HFA
+-        return _lvIsHfaRegArg;
++        return lvIsHfa() && lvIsRegArg;
+ #else
+         return false;
+ #endif
+     }
+ 
+-    void lvSetIsHfaRegArg(bool value = true)
++    var_types lvHfaType() const
+     {
+ #ifdef FEATURE_HFA
+-        _lvIsHfaRegArg = value;
+-#endif
++        switch (_lvHfaType)
++        {
++            case 0:
++                return TYP_FLOAT;
++            case 1:
++                return TYP_DOUBLE;
++            case 2:
++                return TYP_SIMD8;
++            case 3:
++                return TYP_SIMD16;
++            default:
++                assert(!"Unexpected _lvHfaType");
+         }
+-
+-    bool lvHfaTypeIsFloat() const
+-    {
+-#ifdef FEATURE_HFA
+-        return _lvHfaTypeIsFloat;
+-#else
+-        return false;
+ #endif
++        return TYP_UNDEF;
+     }
+ 
+-    void lvSetHfaTypeIsFloat(bool value)
++    void lvSetHfaType(var_types type)
+     {
+ #ifdef FEATURE_HFA
+-        _lvHfaTypeIsFloat = value;
+-#endif
+-    }
+-
+-    // on Arm64 - Returns 1-4 indicating the number of register slots used by the HFA
+-    // on Arm32 - Returns the total number of single FP register slots used by the HFA, max is 8
+-    //
+-    unsigned lvHfaSlots() const
+-    {
+-        assert(lvIsHfa());
+-        assert(varTypeIsStruct(lvType));
+-#ifdef _TARGET_ARM_
+-        return lvExactSize / sizeof(float);
+-#else  //  _TARGET_ARM64_
+-        if (lvHfaTypeIsFloat())
+-        {
+-            return lvExactSize / sizeof(float);
+-        }
+-        else
++        switch (type)
+         {
+-            return lvExactSize / sizeof(double);
++            case TYP_FLOAT:
++                _lvHfaType = 0;
++                break;
++            case TYP_DOUBLE:
++                _lvHfaType = 1;
++                break;
++            case TYP_SIMD8:
++                _lvHfaType = 2;
++                break;
++            case TYP_SIMD16:
++                _lvHfaType = 3;
++                break;
++            default:
++                assert(!"Unexpected HfaType");
+         }
+-#endif //  _TARGET_ARM64_
++#endif
+     }
+ 
++    unsigned lvHfaSlots() const;
++
+     // lvIsMultiRegArgOrRet()
+     //     returns true if this is a multireg LclVar struct used in an argument context
+     //               or if this is a multireg LclVar struct assigned from a multireg call
+@@ -770,12 +769,11 @@ public:
+     }
+     var_types GetHfaType() const
+     {
+-        return lvIsHfa() ? (lvHfaTypeIsFloat() ? TYP_FLOAT : TYP_DOUBLE) : TYP_UNDEF;
++        return lvIsHfa() ? lvHfaType() : TYP_UNDEF;
+     }
+     void SetHfaType(var_types type)
+     {
+-        assert(varTypeIsFloating(type));
+-        lvSetHfaTypeIsFloat(type == TYP_FLOAT);
++        lvSetHfaType(type);
+     }
+ 
+ #ifndef LEGACY_BACKEND
+@@ -7634,8 +7632,9 @@ private:
+         return pTypeInfo->IsStruct() && isSIMDClass(pTypeInfo->GetClassHandleForValueClass());
+     }
+ 
+-    // Get the base (element) type and size in bytes for a SIMD type. Returns TYP_UNKNOWN
+-    // if it is not a SIMD type or is an unsupported base type.
++    // Get the base (element) type and size in bytes for a SIMD type.
++    // Returns TYP_UNKNOWN if it is not a SIMD type
++    // Returns TYP_UNKNOWN (or TYP_UNDEF on ARM64) if it is an unsupported base type.
+     var_types getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, unsigned* sizeBytes = nullptr);
+ 
+     var_types getBaseTypeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd)
+diff --git a/src/jit/compiler.hpp b/src/jit/compiler.hpp
+index 888ef7e..1530f4d 100644
+--- a/src/jit/compiler.hpp
++++ b/src/jit/compiler.hpp
+@@ -2062,7 +2062,11 @@ inline void LclVarDsc::incRefCnts(BasicBlock::weight_t weight, Compiler* comp, b
+ inline void LclVarDsc::setPrefReg(regNumber regNum, Compiler* comp)
+ {
+     regMaskTP regMask;
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++    if (isFloatRegType(TypeGet()) || varTypeIsSIMD(TypeGet()))
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     if (isFloatRegType(TypeGet()))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     {
+         // Check for FP struct-promoted field being passed in integer register
+         //
+@@ -3358,7 +3362,11 @@ inline regNumber genMapFloatRegArgNumToRegNum(unsigned argNum)
+ 
+ __forceinline regNumber genMapRegArgNumToRegNum(unsigned argNum, var_types type)
+ {
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++    if (varTypeIsFloating(type) || varTypeIsSIMD(type))
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     if (varTypeIsFloating(type))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     {
+         return genMapFloatRegArgNumToRegNum(argNum);
+     }
+@@ -3396,7 +3404,11 @@ inline regMaskTP genMapFloatRegArgNumToRegMask(unsigned argNum)
+ __forceinline regMaskTP genMapArgNumToRegMask(unsigned argNum, var_types type)
+ {
+     regMaskTP result;
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++    if (varTypeIsFloating(type) || varTypeIsSIMD(type))
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     if (varTypeIsFloating(type))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     {
+         result = genMapFloatRegArgNumToRegMask(argNum);
+ #ifdef _TARGET_ARM_
+@@ -3515,7 +3527,11 @@ inline unsigned genMapFloatRegNumToRegArgNum(regNumber regNum)
+ 
+ inline unsigned genMapRegNumToRegArgNum(regNumber regNum, var_types type)
+ {
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++    if (varTypeIsFloating(type) || varTypeIsSIMD(type))
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     if (varTypeIsFloating(type))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     {
+         return genMapFloatRegNumToRegArgNum(regNum);
+     }
+diff --git a/src/jit/ee_il_dll.cpp b/src/jit/ee_il_dll.cpp
+index 81ed6cf..2068619 100644
+--- a/src/jit/ee_il_dll.cpp
++++ b/src/jit/ee_il_dll.cpp
+@@ -473,7 +473,8 @@ unsigned Compiler::eeGetArgSize(CORINFO_ARG_LIST_HANDLE list, CORINFO_SIG_INFO*
+             // Is the struct larger than 16 bytes
+             if (structSize > (2 * TARGET_POINTER_SIZE))
+             {
+-                var_types hfaType = GetHfaType(argClass); // set to float or double if it is an HFA, otherwise TYP_UNDEF
++                var_types hfaType =
++                    GetHfaType(argClass); // set to float, double, or SIMD* if it is an HFA, otherwise TYP_UNDEF
+                 bool isHfa = (hfaType != TYP_UNDEF);
+                 if (!isHfa)
+                 {
+diff --git a/src/jit/flowgraph.cpp b/src/jit/flowgraph.cpp
+index 45e1ce4..2544feb 100644
+--- a/src/jit/flowgraph.cpp
++++ b/src/jit/flowgraph.cpp
+@@ -8407,20 +8407,24 @@ private:
+             unsigned returnLocalNum   = comp->lvaGrabTemp(true DEBUGARG("Single return block return value"));
+             comp->genReturnLocal      = returnLocalNum;
+             LclVarDsc& returnLocalDsc = comp->lvaTable[returnLocalNum];
++            var_types  returnType     = TYP_UNKNOWN;
+ 
+             if (comp->compMethodReturnsNativeScalarType())
+             {
+                 returnLocalDsc.lvType = genActualType(comp->info.compRetNativeType);
++                returnType            = returnLocalDsc.lvType;
+             }
+             else if (comp->compMethodReturnsRetBufAddr())
+             {
+                 returnLocalDsc.lvType = TYP_BYREF;
++                returnType            = returnLocalDsc.lvType;
+             }
+             else if (comp->compMethodReturnsMultiRegRetType())
+             {
+                 returnLocalDsc.lvType = TYP_STRUCT;
+                 comp->lvaSetStruct(returnLocalNum, comp->info.compMethodInfo->args.retTypeClass, true);
+                 returnLocalDsc.lvIsMultiRegRet = true;
++                returnType                     = TYP_STRUCT;
+             }
+             else
+             {
+@@ -8453,7 +8457,7 @@ private:
+ 
+             // make sure copy prop ignores this node (make sure it always does a reload from the temp).
+             retTemp->gtFlags |= GTF_DONT_CSE;
+-            returnExpr = comp->gtNewOperNode(GT_RETURN, retTemp->gtType, retTemp);
++            returnExpr = comp->gtNewOperNode(GT_RETURN, returnType, retTemp);
+         }
+         else
+         {
+diff --git a/src/jit/gentree.cpp b/src/jit/gentree.cpp
+index eb13bf9..120df38 100644
+--- a/src/jit/gentree.cpp
++++ b/src/jit/gentree.cpp
+@@ -7321,7 +7321,9 @@ void Compiler::gtBlockOpInit(GenTree* result, GenTree* dst, GenTree* srcOrFillVa
+         {
+             src = src->AsIndir()->Addr()->gtGetOp1();
+         }
+-#ifdef FEATURE_HW_INTRINSICS
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++        if (src->OperIs(GT_SIMD, GT_HWIntrinsic, GT_RET_EXPR, GT_CALL))
++#elif defined(FEATURE_HW_INTRINSICS)
+         if ((src->OperGet() == GT_SIMD) || (src->OperGet() == GT_HWIntrinsic))
+ #else
+         if (src->OperGet() == GT_SIMD)
+@@ -15304,7 +15306,12 @@ GenTree* Compiler::gtNewTempAssign(unsigned tmp, GenTree* val)
+     // see "Zero init inlinee locals:" in fgInlinePrependStatements
+     // thus we may need to set compFloatingPointUsed to true here.
+     //
++    CLANG_FORMAT_COMMENT_ANCHOR;
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++    if ((compFloatingPointUsed == false) && (varTypeIsFloating(dstTyp) || varTypeIsSIMD(dstTyp)))
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     if (varTypeIsFloating(dstTyp) && (compFloatingPointUsed == false))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     {
+         compFloatingPointUsed = true;
+     }
+@@ -18078,7 +18085,16 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler* comp, CORINFO_CLASS_HA
+         case Compiler::SPK_PrimitiveType:
+         {
+             assert(returnType != TYP_UNKNOWN);
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++            assert(!varTypeIsStruct(returnType) || varTypeIsSIMD(returnType));
++
++            if ((comp->compFloatingPointUsed == false) && (varTypeIsFloating(returnType) || varTypeIsSIMD(returnType)))
++            {
++                comp->compFloatingPointUsed = true;
++            }
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             assert(!varTypeIsStruct(returnType));
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             m_regType[0] = returnType;
+             break;
+         }
+@@ -18089,7 +18105,7 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler* comp, CORINFO_CLASS_HA
+             var_types hfaType = comp->GetHfaType(retClsHnd);
+ 
+             // We should have an hfa struct type
+-            assert(varTypeIsFloating(hfaType));
++            assert(hfaType != TYP_UNDEF);
+ 
+             // Note that the retail build issues a warning about a potential divsion by zero without this Max function
+             unsigned elemSize = Max((unsigned)1, EA_SIZE_IN_BYTES(emitActualTypeSize(hfaType)));
+diff --git a/src/jit/gentree.h b/src/jit/gentree.h
+index 5f534db..ccb9b24 100644
+--- a/src/jit/gentree.h
++++ b/src/jit/gentree.h
+@@ -3732,7 +3732,7 @@ struct GenTreeCall final : public GenTree
+         // LEGACY_BACKEND does not use multi reg returns for calls with long return types
+         return varTypeIsLong(gtType) || (varTypeIsStruct(gtType) && !HasRetBufArg());
+ #elif FEATURE_MULTIREG_RET
+-        return varTypeIsStruct(gtType) && !HasRetBufArg();
++        return (gtType == TYP_STRUCT) && !HasRetBufArg();
+ #else
+         return false;
+ #endif
+diff --git a/src/jit/hwintrinsicArm64.cpp b/src/jit/hwintrinsicArm64.cpp
+index 2bd1c4f..1fc6002 100644
+--- a/src/jit/hwintrinsicArm64.cpp
++++ b/src/jit/hwintrinsicArm64.cpp
+@@ -179,7 +179,8 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
+     {
+         simdBaseType = getBaseTypeAndSizeOfSIMDType(simdClass, &simdSizeBytes);
+ 
+-        if (simdBaseType == TYP_UNKNOWN)
++        assert(simdBaseType != TYP_UNKNOWN);
++        if (simdBaseType == TYP_UNDEF)
+         {
+             return impUnsupportedHWIntrinsic(CORINFO_HELP_THROW_TYPE_NOT_SUPPORTED, method, sig, mustExpand);
+         }
+diff --git a/src/jit/importer.cpp b/src/jit/importer.cpp
+index 720bf0f..1849fef 100644
+--- a/src/jit/importer.cpp
++++ b/src/jit/importer.cpp
+@@ -139,7 +139,11 @@ void Compiler::impPushOnStack(GenTree* tree, typeInfo ti)
+     {
+         compLongUsed = true;
+     }
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++    else if ((compFloatingPointUsed == false) && (varTypeIsFloating(tree->gtType) || varTypeIsSIMD(tree->gtType)))
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     else if (((tree->gtType == TYP_FLOAT) || (tree->gtType == TYP_DOUBLE)) && (compFloatingPointUsed == false))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     {
+         compFloatingPointUsed = true;
+     }
+@@ -1171,6 +1175,13 @@ GenTree* Compiler::impAssignStructPtr(GenTree*             destAddr,
+                     lcl->gtFlags |= GTF_DONT_CSE;
+                     lvaTable[lcl->gtLclVarCommon.gtLclNum].lvIsMultiRegRet = true;
+                 }
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++                else if (varTypeIsSIMD(returnType))
++                {
++                    lcl->gtFlags |= GTF_DONT_CSE;
++                    setLclRelatedToSIMDIntrinsic(lcl);
++                }
++#endif               // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+                 else // The call result is not a multireg return
+                 {
+                     // We change this to a GT_LCL_FLD (from a GT_ADDR of a GT_LCL_VAR)
+@@ -8539,7 +8550,11 @@ GenTree* Compiler::impFixupCallStructReturn(GenTreeCall* call, CORINFO_CLASS_HAN
+         {
+             compLongUsed = true;
+         }
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++        else if ((compFloatingPointUsed == false) && (varTypeIsFloating(returnType) || varTypeIsSIMD(returnType)))
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+         else if (((returnType == TYP_FLOAT) || (returnType == TYP_DOUBLE)) && (compFloatingPointUsed == false))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+         {
+             compFloatingPointUsed = true;
+         }
+@@ -8754,13 +8769,7 @@ REDO_RETURN_NODE:
+ #if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     else if ((op->gtOper == GT_HWIntrinsic) && varTypeIsSIMD(op->gtType))
+     {
+-        // TODO-ARM64-FIXME Implement ARM64 ABI for Short Vectors properly
+-        // assert(op->gtType == info.compRetNativeType)
+-        if (op->gtType != info.compRetNativeType)
+-        {
+-            // Insert a register move to keep target type of SIMD intrinsic intact
+-            op = gtNewScalarHWIntrinsicNode(info.compRetNativeType, op, NI_ARM64_NONE_MOV);
+-        }
++        assert(op->gtType == info.compRetNativeType);
+     }
+ #endif
+     else if (op->gtOper == GT_COMMA)
+diff --git a/src/jit/lclvars.cpp b/src/jit/lclvars.cpp
+index 0c6c05c..30ef025 100644
+--- a/src/jit/lclvars.cpp
++++ b/src/jit/lclvars.cpp
+@@ -147,7 +147,11 @@ void Compiler::lvaInitTypeRef()
+         if (howToReturnStruct == SPK_PrimitiveType)
+         {
+             assert(returnType != TYP_UNKNOWN);
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++            assert(!varTypeIsStruct(returnType) || varTypeIsSIMD(returnType));
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             assert(!varTypeIsStruct(returnType));
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+ 
+             info.compRetNativeType = returnType;
+ 
+@@ -156,7 +160,11 @@ void Compiler::lvaInitTypeRef()
+             {
+                 compLongUsed = true;
+             }
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++            else if ((compFloatingPointUsed == false) && (varTypeIsFloating(returnType) || varTypeIsSIMD(returnType)))
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             else if (((returnType == TYP_FLOAT) || (returnType == TYP_DOUBLE)) && (compFloatingPointUsed == false))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             {
+                 compFloatingPointUsed = true;
+             }
+@@ -592,8 +600,8 @@ void Compiler::lvaInitUserArgs(InitVarDscInfo* varDscInfo)
+             // If the argType is a struct, then check if it is an HFA
+             if (varTypeIsStruct(argType))
+             {
+-                hfaType  = GetHfaType(typeHnd); // set to float or double if it is an HFA, otherwise TYP_UNDEF
+-                isHfaArg = varTypeIsFloating(hfaType);
++                hfaType  = GetHfaType(typeHnd); // set to float, double, or SIMD* if it is an HFA, otherwise TYP_UNDEF
++                isHfaArg = hfaType != TYP_UNDEF;
+             }
+         }
+         if (isHfaArg)
+@@ -604,6 +612,14 @@ void Compiler::lvaInitUserArgs(InitVarDscInfo* varDscInfo)
+             argType = hfaType;
+             cSlots  = varDsc->lvHfaSlots();
+         }
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++        else if (varTypeIsStruct(argType))
++        {
++            // Non HFA structs are passed in integer registers
++            argType = TYP_I_IMPL;
++        }
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++
+         // The number of slots that must be enregistered if we are to consider this argument enregistered.
+         // This is normally the same as cSlots, since we normally either enregister the entire object,
+         // or none of it. For structs on ARM, however, we only need to enregister a single slot to consider
+@@ -781,7 +797,6 @@ void Compiler::lvaInitUserArgs(InitVarDscInfo* varDscInfo)
+             {
+                 // We need to save the fact that this HFA is enregistered
+                 varDsc->lvSetIsHfa();
+-                varDsc->lvSetIsHfaRegArg();
+                 varDsc->SetHfaType(hfaType);
+                 varDsc->lvIsMultiRegArg = (varDsc->lvHfaSlots() > 1);
+             }
+@@ -789,7 +804,11 @@ void Compiler::lvaInitUserArgs(InitVarDscInfo* varDscInfo)
+             varDsc->lvIsRegArg = 1;
+ 
+ #if FEATURE_MULTIREG_ARGS
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++            if (argType == TYP_STRUCT)
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             if (varTypeIsStruct(argType))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             {
+ #if defined(FEATURE_UNIX_AMD64_STRUCT_PASSING)
+                 varDsc->lvArgReg = genMapRegArgNumToRegNum(firstAllocatedRegArgNum, firstEightByteType);
+@@ -1180,7 +1199,7 @@ void Compiler::lvaInitVarDsc(LclVarDsc*              varDsc,
+     }
+ 
+     var_types type = JITtype2varType(corInfoType);
+-    if (varTypeIsFloating(type))
++    if (varTypeIsFloating(type) || varTypeIsSIMD(type))
+     {
+         compFloatingPointUsed = true;
+     }
+@@ -2288,11 +2307,12 @@ void Compiler::lvaSetStruct(unsigned varNum, CORINFO_CLASS_HANDLE typeHnd, bool
+         // for structs that are small enough, we check and set lvIsHfa and lvHfaTypeIsFloat
+         if (varDsc->lvExactSize <= MAX_PASS_MULTIREG_BYTES)
+         {
+-            var_types hfaType = GetHfaType(typeHnd); // set to float or double if it is an HFA, otherwise TYP_UNDEF
+-            if (varTypeIsFloating(hfaType))
++            var_types hfaType =
++                GetHfaType(typeHnd); // set to float, double, or SIMD* if it is an HFA, otherwise TYP_UNDEF
++            if (hfaType != TYP_UNDEF)
+             {
+                 varDsc->_lvIsHfa = true;
+-                varDsc->lvSetHfaTypeIsFloat(hfaType == TYP_FLOAT);
++                varDsc->lvSetHfaType(hfaType);
+ 
+                 // hfa variables can never contain GC pointers
+                 assert(varDsc->lvStructGcCount == 0);
+@@ -3517,6 +3537,21 @@ const size_t LclVarDsc::lvArgStackSize() const
+     return stackSize;
+ }
+ 
++/**********************************************************************************
++* on Arm64 - Returns 1-4 indicating the number of register slots used by the HFA
++* on Arm32 - Returns the total number of single FP register slots used by the HFA, max is 8
++*/
++unsigned LclVarDsc::lvHfaSlots() const
++{
++    assert(lvIsHfa());
++    assert(varTypeIsStruct(lvType));
++#ifdef _TARGET_ARM_
++    return lvExactSize / sizeof(float);
++#else  //  _TARGET_ARM64_
++    return lvExactSize / genTypeSize(lvHfaType());
++#endif //  _TARGET_ARM64_
++}
++
+ #ifndef LEGACY_BACKEND
+ /**********************************************************************************
+ * Get type of a variable when passed as an argument.
+@@ -6748,13 +6783,22 @@ void Compiler::lvaDumpEntry(unsigned lclNum, FrameLayoutState curState, size_t r
+ 
+     if (varDsc->lvIsHfaRegArg())
+     {
+-        if (varDsc->lvHfaTypeIsFloat())
++        switch (varDsc->lvHfaType())
+         {
++            case TYP_FLOAT:
+                 printf(" (enregistered HFA: float) ");
+-        }
+-        else
+-        {
++                break;
++            case TYP_DOUBLE:
+                 printf(" (enregistered HFA: double)");
++                break;
++            case TYP_SIMD8:
++                printf(" (enregistered HFA: SIMD8) ");
++                break;
++            case TYP_SIMD16:
++                printf(" (enregistered HFA: SIMD16) ");
++                break;
++            default:
++                assert(!"Unexpected HfaType");
+         }
+     }
+ 
+diff --git a/src/jit/lsraarmarch.cpp b/src/jit/lsraarmarch.cpp
+index 0bdc13e..2b0bb7a 100644
+--- a/src/jit/lsraarmarch.cpp
++++ b/src/jit/lsraarmarch.cpp
+@@ -252,7 +252,7 @@ void LinearScan::BuildCall(GenTreeCall* call)
+         assert(retTypeDesc != nullptr);
+         info->setDstCandidates(this, retTypeDesc->GetABIReturnRegs());
+     }
+-    else if (varTypeIsFloating(registerType))
++    else if (varTypeIsFloating(registerType) || varTypeIsSIMD(registerType))
+     {
+         info->setDstCandidates(this, RBM_FLOATRET);
+     }
+diff --git a/src/jit/lsrabuild.cpp b/src/jit/lsrabuild.cpp
+index 5023b13..3da10a4 100644
+--- a/src/jit/lsrabuild.cpp
++++ b/src/jit/lsrabuild.cpp
+@@ -2991,7 +2991,7 @@ void LinearScan::BuildReturn(GenTree* tree)
+         info->srcCount = 1;
+ 
+ #if FEATURE_MULTIREG_RET
+-        if (varTypeIsStruct(tree))
++        if (tree->TypeGet() == TYP_STRUCT)
+         {
+             // op1 has to be either an lclvar or a multi-reg returning call
+             if (op1->OperGet() != GT_LCL_VAR)
+@@ -3012,6 +3012,12 @@ void LinearScan::BuildReturn(GenTree* tree)
+                 case TYP_VOID:
+                     useCandidates = RBM_NONE;
+                     break;
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++                case TYP_SIMD8:
++                case TYP_SIMD16:
++                    useCandidates = RBM_FLOATRET;
++                    break;
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+                 case TYP_FLOAT:
+                     useCandidates = RBM_FLOATRET;
+                     break;
+diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
+index bbebaae..c40a210 100644
+--- a/src/jit/morph.cpp
++++ b/src/jit/morph.cpp
+@@ -2487,7 +2487,11 @@ void fgArgInfo::EvalArgsToTemps()
+ 
+ #else // !defined(_TARGET_AMD64_) || defined(FEATURE_UNIX_AMD64_STRUCT_PASSING)
+ 
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++            if (defArg->gtType == TYP_STRUCT)
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             if (varTypeIsStruct(defArg))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             {
+                 // Need a temp to walk any GT_COMMA nodes when searching for the clsHnd
+                 GenTree* defArgTmp = defArg;
+@@ -3345,7 +3349,7 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+         unsigned argAlign = 1;
+         // Setup any HFA information about 'argx'
+         var_types hfaType  = GetHfaType(argx);
+-        bool      isHfaArg = varTypeIsFloating(hfaType);
++        bool      isHfaArg = hfaType != TYP_UNDEF;
+         unsigned  hfaSlots = 0;
+ 
+         if (isHfaArg)
+@@ -3545,7 +3549,7 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+                 {
+                     if (isHfaArg)
+                     {
+-                        size = GetHfaCount(argx);
++                        size = hfaSlots;
+                         // HFA structs are passed by value in multiple registers
+                         hasMultiregStructArgs = true;
+                     }
+@@ -3933,6 +3937,9 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+                             argObj->gtType = structBaseType;
+                         }
+                         assert(varTypeCanReg(argObj->TypeGet()) ||
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++                               varTypeIsSIMD(argObj->TypeGet()) ||
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+                                ((copyBlkClass != NO_CLASS_HANDLE) && varTypeIsIntegral(structBaseType)));
+ 
+                         size = 1;
+@@ -3957,7 +3964,7 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+                     {
+                         if (isHfaArg && passUsingFloatRegs)
+                         {
+-                            size = GetHfaCount(argx); // GetHfaCount returns number of elements in the HFA
++                            size = hfaSlots;
+                         }
+                         else
+                         {
+@@ -5017,8 +5024,8 @@ GenTree* Compiler::fgMorphMultiregStructArg(GenTree* arg, fgArgTabEntry* fgEntry
+     unsigned  elemSize                = 0;
+     var_types type[MAX_ARG_REG_COUNT] = {}; // TYP_UNDEF = 0
+ 
+-    hfaType = GetHfaType(objClass); // set to float or double if it is an HFA, otherwise TYP_UNDEF
+-    if (varTypeIsFloating(hfaType))
++    hfaType = GetHfaType(objClass); // set to float, double, or SIMD* if it is an HFA, otherwise TYP_UNDEF
++    if (hfaType != TYP_UNDEF)
+     {
+         elemType  = hfaType;
+         elemSize  = genTypeSize(elemType);
+@@ -5127,7 +5134,7 @@ GenTree* Compiler::fgMorphMultiregStructArg(GenTree* arg, fgArgTabEntry* fgEntry
+         if (varDsc->lvIsHfa())
+         {
+             // We have a HFA struct
+-            noway_assert(elemType == (varDsc->lvHfaTypeIsFloat() ? TYP_FLOAT : TYP_DOUBLE));
++            noway_assert(elemType == varDsc->lvHfaType());
+             noway_assert(elemSize == genTypeSize(elemType));
+             noway_assert(elemCount == (varDsc->lvExactSize / elemSize));
+             noway_assert(elemSize * elemCount == varDsc->lvExactSize);
+@@ -5709,7 +5716,7 @@ void Compiler::fgFixupStructReturn(GenTree* callNode)
+ 
+ #if FEATURE_MULTIREG_RET
+     // Either we don't have a struct now or if struct, then it is a struct returned in regs or in return buffer.
+-    assert(!varTypeIsStruct(call) || call->HasMultiRegRetVal() || callHasRetBuffArg);
++    assert(!varTypeIsStruct(call) || varTypeIsSIMD(call) || call->HasMultiRegRetVal() || callHasRetBuffArg);
+ #else // !FEATURE_MULTIREG_RET
+     // No more struct returns
+     assert(call->TypeGet() != TYP_STRUCT);
+@@ -7507,7 +7514,7 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee)
+ 
+ #elif defined(_TARGET_ARM64_) // ARM64
+                 var_types hfaType  = GetHfaType(argx);
+-                bool      isHfaArg = varTypeIsFloating(hfaType);
++                bool      isHfaArg = hfaType != TYP_UNDEF;
+                 size_t    size     = 1;
+ 
+                 if (isHfaArg)
+@@ -9402,12 +9409,16 @@ GenTree* Compiler::fgMorphOneAsgBlockOp(GenTree* tree)
+         }
+     }
+ 
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++    if (asgType != TYP_STRUCT)
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     // TODO-1stClassStructs: Change this to asgType != TYP_STRUCT.
+     if (!varTypeIsStruct(asgType))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     {
+         // For initBlk, a non constant source is not going to allow us to fiddle
+         // with the bits to create a single assigment.
+-        noway_assert(size <= REGSIZE_BYTES);
++        noway_assert(size <= REGSIZE_BYTES || (varTypeIsSIMD(asgType) && size <= FP_REGSIZE_BYTES));
+ 
+         if (isInitBlock && !src->IsConstInitVal())
+         {
+@@ -9435,7 +9446,13 @@ GenTree* Compiler::fgMorphOneAsgBlockOp(GenTree* tree)
+             // holes, whose contents could be meaningful in unsafe code.  If we decide that's a valid
+             // concern, then we could compromise, and say that address-exposed + fields do not completely cover the
+             // memory of the struct prevent field-wise assignments.  Same situation exists for the "src" decision.
++            CLANG_FORMAT_COMMENT_ANCHOR;
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++            if (varTypeIsStruct(lclVarTree) && (destVarDsc->lvPromoted || destVarDsc->lvIsSIMDType()) &&
++                (genTypeSize(asgType) != genTypeSize(destVarDsc)))
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             if (varTypeIsStruct(lclVarTree) && (destVarDsc->lvPromoted || destVarDsc->lvIsSIMDType()))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             {
+                 // Let fgMorphInitBlock handle it.  (Since we'll need to do field-var-wise assignments.)
+                 return nullptr;
+@@ -10229,7 +10246,11 @@ GenTree* Compiler::fgMorphBlockOperand(GenTree* tree, var_types asgType, unsigne
+                 needsIndirection = false;
+                 effectiveVal     = indirTree->Addr()->gtGetOp1();
+             }
+-            if (effectiveVal->OperIsSIMD() || effectiveVal->OperIsSimdHWIntrinsic())
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++            if (effectiveVal->OperIs(GT_HWIntrinsic, GT_SIMD, GT_CALL))
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++            if (effectiveVal->OperIs(GT_HWIntrinsic, GT_SIMD))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+             {
+                 needsIndirection = false;
+             }
+@@ -18413,7 +18434,11 @@ void Compiler::fgMarkImplicitByRefArgs()
+     {
+         LclVarDsc* varDsc = &lvaTable[lclNum];
+ 
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++        if (varDsc->lvIsParam && (varDsc->lvType == TYP_STRUCT))
++#else // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+         if (varDsc->lvIsParam && varTypeIsStruct(varDsc))
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+         {
+             size_t size;
+ 
+@@ -18572,7 +18597,6 @@ void Compiler::fgRetypeImplicitByRefArgs()
+                     // the parameter which is really a pointer to the struct.
+                     fieldVarDsc->lvIsRegArg      = false;
+                     fieldVarDsc->lvIsMultiRegArg = false;
+-                    fieldVarDsc->lvSetIsHfaRegArg(false);
+                     fieldVarDsc->lvArgReg        = REG_NA;
+ #if FEATURE_MULTIREG_ARGS
+                     fieldVarDsc->lvOtherArgReg = REG_NA;
+diff --git a/src/jit/regalloc.cpp b/src/jit/regalloc.cpp
+index 6046d31..b062dd7 100644
+--- a/src/jit/regalloc.cpp
++++ b/src/jit/regalloc.cpp
+@@ -1231,6 +1231,10 @@ regMaskTP Compiler::rpPredictRegPick(var_types type, rpPredictReg predictReg, re
+ 
+         case TYP_FLOAT:
+         case TYP_DOUBLE:
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++        case TYP_SIMD8:
++        case TYP_SIMD16:
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+ 
+ #if FEATURE_FP_REGALLOC
+             regMaskTP restrictMask;
+diff --git a/src/jit/register_arg_convention.h b/src/jit/register_arg_convention.h
+index 758c764..bea67e0 100644
+--- a/src/jit/register_arg_convention.h
++++ b/src/jit/register_arg_convention.h
+@@ -56,7 +56,11 @@ public:
+     // return ref to current register arg for this type
+     unsigned& regArgNum(var_types type)
+     {
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++        return (varTypeIsFloating(type) || varTypeIsSIMD(type)) ? floatRegArgNum : intRegArgNum;
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+         return varTypeIsFloating(type) ? floatRegArgNum : intRegArgNum;
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     }
+ 
+     // Allocate a set of contiguous argument registers. "type" is either an integer
+@@ -106,7 +110,11 @@ private:
+     // return max register arg for this type
+     unsigned maxRegArgNum(var_types type)
+     {
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++        return (varTypeIsFloating(type) || varTypeIsSIMD(type)) ? maxFloatRegArgNum : maxIntRegArgNum;
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+         return varTypeIsFloating(type) ? maxFloatRegArgNum : maxIntRegArgNum;
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+     }
+ 
+     bool enoughAvailRegs(var_types type, unsigned numRegs = 1);
+diff --git a/src/jit/scopeinfo.cpp b/src/jit/scopeinfo.cpp
+index 6a1064b..5297ecd 100644
+--- a/src/jit/scopeinfo.cpp
++++ b/src/jit/scopeinfo.cpp
+@@ -1011,6 +1011,13 @@ void CodeGen::psiBegProlog()
+                 {
+                     regType = lclVarDsc1->GetHfaType();
+                 }
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++                else if (varTypeIsStruct(regType))
++                {
++                    // Non HFA structs are passed in integer register
++                    regType = TYP_I_IMPL;
++                }
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+                 assert(genMapRegNumToRegArgNum(lclVarDsc1->lvArgReg, regType) != (unsigned)-1);
+ #endif // DEBUG
+ 
+diff --git a/src/jit/simd.cpp b/src/jit/simd.cpp
+index 62bed5f..06e09c9 100644
+--- a/src/jit/simd.cpp
++++ b/src/jit/simd.cpp
+@@ -654,6 +654,10 @@ var_types Compiler::getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, u
+                             break;
+ 
+                         default:
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++                            // Vector128`1 is a HFA Short Vector Type even when base type is bogus
++                            simdBaseType = TYP_UNDEF;
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+                             JITDUMP("  Unknown Hardware Intrinsic SIMD Type Vector128<T>\n");
+                     }
+                 }
+@@ -700,6 +704,10 @@ var_types Compiler::getBaseTypeAndSizeOfSIMDType(CORINFO_CLASS_HANDLE typeHnd, u
+                             break;
+ 
+                         default:
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
++                            // Vector64`1 is a HFA Short Vector Type even when base type is bogus
++                            simdBaseType = TYP_UNDEF;
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+                             JITDUMP("  Unknown Hardware Intrinsic SIMD Type Vector64<T>\n");
+                     }
+                 }
+diff --git a/src/jit/target.h b/src/jit/target.h
+index 453f8f9..cbd34f1 100644
+--- a/src/jit/target.h
++++ b/src/jit/target.h
+@@ -1552,8 +1552,13 @@ typedef unsigned short regPairNoSmall; // arm: need 12 bits
+   #define FEATURE_MULTIREG_ARGS         1  // Support for passing a single argument in more than one register  
+   #define FEATURE_MULTIREG_RET          1  // Support for returning a single value in more than one register  
+   #define FEATURE_STRUCT_CLASSIFIER     0  // Uses a classifier function to determine is structs are passed/returned in more than one register
++#if defined(FEATURE_HW_INTRINSICS)
++  #define MAX_PASS_MULTIREG_BYTES      64  // Maximum size of a struct that could be passed in more than one register (max is 4 SIMD16 using an HFA)
++  #define MAX_RET_MULTIREG_BYTES       64  // Maximum size of a struct that could be returned in more than one register (Max is an HFA of 4 SIMD16)
++#else  // defined(FEATURE_HW_INTRINSICS)
+   #define MAX_PASS_MULTIREG_BYTES      32  // Maximum size of a struct that could be passed in more than one register (max is 4 doubles using an HFA)
+   #define MAX_RET_MULTIREG_BYTES       32  // Maximum size of a struct that could be returned in more than one register (Max is an HFA of 4 doubles)
++#endif // defined(FEATURE_HW_INTRINSICS)
+   #define MAX_ARG_REG_COUNT             4  // Maximum registers used to pass a single argument in multiple registers. (max is 4 floats or doubles using an HFA)
+   #define MAX_RET_REG_COUNT             4  // Maximum registers used to return a value.
+ 
+diff --git a/src/vm/class.cpp b/src/vm/class.cpp
+index d0b07f0..0c738dc 100644
+--- a/src/vm/class.cpp
++++ b/src/vm/class.cpp
+@@ -1664,6 +1664,31 @@ CorElementType MethodTable::GetHFAType()
+         _ASSERTE(pMT->IsValueType());
+         _ASSERTE(pMT->GetNumInstanceFields() > 0);
+ 
++#if defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_) // ARM64 or arm64altjit
++        if (pMT->IsIntrinsicType())
++        {
++            LPCUTF8 namespaceName;
++            LPCUTF8 className = pMT->GetFullyQualifiedNameInfo(&namespaceName);
++
++            //
++            // On ARM64 Vector128 and Vector64 are treated as Short Vector HFA Types
++            //
++            // See comments in EEClass::CheckForHFA()
++            //
++            if (strcmp(className, "Vector64`1") == 0)
++            {
++                assert(strcmp(namespaceName, "System.Runtime.Intrinsics") == 0);
++                return ELEMENT_TYPE_V8;
++            }
++
++            if (strcmp(className, "Vector128`1") == 0)
++            {
++                assert(strcmp(namespaceName, "System.Runtime.Intrinsics") == 0);
++                return ELEMENT_TYPE_V16;
++            }
++        }
++#endif //  (defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_)
++
+         PTR_FieldDesc pFirstField = pMT->GetApproxFieldDescListRaw();
+ 
+         CorElementType fieldType = pFirstField->GetFieldType();
+@@ -1722,18 +1747,57 @@ EEClass::CheckForHFA()
+     if (HasExplicitFieldOffsetLayout())
+         return false;
+ 
+-    // The SIMD Intrinsic types are meant to be handled specially and should not be treated as HFA
++    // The SIMD Intrinsic types are meant to be handled specially
+     if (GetMethodTable()->IsIntrinsicType())
+     {
+         LPCUTF8 namespaceName;
+         LPCUTF8 className = GetMethodTable()->GetFullyQualifiedNameInfo(&namespaceName);
+ 
++#if defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_) // ARM64 or arm64altjit
++        //
++        // On ARM64 and arm64altjit Vector128 and Vector64 are treated as Short Vector Types
++        //
++        // We treat Short Vectors as an HFA type
++        //
++        // Homogenous Aggregates are determined by examining the data members after data
++        // layout.  An homogenous aggregate must contain 1 - 4 members of the same type in
++        // the final layout
++        //
++        // HA w/ type floating is an HFA
++        // HA w/ type Short Vector is an HVA
++        //
++        // HVA & HFA are treated the same by the ABI the only difference being member types
++        //
++        // A struct which contains a single Short Vector has the same layout as a Short Vector
++        // They are treated the same by the ABI.  Passed in the same registers and using the
++        // same stack layout.
++        //
++        // Therefore we treat HFA, HVA, & Short Vectors as HFA for ABI purposes
++        //
++        if ((strcmp(className, "Vector128`1") == 0) || (strcmp(className, "Vector64`1") == 0))
++        {
++            assert(strcmp(namespaceName, "System.Runtime.Intrinsics") == 0);
++
++#if defined(FEATURE_HFA)
++            GetMethodTable()->SetIsHFA();
++#endif
++            return true;
++        }
++
++        // Vector256 is too big to be treated as a Short Vector Type
++        if (strcmp(className, "Vector256`1") == 0)
++        {
++            assert(strcmp(namespaceName, "System.Runtime.Intrinsics") == 0);
++            return false;
++        }
++#else //  (defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_)
+         if ((strcmp(className, "Vector256`1") == 0) || (strcmp(className, "Vector128`1") == 0) ||
+             (strcmp(className, "Vector64`1") == 0))
+         {
+             assert(strcmp(namespaceName, "System.Runtime.Intrinsics") == 0);
+             return false;
+         }
++#endif //  (defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_)
+     }
+ 
+     CorElementType hfaType = ELEMENT_TYPE_END;
+@@ -1781,10 +1845,24 @@ EEClass::CheckForHFA()
+         }
+     }
+ 
+-    if (hfaType == ELEMENT_TYPE_END)
+-        return false;
++    int elemSize = 0;
+ 
+-    int elemSize = (hfaType == ELEMENT_TYPE_R8) ? sizeof(double) : sizeof(float);
++    switch (hfaType)
++    {
++        case ELEMENT_TYPE_R4:
++            elemSize = sizeof(float);
++            break;
++        case ELEMENT_TYPE_R8:
++        case ELEMENT_TYPE_V8:
++            elemSize = sizeof(double);
++            break;
++        case ELEMENT_TYPE_V16:
++            elemSize = 2*sizeof(double);
++            break;
++        default:
++            // Not HFA
++            return false;
++    }
+ 
+     // Note that we check the total size, but do not perform any checks on number of fields:
+     // - Type of fields can be HFA valuetype itself
+diff --git a/src/vm/jitinterface.cpp b/src/vm/jitinterface.cpp
+index 78f3a51..672a56a 100644
+--- a/src/vm/jitinterface.cpp
++++ b/src/vm/jitinterface.cpp
+@@ -9717,8 +9717,21 @@ CorInfoType CEEInfo::getHFAType(CORINFO_CLASS_HANDLE hClass)
+ 
+     TypeHandle VMClsHnd(hClass);
+ 
+-    result = asCorInfoType(VMClsHnd.GetHFAType());
++    CorElementType hfaType = VMClsHnd.GetHFAType();
+ 
++#if defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_) // ARM64 or arm64altjit
++    auto isVector =  hfaType & ELEMENT_TYPE_SHORT_VECTOR;
++    CorElementType hfaMaskedType = (CorElementType)(hfaType & ~ELEMENT_TYPE_SHORT_VECTOR);
++
++    result = asCorInfoType(hfaMaskedType);
++
++    if (isVector)
++    {
++        result = (CorInfoType)(result | CORINFO_TYPE_MOD_VECTOR);
++    }
++#else // defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_)
++    result = asCorInfoType(hfaType);
++#endif // defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_)
+     EE_TO_JIT_TRANSITION();
+ 
+     return result;
+-- 
+2.7.4
+

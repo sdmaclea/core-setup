@@ -1,0 +1,367 @@
+From d05b4d3edc17743465fc9e23ce9de59dc702e4a7 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 8 Feb 2018 12:30:40 -0500
+Subject: [PATCH] [Arm64] 128-bit Floating Register Save Restore
+
+---
+ src/pal/inc/unixasmmacrosarm64.inc    | 34 +++++++++++++++++-----------------
+ src/vm/argdestination.h               | 11 +++++++----
+ src/vm/arm64/CallDescrWorkerARM64.asm |  8 ++++----
+ src/vm/arm64/asmconstants.h           |  2 +-
+ src/vm/arm64/asmhelpers.S             | 24 ++++++++++++------------
+ src/vm/arm64/asmhelpers.asm           | 24 ++++++++++++------------
+ src/vm/arm64/asmmacros.h              | 18 +++++++++---------
+ src/vm/arm64/calldescrworkerarm64.S   |  8 ++++----
+ src/vm/arm64/cgencpu.h                |  9 +++++----
+ 9 files changed, 71 insertions(+), 67 deletions(-)
+
+diff --git a/src/pal/inc/unixasmmacrosarm64.inc b/src/pal/inc/unixasmmacrosarm64.inc
+index f0c4a5e..7f72793 100644
+--- a/src/pal/inc/unixasmmacrosarm64.inc
++++ b/src/pal/inc/unixasmmacrosarm64.inc
+@@ -137,14 +137,14 @@ C_FUNC(\Name\()_End):
+ // ArgumentRegisters::x2
+ // ArgumentRegisters::x1
+ // ArgumentRegisters::x0
+-// FloatRegisters::d7
+-// FloatRegisters::d6
+-// FloatRegisters::d5
+-// FloatRegisters::d4
+-// FloatRegisters::d3
+-// FloatRegisters::d2
+-// FloatRegisters::d1
+-// FloatRegisters::d0
++// FloatRegisters::q7
++// FloatRegisters::q6
++// FloatRegisters::q5
++// FloatRegisters::q4
++// FloatRegisters::q3
++// FloatRegisters::q2
++// FloatRegisters::q1
++// FloatRegisters::q0
+ .macro PROLOG_WITH_TRANSITION_BLOCK extraLocals = 0, SaveFPArgs = 1
+ 
+         __PWTB_FloatArgumentRegisters = \extraLocals
+@@ -199,13 +199,13 @@ C_FUNC(\Name\()_End):
+ 
+ .endm
+ 
+-// Reserve 64 bytes of memory before calling  SAVE_FLOAT_ARGUMENT_REGISTERS
++// Reserve 128 bytes of memory before calling  SAVE_FLOAT_ARGUMENT_REGISTERS
+ .macro SAVE_FLOAT_ARGUMENT_REGISTERS reg, ofs
+ 
+-        stp                    d0, d1, [\reg, #(\ofs)]
+-        stp                    d2, d3, [\reg, #(\ofs + 16)]
+-        stp                    d4, d5, [\reg, #(\ofs + 32)]
+-        stp                    d6, d7, [\reg, #(\ofs + 48)]
++        stp                    q0, q1, [\reg, #(\ofs)]
++        stp                    q2, q3, [\reg, #(\ofs + 32)]
++        stp                    q4, q5, [\reg, #(\ofs + 64)]
++        stp                    q6, q7, [\reg, #(\ofs + 96)]
+ 
+ .endm
+ 
+@@ -221,10 +221,10 @@ C_FUNC(\Name\()_End):
+ 
+ .macro RESTORE_FLOAT_ARGUMENT_REGISTERS reg, ofs
+ 
+-        ldp                    d0, d1, [\reg, #(\ofs)]
+-        ldp                    d2, d3, [\reg, #(\ofs + 16)]
+-        ldp                    d4, d5, [\reg, #(\ofs + 32)]
+-        ldp                    d6, d7, [\reg, #(\ofs + 48)]
++        ldp                    q0, q1, [\reg, #(\ofs)]
++        ldp                    q2, q3, [\reg, #(\ofs + 32)]
++        ldp                    q4, q5, [\reg, #(\ofs + 64)]
++        ldp                    q6, q7, [\reg, #(\ofs + 96)]
+ 
+ .endm
+ 
+diff --git a/src/vm/argdestination.h b/src/vm/argdestination.h
+index 8ab0a56..2d2a842 100644
+--- a/src/vm/argdestination.h
++++ b/src/vm/argdestination.h
+@@ -71,14 +71,17 @@ public:
+         {
+             for (int i = 0; i < floatRegCount; ++i)
+             {
+-                // Copy 4 bytes on 8 bytes alignment
+-                *((UINT64*)dest + i) = *((UINT32*)src + i);
++                // Copy 4 bytes on 16 bytes alignment
++                *((UINT64*)dest + 2*i) = *((UINT32*)src + i);
+             }
+         }
+         else
+         {
+-            // We can just do a memcpy.
+-            memcpyNoGCRefs(dest, src, fieldBytes);
++            for (int i = 0; i < floatRegCount; ++i)
++            {
++                // Copy 8 bytes on 16 bytes alignment
++                *((UINT64*)dest + 2*i) = *((UINT64*)src + i);
++            }
+         }
+     }
+ 
+diff --git a/src/vm/arm64/CallDescrWorkerARM64.asm b/src/vm/arm64/CallDescrWorkerARM64.asm
+index b9f8a60..720b7a2 100644
+--- a/src/vm/arm64/CallDescrWorkerARM64.asm
++++ b/src/vm/arm64/CallDescrWorkerARM64.asm
+@@ -56,10 +56,10 @@ Ldonestack
+         ;; given in x9. 
+         ldr     x9, [x19,#CallDescrData__pFloatArgumentRegisters]
+         cbz     x9, LNoFloatingPoint
+-        ldp     d0, d1, [x9]
+-        ldp     d2, d3, [x9, #16]
+-        ldp     d4, d5, [x9, #32]
+-        ldp     d6, d7, [x9, #48]
++        ldp     q0, q1, [x9]
++        ldp     q2, q3, [x9, #32]
++        ldp     q4, q5, [x9, #64]
++        ldp     q6, q7, [x9, #96]
+ LNoFloatingPoint
+ 
+         ;; Copy [pArgumentRegisters, ..., pArgumentRegisters + 64]
+diff --git a/src/vm/arm64/asmconstants.h b/src/vm/arm64/asmconstants.h
+index dca845d..3bc8089 100644
+--- a/src/vm/arm64/asmconstants.h
++++ b/src/vm/arm64/asmconstants.h
+@@ -58,7 +58,7 @@ ASMCONSTANTS_C_ASSERT(AppDomain__m_dwId == offsetof(AppDomain, m_dwId));
+ #define SIZEOF__ArgumentRegisters 0x48
+ ASMCONSTANTS_C_ASSERT(SIZEOF__ArgumentRegisters == sizeof(ArgumentRegisters))
+ 
+-#define SIZEOF__FloatArgumentRegisters 0x40
++#define SIZEOF__FloatArgumentRegisters 0x80
+ ASMCONSTANTS_C_ASSERT(SIZEOF__FloatArgumentRegisters == sizeof(FloatArgumentRegisters))
+ 
+ #define CallDescrData__pSrc                0x00
+diff --git a/src/vm/arm64/asmhelpers.S b/src/vm/arm64/asmhelpers.S
+index fd8e879..5c19242 100644
+--- a/src/vm/arm64/asmhelpers.S
++++ b/src/vm/arm64/asmhelpers.S
+@@ -121,18 +121,18 @@ LEAF_END HelperMethodFrameRestoreState, _TEXT
+ // The call in ndirect import precode points to this function.
+ NESTED_ENTRY NDirectImportThunk, _TEXT, NoHandler
+ 
+-    PROLOG_SAVE_REG_PAIR_INDEXED fp, lr, -160
++    PROLOG_SAVE_REG_PAIR_INDEXED fp, lr, -224
+     SAVE_ARGUMENT_REGISTERS sp, 16
+-    SAVE_FLOAT_ARGUMENT_REGISTERS sp, 88
++    SAVE_FLOAT_ARGUMENT_REGISTERS sp, 96
+ 
+     mov x0, x12
+     bl NDirectImportWorker
+     mov x12, x0
+ 
+     // pop the stack and restore original register state
+-    RESTORE_FLOAT_ARGUMENT_REGISTERS sp, 88
++    RESTORE_FLOAT_ARGUMENT_REGISTERS sp, 96
+     RESTORE_ARGUMENT_REGISTERS sp, 16
+-    EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, 160
++    EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, 224
+ 
+     // If we got back from NDirectImportWorker, the MD has been successfully
+     // linked. Proceed to execute the original DLL call.
+@@ -481,9 +481,9 @@ WRITE_BARRIER_END JIT_WriteBarrier
+ NESTED_ENTRY VirtualMethodFixupStub, _TEXT, NoHandler
+ 
+     // Save arguments and return address
+-    PROLOG_SAVE_REG_PAIR_INDEXED fp, lr, -160
++    PROLOG_SAVE_REG_PAIR_INDEXED fp, lr, -224
+     SAVE_ARGUMENT_REGISTERS sp, 16
+-    SAVE_FLOAT_ARGUMENT_REGISTERS sp, 88
++    SAVE_FLOAT_ARGUMENT_REGISTERS sp, 96
+ 
+     // Refer to ZapImportVirtualThunk::Save
+     // for details on this.
+@@ -500,8 +500,8 @@ NESTED_ENTRY VirtualMethodFixupStub, _TEXT, NoHandler
+ 
+     // pop the stack and restore original register state
+     RESTORE_ARGUMENT_REGISTERS sp, 16
+-    RESTORE_FLOAT_ARGUMENT_REGISTERS sp, 88
+-    EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, 160
++    RESTORE_FLOAT_ARGUMENT_REGISTERS sp, 96
++    EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, 224
+ 
+     PATCH_LABEL VirtualMethodFixupPatchLabel
+ 
+@@ -711,9 +711,9 @@ COMToCLRDispatchHelper_RegSetup
+ NESTED_ENTRY TheUMEntryPrestub, _TEXT, UnhandledExceptionHandlerUnix
+ 
+     // Save arguments and return address
+-    PROLOG_SAVE_REG_PAIR_INDEXED fp, lr, -160
++    PROLOG_SAVE_REG_PAIR_INDEXED fp, lr, -224
+     SAVE_ARGUMENT_REGISTERS sp, 16
+-    SAVE_FLOAT_ARGUMENT_REGISTERS sp, 88
++    SAVE_FLOAT_ARGUMENT_REGISTERS sp, 96
+ 
+     mov x0, x12
+     bl C_FUNC(TheUMEntryPrestubWorker)
+@@ -723,8 +723,8 @@ NESTED_ENTRY TheUMEntryPrestub, _TEXT, UnhandledExceptionHandlerUnix
+ 
+     // pop the stack and restore original register state
+     RESTORE_ARGUMENT_REGISTERS sp, 16
+-    RESTORE_FLOAT_ARGUMENT_REGISTERS sp, 88
+-    EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, 160
++    RESTORE_FLOAT_ARGUMENT_REGISTERS sp, 96
++    EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, 224
+ 
+     // and tailcall to the actual method
+     EPILOG_BRANCH_REG x12
+diff --git a/src/vm/arm64/asmhelpers.asm b/src/vm/arm64/asmhelpers.asm
+index 23b7b38..00f108b 100644
+--- a/src/vm/arm64/asmhelpers.asm
++++ b/src/vm/arm64/asmhelpers.asm
+@@ -182,18 +182,18 @@ Done
+ ; The call in ndirect import precode points to this function.
+         NESTED_ENTRY NDirectImportThunk
+ 
+-        PROLOG_SAVE_REG_PAIR           fp, lr, #-160!
++        PROLOG_SAVE_REG_PAIR           fp, lr, #-224!
+         SAVE_ARGUMENT_REGISTERS        sp, 16
+-        SAVE_FLOAT_ARGUMENT_REGISTERS  sp, 88 
++        SAVE_FLOAT_ARGUMENT_REGISTERS  sp, 96
+ 
+         mov     x0, x12
+         bl      NDirectImportWorker
+         mov     x12, x0
+ 
+         ; pop the stack and restore original register state
+-        RESTORE_FLOAT_ARGUMENT_REGISTERS  sp, 88
++        RESTORE_FLOAT_ARGUMENT_REGISTERS  sp, 96
+         RESTORE_ARGUMENT_REGISTERS        sp, 16
+-        EPILOG_RESTORE_REG_PAIR           fp, lr, #160!
++        EPILOG_RESTORE_REG_PAIR           fp, lr, #224!
+ 
+         ; If we got back from NDirectImportWorker, the MD has been successfully
+         ; linked. Proceed to execute the original DLL call.
+@@ -435,9 +435,9 @@ Exit
+     NESTED_ENTRY VirtualMethodFixupStub
+ 
+     ; Save arguments and return address
+-    PROLOG_SAVE_REG_PAIR           fp, lr, #-160!
++    PROLOG_SAVE_REG_PAIR           fp, lr, #-224!
+     SAVE_ARGUMENT_REGISTERS        sp, 16
+-    SAVE_FLOAT_ARGUMENT_REGISTERS  sp, 88 
++    SAVE_FLOAT_ARGUMENT_REGISTERS  sp, 96
+ 
+     ; Refer to ZapImportVirtualThunk::Save
+     ; for details on this.
+@@ -454,8 +454,8 @@ Exit
+ 
+     ; pop the stack and restore original register state
+     RESTORE_ARGUMENT_REGISTERS        sp, 16
+-    RESTORE_FLOAT_ARGUMENT_REGISTERS  sp, 88
+-    EPILOG_RESTORE_REG_PAIR           fp, lr, #160!
++    RESTORE_FLOAT_ARGUMENT_REGISTERS  sp, 96
++    EPILOG_RESTORE_REG_PAIR           fp, lr, #224!
+ 
+     PATCH_LABEL VirtualMethodFixupPatchLabel
+ 
+@@ -696,9 +696,9 @@ COMToCLRDispatchHelper_RegSetup
+     NESTED_ENTRY TheUMEntryPrestub,,UMEntryPrestubUnwindFrameChainHandler
+ 
+     ; Save arguments and return address
+-    PROLOG_SAVE_REG_PAIR           fp, lr, #-160!
++    PROLOG_SAVE_REG_PAIR           fp, lr, #-224!
+     SAVE_ARGUMENT_REGISTERS        sp, 16
+-    SAVE_FLOAT_ARGUMENT_REGISTERS  sp, 88
++    SAVE_FLOAT_ARGUMENT_REGISTERS  sp, 96
+ 
+     mov x0, x12
+     bl  TheUMEntryPrestubWorker
+@@ -708,8 +708,8 @@ COMToCLRDispatchHelper_RegSetup
+ 
+     ; pop the stack and restore original register state
+     RESTORE_ARGUMENT_REGISTERS        sp, 16
+-    RESTORE_FLOAT_ARGUMENT_REGISTERS  sp, 88
+-    EPILOG_RESTORE_REG_PAIR           fp, lr, #160!
++    RESTORE_FLOAT_ARGUMENT_REGISTERS  sp, 96
++    EPILOG_RESTORE_REG_PAIR           fp, lr, #224!
+ 
+     ; and tailcall to the actual method
+     EPILOG_BRANCH_REG x12
+diff --git a/src/vm/arm64/asmmacros.h b/src/vm/arm64/asmmacros.h
+index 74613da..5705fe8 100644
+--- a/src/vm/arm64/asmmacros.h
++++ b/src/vm/arm64/asmmacros.h
+@@ -179,7 +179,7 @@ __PWTB_SAVE_ARGUMENT_REGISTERS_OFFSET SETA 0
+         str                    x8, [$reg, #(__PWTB_SAVE_ARGUMENT_REGISTERS_OFFSET + 64)]
+     MEND
+ 
+-; Reserve 64 bytes of memory before calling  SAVE_FLOAT_ARGUMENT_REGISTERS
++; Reserve 128 bytes of memory before calling  SAVE_FLOAT_ARGUMENT_REGISTERS
+     MACRO
+        SAVE_FLOAT_ARGUMENT_REGISTERS $reg, $offset 
+ 
+@@ -191,10 +191,10 @@ __PWTB_SAVE_FLOAT_ARGUMENT_REGISTERS_OFFSET SETA $offset
+ __PWTB_SAVE_FLOAT_ARGUMENT_REGISTERS_OFFSET SETA 0
+        ENDIF
+ 
+-        stp                    d0, d1, [$reg, #(__PWTB_SAVE_FLOAT_ARGUMENT_REGISTERS_OFFSET)]
+-        stp                    d2, d3, [$reg, #(__PWTB_SAVE_FLOAT_ARGUMENT_REGISTERS_OFFSET + 16)]
+-        stp                    d4, d5, [$reg, #(__PWTB_SAVE_FLOAT_ARGUMENT_REGISTERS_OFFSET + 32)]
+-        stp                    d6, d7, [$reg, #(__PWTB_SAVE_FLOAT_ARGUMENT_REGISTERS_OFFSET + 48)]
++        stp                    q0, q1, [$reg, #(__PWTB_SAVE_FLOAT_ARGUMENT_REGISTERS_OFFSET)]
++        stp                    q2, q3, [$reg, #(__PWTB_SAVE_FLOAT_ARGUMENT_REGISTERS_OFFSET + 32)]
++        stp                    q4, q5, [$reg, #(__PWTB_SAVE_FLOAT_ARGUMENT_REGISTERS_OFFSET + 64)]
++        stp                    q6, q7, [$reg, #(__PWTB_SAVE_FLOAT_ARGUMENT_REGISTERS_OFFSET + 96)]
+     MEND
+ 
+     MACRO
+@@ -226,10 +226,10 @@ __PWTB_RESTORE_FLOAT_ARGUMENT_REGISTERS_OFFSET SETA $offset
+ __PWTB_RESTORE_FLOAT_ARGUMENT_REGISTERS_OFFSET SETA 0
+        ENDIF
+ 
+-        ldp                    d0, d1, [$reg, #(__PWTB_RESTORE_FLOAT_ARGUMENT_REGISTERS_OFFSET)]
+-        ldp                    d2, d3, [$reg, #(__PWTB_RESTORE_FLOAT_ARGUMENT_REGISTERS_OFFSET + 16)]
+-        ldp                    d4, d5, [$reg, #(__PWTB_RESTORE_FLOAT_ARGUMENT_REGISTERS_OFFSET + 32)]
+-        ldp                    d6, d7, [$reg, #(__PWTB_RESTORE_FLOAT_ARGUMENT_REGISTERS_OFFSET + 48)]
++        ldp                    q0, q1, [$reg, #(__PWTB_RESTORE_FLOAT_ARGUMENT_REGISTERS_OFFSET)]
++        ldp                    q2, q3, [$reg, #(__PWTB_RESTORE_FLOAT_ARGUMENT_REGISTERS_OFFSET + 32)]
++        ldp                    q4, q5, [$reg, #(__PWTB_RESTORE_FLOAT_ARGUMENT_REGISTERS_OFFSET + 64)]
++        ldp                    q6, q7, [$reg, #(__PWTB_RESTORE_FLOAT_ARGUMENT_REGISTERS_OFFSET + 96)]
+     MEND
+ 
+ ; ------------------------------------------------------------------
+diff --git a/src/vm/arm64/calldescrworkerarm64.S b/src/vm/arm64/calldescrworkerarm64.S
+index 5bcad2f..8e135e0 100644
+--- a/src/vm/arm64/calldescrworkerarm64.S
++++ b/src/vm/arm64/calldescrworkerarm64.S
+@@ -48,10 +48,10 @@ LOCAL_LABEL(donestack):
+     // given in x8. 
+     ldr     x9, [x19,#CallDescrData__pFloatArgumentRegisters]
+     cbz     x9, LOCAL_LABEL(NoFloatingPoint)
+-    ldp     d0, d1, [x9]
+-    ldp     d2, d3, [x9, #16]
+-    ldp     d4, d5, [x9, #32]
+-    ldp     d6, d7, [x9, #48]
++    ldp     q0, q1, [x9]
++    ldp     q2, q3, [x9, #32]
++    ldp     q4, q5, [x9, #64]
++    ldp     q6, q7, [x9, #96]
+ LOCAL_LABEL(NoFloatingPoint):
+ 
+     // Copy [pArgumentRegisters, ..., pArgumentRegisters + 56]
+diff --git a/src/vm/arm64/cgencpu.h b/src/vm/arm64/cgencpu.h
+index 7e3d620..0e528d5 100644
+--- a/src/vm/arm64/cgencpu.h
++++ b/src/vm/arm64/cgencpu.h
+@@ -135,10 +135,11 @@ typedef DPTR(struct FloatArgumentRegisters) PTR_FloatArgumentRegisters;
+ struct FloatArgumentRegisters {
+     // armV8 supports 32 floating point registers. Each register is 128bits long.
+     // It can be accessed as 128-bit value or 64-bit value(d0-d31) or as 32-bit value (s0-s31)
+-    // or as 16-bit value or as 8-bit values. C# only has two builtin floating datatypes float(32-bit) and 
+-    // double(64-bit). It does not have a quad-precision floating point.So therefore it does not make sense to
+-    // store full 128-bit values in Frame when the upper 64 bit will not contain any values.
+-    double  d[8];  // d0-d7
++    // or as 16-bit value or as 8-bit values.
++    // C# only has two builtin floating datatypes float(32-bit) and double(64-bit).
++    // It does not have a quad-precision floating point.
++    // However HW Intrinsics support using the full 128-bit value for passing Vectors.
++    double  qAsDouble[16];  // q0-q7
+ };
+ 
+ 
+-- 
+2.7.4
+
