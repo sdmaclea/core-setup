@@ -1,0 +1,32 @@
+From df3ce1b91f605e9cf0586d76ffa2216a5f5f3229 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 9 Feb 2018 16:01:05 -0500
+Subject: [PATCH] Fix JIT.SIMD.VectorUtil.CheckValue<T>
+
+---
+ tests/src/JIT/SIMD/VectorUtil.cs | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/tests/src/JIT/SIMD/VectorUtil.cs b/tests/src/JIT/SIMD/VectorUtil.cs
+index 2249ff8..8acc0ec 100644
+--- a/tests/src/JIT/SIMD/VectorUtil.cs
++++ b/tests/src/JIT/SIMD/VectorUtil.cs
+@@ -26,8 +26,15 @@ internal partial class VectorTest
+         }
+         if (returnVal == false)
+         {
++            if ((typeof(T) == typeof(double)) || (typeof(T) == typeof(float)))
++            {
++                Console.WriteLine("CheckValue failed for type " + typeof(T).ToString() + ". Expected: {0} , Got: {1}", expectedValue, value);
++            }
++            else
++            {
+                 Console.WriteLine("CheckValue failed for type " + typeof(T).ToString() + ". Expected: {0} (0x{0:X}), Got: {1} (0x{1:X})", expectedValue, value);
+             }
++        }
+         return returnVal;
+     }
+ 
+-- 
+2.7.4
+
