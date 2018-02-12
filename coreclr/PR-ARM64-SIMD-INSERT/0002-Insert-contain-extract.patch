@@ -1,0 +1,63 @@
+From 3955d9410ced7e705f9edb1abf43c3503aaa9197 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 12 Feb 2018 13:08:54 -0500
+Subject: [PATCH] Insert contain extract
+
+---
+ src/jit/codegenarm64.cpp | 5 ++++-
+ src/jit/lowerarmarch.cpp | 2 --
+ 2 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 610e572..d151d3b 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -5336,7 +5336,6 @@ void CodeGen::genHWIntrinsicSimdInsertOp(GenTreeHWIntrinsic* node)
+     genConsumeRegs(op3);
+ 
+     regNumber op1Reg = op1->gtRegNum;
+-    regNumber op3Reg = op3->gtRegNum;
+ 
+     assert(genIsValidFloatReg(targetReg));
+     assert(genIsValidFloatReg(op1Reg));
+@@ -5355,6 +5354,8 @@ void CodeGen::genHWIntrinsicSimdInsertOp(GenTreeHWIntrinsic* node)
+     if (op3->isContained())
+     {
+         // Handle vector element to vector element case
++        regNumber op3Reg = op3->gtGetOp1()->gtRegNum;
++
+         assert(genIsValidFloatReg(op3Reg));
+         assert(op2->isContainedIntOrIImmed());
+         assert(op3->OperIs(GT_HWIntrinsic));
+@@ -5370,6 +5371,8 @@ void CodeGen::genHWIntrinsicSimdInsertOp(GenTreeHWIntrinsic* node)
+     {
+         // Handle scalar to vector element case
+         // TODO-ARM64-CQ handle containing scalar const where possible
++        regNumber op3Reg = op3->gtRegNum;
++
+         auto emitSwCase = [&](int element) {
+             assert(element >= 0);
+             assert(element < elements);
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index 4d7632f..6c154ce 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -916,7 +916,6 @@ void Lowering::ContainCheckHWIntrinsic(GenTreeHWIntrinsic* node)
+ 
+                 GenTree* op3 = argList->Rest()->Rest()->Current();
+ 
+-#if NYI_ARM64_HW_INTRINSIC_CONTAINMENT
+                 // TODO-ARM64-CQ Support containing NI_ARM64_SIMD_GetItem (vector element to element move)
+                 if (op3->OperIs(GT_HWIntrinsic) && (op3->AsHWIntrinsic()->gtHWIntrinsicId == NI_ARM64_SIMD_GetItem))
+                 {
+@@ -927,7 +926,6 @@ void Lowering::ContainCheckHWIntrinsic(GenTreeHWIntrinsic* node)
+                         MakeSrcContained(node, op3);
+                     }
+                 }
+-#endif // NYI_ARM64_HW_INTRINSIC_CONTAINMENT
+             }
+             break;
+ 
+-- 
+2.7.4
+
