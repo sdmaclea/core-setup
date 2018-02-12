@@ -1,4 +1,4 @@
-From 91e2514412769b0dce859512e256c10194a25769 Mon Sep 17 00:00:00 2001
+From 0e3ecf115370bd27163ce525644b78910ba0f102 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Thu, 8 Feb 2018 12:26:47 -0500
 Subject: [PATCH] Improve diagnostics
@@ -8,10 +8,10 @@ Subject: [PATCH] Improve diagnostics
  1 file changed, 18 insertions(+)
 
 diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
-index 25b4a83..a28d98e 100644
+index 20f8eb2..114c113 100644
 --- a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
 +++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
-@@ -94,6 +94,21 @@ namespace Arm64intrisicsTest
+@@ -96,6 +96,21 @@ namespace Arm64intrisicsTest
              testBinOp<TBaseType, TVectorType, TBaseType, TVectorType>(testCaseDescription, binOp, check);
          }
  
@@ -33,7 +33,7 @@ index 25b4a83..a28d98e 100644
          static void testBinOp<TBaseType, TVectorType, TBaseReturnType, TVectorReturnType>(String testCaseDescription,
                                                        Func<TVectorType, TVectorType, TVectorReturnType> binOp,
                                                        Func<TBaseType, TBaseType, TBaseReturnType> check)
-@@ -124,6 +139,9 @@ namespace Arm64intrisicsTest
+@@ -126,6 +141,9 @@ namespace Arm64intrisicsTest
                          if(!failed)
                          {
                              Console.WriteLine($"testBinOp<{typeof(TBaseType).Name}, {typeof(TVectorType).Name} >{testCaseDescription}: Check Failed");

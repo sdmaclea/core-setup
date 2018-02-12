@@ -1,4 +1,4 @@
-From 45b59e458f05fad3915c48e56c5ae45ca598b74c Mon Sep 17 00:00:00 2001
+From 128687b87fc1ca9284b77a904a3bead4fe066c82 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Thu, 1 Feb 2018 12:37:30 -0500
 Subject: [PATCH] Add TestInsert
@@ -8,10 +8,10 @@ Subject: [PATCH] Add TestInsert
  1 file changed, 150 insertions(+), 1 deletion(-)
 
 diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
-index a28d98e..5bc85b7 100644
+index 114c113..20d9e69 100644
 --- a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
 +++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
-@@ -199,11 +199,66 @@ namespace Arm64intrisicsTest
+@@ -201,11 +201,66 @@ namespace Arm64intrisicsTest
              }
          }
  
@@ -78,7 +78,7 @@ index a28d98e..5bc85b7 100644
              var v = DataSet<TBaseType, TVectorType>.vectorX;
  
              bool caughtArgRangeEx = false;
-@@ -1482,6 +1537,100 @@ namespace Arm64intrisicsTest
+@@ -1484,6 +1539,100 @@ namespace Arm64intrisicsTest
  #endif // ARM64_SIMD_API_PENDING_APPROVAL_AND_OR_COREFX_MERGE
          }
  
@@ -179,7 +179,7 @@ index a28d98e..5bc85b7 100644
          static void TestLeadingSignCount()
          {
  #if ARM64_SIMD_API_PENDING_APPROVAL_AND_OR_COREFX_MERGE
-@@ -2190,7 +2339,7 @@ namespace Arm64intrisicsTest
+@@ -2192,7 +2341,7 @@ namespace Arm64intrisicsTest
              TestCompareTest();
              TestDivide();
              TestExtract();

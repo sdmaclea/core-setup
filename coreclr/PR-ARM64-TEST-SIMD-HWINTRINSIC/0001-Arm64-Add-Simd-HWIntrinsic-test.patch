@@ -1,27 +1,29 @@
-From 2afc711a6396365c19443e54c45d8d4465da2fe6 Mon Sep 17 00:00:00 2001
+From 4037f16b0e4c825765c381ac650d705fc92764b0 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 15 Dec 2017 20:04:06 -0500
 Subject: [PATCH] [Arm64] Add Simd HWIntrinsic test
 
 ---
- tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs     | 2213 ++++++++++++++++++++
+ tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs     | 2217 ++++++++++++++++++++
  tests/src/JIT/HardwareIntrinsics/Arm64/Simd.csproj |   36 +
- 2 files changed, 2249 insertions(+)
+ 2 files changed, 2253 insertions(+)
  create mode 100644 tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
  create mode 100644 tests/src/JIT/HardwareIntrinsics/Arm64/Simd.csproj
 
 diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
 new file mode 100644
-index 0000000..25b4a83
+index 0000000..20f8eb2
 --- /dev/null
 +++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Simd.cs
-@@ -0,0 +1,2213 @@
+@@ -0,0 +1,2217 @@
 +using System;
 +using System.Diagnostics;
 +using System.Runtime.CompilerServices;
 +using System.Runtime.InteropServices;
 +using System.Runtime.Intrinsics;
++#if ARM64_SIMD_API_PENDING_APPROVAL_AND_OR_COREFX_MERGE
 +using System.Runtime.Intrinsics.Arm.Arm64;
++#endif // ARM64_SIMD_API_PENDING_APPROVAL_AND_OR_COREFX_MERGE
 +
 +namespace Arm64intrisicsTest
 +{
@@ -2209,6 +2211,7 @@ index 0000000..25b4a83
 +
 +        static int Main(string[] args)
 +        {
++#if ARM64_SIMD_API_PENDING_APPROVAL_AND_OR_COREFX_MERGE
 +            Console.WriteLine($"System.Runtime.Intrinsics.Arm.Arm64.Simd.IsSupported = {Simd.IsSupported}");
 +
 +            // Reflection call
@@ -2216,6 +2219,7 @@ index 0000000..25b4a83
 +            bool reflectedIsSupported = Convert.ToBoolean(typeof(Simd).GetMethod(issupported).Invoke(null, null));
 +
 +            Debug.Assert(reflectedIsSupported == Simd.IsSupported, "Reflection result does not match");
++#endif // ARM64_SIMD_API_PENDING_APPROVAL_AND_OR_COREFX_MERGE
 +
 +            initializeDataSetDefault();
 +
