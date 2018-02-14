@@ -1,0 +1,34 @@
+From 9556affe784dbf58aa5a53be1f8785a88f67e2ae Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 14 Feb 2018 12:27:03 -0500
+Subject: [PATCH] [Arm64] Mark removed compare zero nodes unused
+
+---
+ src/jit/lowerarmarch.cpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
+index a914c61..c61b232 100644
+--- a/src/jit/lowerarmarch.cpp
++++ b/src/jit/lowerarmarch.cpp
+@@ -540,7 +540,7 @@ void Lowering::LowerHWIntrinsic(GenTreeHWIntrinsic* node)
+                 node->gtHWIntrinsicId = setAllVector;
+                 node->gtOp.gtOp1      = comp->gtNewLconNode(~0ULL);
+                 BlockRange().InsertBefore(node, node->gtOp.gtOp1);
+-                BlockRange().Remove(origOp1);
++                BlockRange().Remove(origOp1, (origOp1->gtFlags & GTF_ALL_EFFECT) == 0);
+                 break;
+             case NI_ARM64_SIMD_GT_ZERO:
+                 // Unsigned > 0 ==> !(Unsigned == 0)
+@@ -559,7 +559,7 @@ void Lowering::LowerHWIntrinsic(GenTreeHWIntrinsic* node)
+                 node->gtHWIntrinsicId = setAllVector;
+                 node->gtOp.gtOp1      = comp->gtNewIconNode(0);
+                 BlockRange().InsertBefore(node, node->gtOp.gtOp1);
+-                BlockRange().Remove(origOp1);
++                BlockRange().Remove(origOp1, (origOp1->gtFlags & GTF_ALL_EFFECT) == 0);
+                 break;
+             default:
+                 assert(!"Unhandled LowerCmpUZero case");
+-- 
+2.7.4
+
