@@ -1,0 +1,28 @@
+From 3f876bef7c9a95ad01aeefdc9654db4266bd53e9 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 15 Feb 2018 22:15:53 +0000
+Subject: [PATCH] Handle matching null binder
+
+---
+ src/vm/assemblyspec.cpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/vm/assemblyspec.cpp b/src/vm/assemblyspec.cpp
+index 7f2829d..8d3f76f 100644
+--- a/src/vm/assemblyspec.cpp
++++ b/src/vm/assemblyspec.cpp
+@@ -792,9 +792,9 @@ BOOL AreSameBinderInstance(ICLRPrivBinder *pBinderA, ICLRPrivBinder *pBinderB)
+ {
+     LIMITED_METHOD_CONTRACT;
+     
+-    BOOL fIsSameInstance = FALSE;
++    BOOL fIsSameInstance = (pBinderA == pBinderB);
+     
+-    if ((pBinderA != NULL) && (pBinderB != NULL))
++    if (!fIsSameInstance && (pBinderA != NULL) && (pBinderB != NULL))
+     {
+         // Get the ID for the first binder
+         UINT_PTR binderIDA = 0, binderIDB = 0;
+-- 
+2.7.4
+
