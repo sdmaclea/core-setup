@@ -1,0 +1,39 @@
+From 54b16f0bc9782cd9378ea093d6eefb641d4c6817 Mon Sep 17 00:00:00 2001
+From: Sergey Kanzhelev <SergKanz@microsoft.com>
+Date: Fri, 22 Dec 2017 11:17:41 -0800
+Subject: [PATCH] remove ApplicationInsights patches (#244)
+
+* remove ApplicationInsights patches
+
+* revert change of csproj
+
+* Update application-insights SHA to v2.4.0-sourcebuild branch
+---
+ .../0001-Clean-up-NuGet.config.patch               | 43 ----------------------
+ .../0002-Add-clear-to-NuGet.config.patch           | 24 ------------
+ ...-that-only-builds-components-CLI-consumes.patch | 40 --------------------
+ src/application-insights                           |  2 +-
+ 4 files changed, 1 insertion(+), 108 deletions(-)
+ delete mode 100644 patches/application-insights/0001-Clean-up-NuGet.config.patch
+ delete mode 100644 patches/application-insights/0002-Add-clear-to-NuGet.config.patch
+ delete mode 100644 patches/application-insights/0003-Add-project-that-only-builds-components-CLI-consumes.patch
+
+diff --git a/patches/application-insights/0001-Clean-up-NuGet.config.patch b/patches/application-insights/0001-Clean-up-NuGet.config.patch
+deleted file mode 100644
+index 69c66dd..0000000
+diff --git a/patches/application-insights/0002-Add-clear-to-NuGet.config.patch b/patches/application-insights/0002-Add-clear-to-NuGet.config.patch
+deleted file mode 100644
+index 76d72e2..0000000
+diff --git a/patches/application-insights/0003-Add-project-that-only-builds-components-CLI-consumes.patch b/patches/application-insights/0003-Add-project-that-only-builds-components-CLI-consumes.patch
+deleted file mode 100644
+index f93fb3e..0000000
+diff --git a/src/application-insights b/src/application-insights
+index 9b5b49f..53b8094 160000
+--- a/src/application-insights
++++ b/src/application-insights
+@@ -1 +1 @@
+-Subproject commit 9b5b49f2a7697a2bf38f09ca2f2c97326c49d93b
++Subproject commit 53b80940842204f78708a538628288ff5d741a1d
+-- 
+2.7.4
+

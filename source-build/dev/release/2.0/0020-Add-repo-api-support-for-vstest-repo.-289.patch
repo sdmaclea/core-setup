@@ -1,0 +1,88 @@
+From 06dd9c6f5c4cfdd422be70d9a93a59e83a7c9840 Mon Sep 17 00:00:00 2001
+From: Arun Mahapatra <codito@users.noreply.github.com>
+Date: Mon, 27 Nov 2017 20:43:27 +0530
+Subject: [PATCH] Add repo api support for vstest repo. (#289)
+
+* Add repo api support for vstest repo.
+
+Fix #178 #96
+
+* Update vstest repo to 92c73db.
+
+* Explicitly enable DotnetSourceBuild and provide path to dotnet-cli.
+---
+ .../0001-Respect-NUGET_PACKAGES-if-it-is-set.patch |   25 -
+ ...-Copy-prebuilt-dotnet-from-known-location.patch |   53 -
+ .../vstest/0003-Fix-packing-with-newest-CLI.patch  |   37 -
+ .../0004-Fix-build.sh-argument-parsing.patch       |   48 -
+ .../vstest/0005-Fix-restore-with-newest-CLI.patch  |   49 -
+ ...006-Remove-projects-we-don-t-need-for-CLI.patch | 1118 --------------------
+ patches/vstest/0007-Fix-typo-in-build.sh.patch     |   25 -
+ patches/vstest/0008-Unify-Versions.patch           |   54 -
+ ...no-check-during-build.-See-https-github.c.patch |   44 -
+ repos/vstest.proj                                  |    4 +-
+ src/vstest                                         |    2 +-
+ 11 files changed, 3 insertions(+), 1456 deletions(-)
+ delete mode 100644 patches/vstest/0001-Respect-NUGET_PACKAGES-if-it-is-set.patch
+ delete mode 100644 patches/vstest/0002-Copy-prebuilt-dotnet-from-known-location.patch
+ delete mode 100644 patches/vstest/0003-Fix-packing-with-newest-CLI.patch
+ delete mode 100644 patches/vstest/0004-Fix-build.sh-argument-parsing.patch
+ delete mode 100644 patches/vstest/0005-Fix-restore-with-newest-CLI.patch
+ delete mode 100644 patches/vstest/0006-Remove-projects-we-don-t-need-for-CLI.patch
+ delete mode 100644 patches/vstest/0007-Fix-typo-in-build.sh.patch
+ delete mode 100644 patches/vstest/0008-Unify-Versions.patch
+ delete mode 100644 patches/vstest/0009-Suppress-Mono-check-during-build.-See-https-github.c.patch
+
+diff --git a/patches/vstest/0001-Respect-NUGET_PACKAGES-if-it-is-set.patch b/patches/vstest/0001-Respect-NUGET_PACKAGES-if-it-is-set.patch
+deleted file mode 100644
+index ac94511..0000000
+diff --git a/patches/vstest/0002-Copy-prebuilt-dotnet-from-known-location.patch b/patches/vstest/0002-Copy-prebuilt-dotnet-from-known-location.patch
+deleted file mode 100644
+index ae9efad..0000000
+diff --git a/patches/vstest/0003-Fix-packing-with-newest-CLI.patch b/patches/vstest/0003-Fix-packing-with-newest-CLI.patch
+deleted file mode 100644
+index defe520..0000000
+diff --git a/patches/vstest/0004-Fix-build.sh-argument-parsing.patch b/patches/vstest/0004-Fix-build.sh-argument-parsing.patch
+deleted file mode 100644
+index 0de8fdb..0000000
+diff --git a/patches/vstest/0005-Fix-restore-with-newest-CLI.patch b/patches/vstest/0005-Fix-restore-with-newest-CLI.patch
+deleted file mode 100644
+index e20c488..0000000
+diff --git a/patches/vstest/0006-Remove-projects-we-don-t-need-for-CLI.patch b/patches/vstest/0006-Remove-projects-we-don-t-need-for-CLI.patch
+deleted file mode 100644
+index 4d8f88f..0000000
+diff --git a/patches/vstest/0007-Fix-typo-in-build.sh.patch b/patches/vstest/0007-Fix-typo-in-build.sh.patch
+deleted file mode 100644
+index 1dfabc6..0000000
+diff --git a/patches/vstest/0008-Unify-Versions.patch b/patches/vstest/0008-Unify-Versions.patch
+deleted file mode 100644
+index c693534..0000000
+diff --git a/patches/vstest/0009-Suppress-Mono-check-during-build.-See-https-github.c.patch b/patches/vstest/0009-Suppress-Mono-check-during-build.-See-https-github.c.patch
+deleted file mode 100644
+index 0d7b2ee..0000000
+diff --git a/repos/vstest.proj b/repos/vstest.proj
+index b932b84..544cab7 100644
+--- a/repos/vstest.proj
++++ b/repos/vstest.proj
+@@ -2,9 +2,9 @@
+ <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))/dir.props" />
+   <PropertyGroup>
+-    <BuildCommand>$(ProjectDirectory)/build$(ShellExtension) -c $(Configuration) -r $(TargetRid) -v 15.3.0 -vs preview-20170628-02 -nomono</BuildCommand>
++    <BuildCommand>$(ProjectDirectory)/build$(ShellExtension) -DotnetBuildFromSource -DotnetCoreSdkDir $(DotNetCliToolDir) -c $(Configuration) -r $(TargetRid) -v 15.3.0 -vs preview-20170628-02</BuildCommand>
+     <PackagesOutput>$(ProjectDirectory)/artifacts/$(Configuration)/packages</PackagesOutput>
+-    <RepoApiImplemented>false</RepoApiImplemented>
++    <RepoApiImplemented>true</RepoApiImplemented>
+   </PropertyGroup>
+ 
+   <ItemGroup>
+diff --git a/src/vstest b/src/vstest
+index 1f13600..92c73db 160000
+--- a/src/vstest
++++ b/src/vstest
+@@ -1 +1 @@
+-Subproject commit 1f13600aec5ef4c2aa08573f4c7391c12bf22b08
++Subproject commit 92c73dba52998f912bdd7dc9f37998475f8c896b
+-- 
+2.7.4
+

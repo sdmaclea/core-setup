@@ -1,0 +1,27 @@
+From a69d57b9129ee8dc3368c65806705db99f975326 Mon Sep 17 00:00:00 2001
+From: Davis Goodin <dagood@users.noreply.github.com>
+Date: Mon, 30 Oct 2017 16:36:37 -0500
+Subject: [PATCH] Always pass CoreCLR msbuildonunsupportedplatform (#266)
+
+* Always pass CoreCLR msbuildonunsupportedplatform
+
+* Only pass msbuildonunsupportedplatform on non-Win
+---
+ repos/coreclr.proj | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/repos/coreclr.proj b/repos/coreclr.proj
+index a2f8f13..f1e4de9 100644
+--- a/repos/coreclr.proj
++++ b/repos/coreclr.proj
+@@ -3,6 +3,7 @@
+   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))/dir.props" />
+   <PropertyGroup>
+     <BuildArguments>$(Platform) $(Configuration) skiptests -PortableBuild=false </BuildArguments>
++    <BuildArguments Condition="'$(OS)' != 'Windows_NT'">$(BuildArguments) msbuildonunsupportedplatform</BuildArguments>
+     <BuildArguments Condition="$(Platform.Contains('arm'))">$(BuildArguments) skipnuget cross -skiprestore stripSymbols cmakeargs -DFEATURE_GDBJIT=TRUE</BuildArguments>
+     <BuildCommand>$(ProjectDirectory)/build$(ShellExtension) $(BuildArguments) --</BuildCommand>
+     <BuildCommand Condition="$(Platform.Contains('arm'))">$(ArmEnvironmentVariables) $(BuildCommand)</BuildCommand>
+-- 
+2.7.4
+

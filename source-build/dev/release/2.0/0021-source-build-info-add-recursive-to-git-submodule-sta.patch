@@ -1,0 +1,23 @@
+From d45e902b4753c705489ec0be9df1f35979ec8540 Mon Sep 17 00:00:00 2001
+From: Tom Deseyn <tom.deseyn@gmail.com>
+Date: Fri, 1 Dec 2017 09:50:56 +0100
+Subject: [PATCH] source-build-info: add recursive to git submodule status
+
+---
+ build-source-tarball.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/build-source-tarball.sh b/build-source-tarball.sh
+index fb1ecac..0acb742 100755
+--- a/build-source-tarball.sh
++++ b/build-source-tarball.sh
+@@ -74,5 +74,5 @@ source-build:
+  $(git rev-parse HEAD) . ($(git describe --always HEAD))
+ 
+ submodules:
+-$(git submodule status)
++$(git submodule status --recursive)
+ EOF
+-- 
+2.7.4
+

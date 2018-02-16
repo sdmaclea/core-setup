@@ -1,0 +1,122 @@
+From 1b2419cb24728ea58fd21bbedd4a418f2efd729b Mon Sep 17 00:00:00 2001
+From: Chris Rummel <crummel@microsoft.com>
+Date: Thu, 9 Nov 2017 15:07:40 -0600
+Subject: [PATCH] Some improvements for building subrepos. - Stop after the
+ first error.  This also means the "See <repo>.log for details" message will
+ now correctly identify the broken repo. - Remove explicit filename log
+ parameter on xliff-tasks and cli-deps-satellites.  This stops those repos
+ from outputting to the screen as well as the file during the build. - Add
+ messages for packaging and some custom steps so we don't hang between repos
+ with no status reporting.
+
+---
+ build.proj                     |  2 +-
+ repos/cli-deps-satellites.proj |  2 +-
+ repos/corefx.proj              |  2 ++
+ repos/dir.targets              | 10 +++++++++-
+ repos/roslyn.proj              |  2 ++
+ repos/xliff-tasks.proj         |  2 +-
+ 6 files changed, 16 insertions(+), 4 deletions(-)
+
+diff --git a/build.proj b/build.proj
+index aae6591..eb2ab46 100644
+--- a/build.proj
++++ b/build.proj
+@@ -5,7 +5,7 @@
+   <Target Name="Build" DependsOnTargets="PrepareOutput;InitBuild">
+     <Message Text="Build Environment: $(Platform) $(Configuration) $(TargetOS) $(TargetRid)" />
+ 
+-    <MSBuild Projects="repos\$(RootRepo).proj" Targets="Build" BuildInParallel="$(BuildInParallel)" />
++    <MSBuild Projects="repos\$(RootRepo).proj" Targets="Build" BuildInParallel="$(BuildInParallel)" StopOnFirstFailure="true" />
+   </Target>
+ 
+   <Target Name="PrepareOutput">
+diff --git a/repos/cli-deps-satellites.proj b/repos/cli-deps-satellites.proj
+index 6fc5b60..58e3066 100644
+--- a/repos/cli-deps-satellites.proj
++++ b/repos/cli-deps-satellites.proj
+@@ -17,7 +17,7 @@
+   <Target Name="RepoBuild">
+     <Exec Command="$(DotnetToolCommand) restore $(ProjectDirectory)src $(RedirectRepoOutputToLog)" />
+ 
+-    <Exec Command="$(DotnetToolCommand) build $(ProjectDirectory)src /v:normal /flp:Verbosity=Diag;LogFile=$(ProjectDirectory)msbuild.log $(RedirectRepoOutputToLog)"
++    <Exec Command="$(DotnetToolCommand) build $(ProjectDirectory)src /v:normal /flp:Verbosity=Diag $(RedirectRepoOutputToLog)"
+           EnvironmentVariables="@(EnvironmentVariables)" />
+   </Target>
+ </Project>
+diff --git a/repos/corefx.proj b/repos/corefx.proj
+index 3853dc7..24d22e0 100644
+--- a/repos/corefx.proj
++++ b/repos/corefx.proj
+@@ -35,8 +35,10 @@
+ 
+   <Target Name="BuildNetStandardLibraryNetFramework"
+           BeforeTargets="Package">
++    <Message Importance="High" Text="[$([System.DateTime]::Now.ToString('HH:mm:ss.ff'))] Building .NET Standard Library for 'corefx'" />
+     <Exec Command="$(FrameworkBuildCommand) $(RepoApiArgs) $(RedirectRepoOutputToLog)"
+           WorkingDirectory="$(ProjectDirectory)"
+           EnvironmentVariables="@(EnvironmentVariables)" />
++    <Message Importance="High" Text="[$([System.DateTime]::Now.ToString('HH:mm:ss.ff'))] Building .NET Standard Library for 'corefx'...done" />
+   </Target>
+ </Project>
+diff --git a/repos/dir.targets b/repos/dir.targets
+index 7ccc1c5..e8d536d 100644
+--- a/repos/dir.targets
++++ b/repos/dir.targets
+@@ -60,7 +60,7 @@
+       <_DependentProject Include="@(RepositoryReference -> '%(Identity).proj')" />
+     </ItemGroup>
+ 
+-    <MSBuild Projects="@(_DependentProject)" Targets="Build" BuildInParallel="$(BuildInParallel)" />
++    <MSBuild Projects="@(_DependentProject)" Targets="Build" BuildInParallel="$(BuildInParallel)" StopOnFirstFailure="true" />
+   </Target>
+ 
+   <Target Name="ApplyPatches" Condition="Exists('$(PatchesDir)$(RepositoryName)') and '$(SkipPatches)' != 'true'">
+@@ -138,7 +138,15 @@
+   </Target>
+ 
+   <Target Name="Package" AfterTargets="Build" Condition="'$(BuildPackagesCommand)' != ''">
++    <Message Importance="High" Text="[$([System.DateTime]::Now.ToString('HH:mm:ss.ff'))] Packaging '$(RepositoryName)'" />
++    <Message Importance="High" Text="Running command:" />
++    <Message Importance="High" Text="  $(BuildPackagesCommand)" />
++    <Message Importance="High" Text="  Log: $(RepoConsoleLogFile)" />
++    <Message Importance="High" Text="  With Enivornment Varibles:" />
++    <Message Importance="High" Text="    %(EnvironmentVariables.Identity)" />
+     <Exec Command="$(BuildPackagesCommand) $(RedirectRepoOutputToLog)" WorkingDirectory="$(ProjectDirectory)" EnvironmentVariables="@(EnvironmentVariables)" />
++    <Message Importance="High" Text="[$([System.DateTime]::Now.ToString('HH:mm:ss.ff'))] Packaging '$(RepositoryName)'...done" />
++    <OnError ExecuteTargets="ReportRepoError" />
+   </Target>
+ 
+   <Target Name="GatherBuiltPackages">
+diff --git a/repos/roslyn.proj b/repos/roslyn.proj
+index 1ad0a99..907aaca 100644
+--- a/repos/roslyn.proj
++++ b/repos/roslyn.proj
+@@ -45,9 +45,11 @@
+   </Target>
+ 
+   <Target Name="Package" AfterTargets="Build">
++    <Message Importance="High" Text="[$([System.DateTime]::Now.ToString('HH:mm:ss.ff'))] Packaging 'roslyn'" />
+     <Exec Command="$(DotnetToolCommand) pack --no-build $(ProjectDirectory)/src/NuGet/PackHelper.csproj -p:Configuration=$(Configuration) -p:NuspecFile=%(NuSpecFiles.Identity) -p:NuspecBasePath=$(ProjectDirectory)/Binaries/$(Configuration) -p:PackageOutputPath=$(PackagesOutput) $(RedirectRepoOutputToLog)"
+           WorkingDirectory="$(ProjectDirectory)"
+           EnvironmentVariables="@(EnvironmentVariables)" />
++    <Message Importance="High" Text="[$([System.DateTime]::Now.ToString('HH:mm:ss.ff'))] Packaging 'roslyn'...done" />
+   </Target>
+ 
+ </Project>
+diff --git a/repos/xliff-tasks.proj b/repos/xliff-tasks.proj
+index 1f55d5c..5157863 100644
+--- a/repos/xliff-tasks.proj
++++ b/repos/xliff-tasks.proj
+@@ -14,7 +14,7 @@
+   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))/dir.targets" />
+ 
+   <Target Name="RepoBuild">
+-    <Exec Command="$(DotnetToolCommand) pack $(ProjectDirectory)src\XliffTasks\XliffTasks.csproj /v:normal /flp:Verbosity=Diag;LogFile=$(ProjectDirectory)msbuild.log $(RedirectRepoOutputToLog)"
++    <Exec Command="$(DotnetToolCommand) pack $(ProjectDirectory)src\XliffTasks\XliffTasks.csproj /v:normal /flp:Verbosity=Diag $(RedirectRepoOutputToLog)"
+           EnvironmentVariables="@(EnvironmentVariables)" />
+   </Target>
+ </Project>
+-- 
+2.7.4
+
