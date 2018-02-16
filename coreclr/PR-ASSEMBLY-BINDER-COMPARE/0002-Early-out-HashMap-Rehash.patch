@@ -1,17 +1,17 @@
-From 7f8bcb22d5e0e15ac6e86b85d93cf9494a3e06f7 Mon Sep 17 00:00:00 2001
+From ef53c1449de174e89492adfa09cbeabd6a2fe414 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Thu, 15 Feb 2018 22:25:37 +0000
 Subject: [PATCH] Early out HashMap::Rehash()
 
 ---
- src/vm/hash.cpp | 11 +++++++++--
- 1 file changed, 9 insertions(+), 2 deletions(-)
+ src/vm/hash.cpp | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
 
 diff --git a/src/vm/hash.cpp b/src/vm/hash.cpp
-index 6b6b213..9821f42 100644
+index 6b6b213..20eddfd 100644
 --- a/src/vm/hash.cpp
 +++ b/src/vm/hash.cpp
-@@ -878,9 +878,16 @@ void HashMap::Rehash()
+@@ -878,9 +878,18 @@ void HashMap::Rehash()
      _ASSERTE (OwnLock());
  #endif
  
@@ -19,14 +19,16 @@ index 6b6b213..9821f42 100644
 +    UPTR newPrimeIndex = NewSize();
  
 -    ASSERT(m_iPrimeIndex < 70);
++    ASSERT(newPrimeIndex < g_rgNumPrimes);
++
 +    if ((m_iPrimeIndex == newPrimeIndex) && (m_cbDeletes == 0))
 +    {
 +        return;
 +    }
 +
-+    DWORD cbNewSize = g_rgPrimes[m_iPrimeIndex = newPrimeIndex];
++    m_iPrimeIndex = newPrimeIndex;
 +
-+    ASSERT(m_iPrimeIndex < g_rgNumPrimes);
++    DWORD cbNewSize = g_rgPrimes[m_iPrimeIndex];
  
      Bucket* rgBuckets = Buckets();
      UPTR cbCurrSize =   GetSize(rgBuckets);
