@@ -1,0 +1,26 @@
+From 2569676870a173fbe20c358c293b429f8b89e754 Mon Sep 17 00:00:00 2001
+From: Ian Hays <ianha@microsoft.com>
+Date: Tue, 20 Feb 2018 10:45:42 -0800
+Subject: [PATCH] Update buildBootstrapcli script
+
+The `-arch` parameter does not exist and will cause failures if used.
+---
+ Documentation/boostrap-new-os.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Documentation/boostrap-new-os.md b/Documentation/boostrap-new-os.md
+index 6281ed4..16b7d46 100644
+--- a/Documentation/boostrap-new-os.md
++++ b/Documentation/boostrap-new-os.md
+@@ -58,7 +58,7 @@ Options:
+ ```
+ So, for example, when we were creating bootstrap CLI for RHEL / CentOS 6, the command was:
+ ```bash
+-./buildbootstrapcli.sh -arch x64 -rid rhel.6 -release -os Linux -seedcli ~/seed-cli
++./buildbootstrapcli.sh -rid rhel.6 -release -os Linux -seedcli ~/seed-cli
+ ```
+ After running the script, check the console output. If the last line printed is `**** Bootstrap CLI was successfully built  ****`, then everything went fine and the bootstrap CLI is ready. You can find it in the `<Rid>-<Architecture>/dotnetcli` subfolder. So for the example command above, it would be `rhel.6-x64/dotnetcli`.
+ If there were build errors, they need to be looked into and fixed. After that run the `buildbootstrapcli.sh` with the same arguments again. Repeat until everything builds.
+-- 
+2.7.4
+
