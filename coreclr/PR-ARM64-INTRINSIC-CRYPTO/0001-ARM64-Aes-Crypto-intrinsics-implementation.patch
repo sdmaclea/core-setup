@@ -1,0 +1,372 @@
+From 90e555ceb85536db6257d55785571c9e1de6040e Mon Sep 17 00:00:00 2001
+From: Debayan Ghosh <debayang.qdt@qualcommdatacenter.com>
+Date: Wed, 21 Feb 2018 12:11:23 +0530
+Subject: [PATCH 1/4] ARM64 Aes Crypto intrinsics implementation
+
+---
+ src/jit/codegenarm64.cpp                           | 51 ++++++++++++++++++++++
+ src/jit/codegenlinear.h                            |  1 +
+ src/jit/emitarm64.cpp                              | 23 ++++++++++
+ src/jit/emitfmtsarm64.h                            |  1 +
+ src/jit/hwintrinsicArm64.cpp                       |  2 +
+ src/jit/hwintrinsicArm64.h                         |  1 +
+ src/jit/hwintrinsiclistArm64.h                     |  5 +++
+ src/jit/instrsarm64.h                              | 12 +++++
+ src/mscorlib/System.Private.CoreLib.csproj         |  4 +-
+ .../Arm/Arm64/Aes.PlatformNotSupported.cs          | 40 +++++++++++++++++
+ .../src/System/Runtime/Intrinsics/Arm/Arm64/Aes.cs | 40 +++++++++++++++++
+ 11 files changed, 179 insertions(+), 1 deletion(-)
+ create mode 100644 src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Aes.PlatformNotSupported.cs
+ create mode 100644 src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Aes.cs
+
+diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
+index 5463e2a..07f001f 100644
+--- a/src/jit/codegenarm64.cpp
++++ b/src/jit/codegenarm64.cpp
+@@ -5011,6 +5011,9 @@ void CodeGen::genHWIntrinsic(GenTreeHWIntrinsic* node)
+         case HWIntrinsicInfo::SimdUnaryOp:
+             genHWIntrinsicSimdUnaryOp(node);
+             break;
++        case HWIntrinsicInfo::SimdBinaryOverlapOp:
++            genHWIntrinsicSimdBinaryOverlapOp(node);
++            break;
+         default:
+             NYI("HWIntrinsic form not implemented");
+     }
+@@ -5579,6 +5582,54 @@ void CodeGen::genHWIntrinsicSimdUnaryOp(GenTreeHWIntrinsic* node)
+     genProduceReg(node);
+ }
+ 
++//------------------------------------------------------------------------
++// genHWIntrinsicSimdBinaryOverlapOp:
++//
++// Produce code for a GT_HWIntrinsic node with form SimdBinaryOverlapOp.
++//
++// Consumes two SIMD operands and produces a SIMD result.
++// First operand is both source and destination.
++//
++// Arguments:
++//    node - the GT_HWIntrinsic node
++//
++// Return Value:
++//    None.
++//
++void CodeGen::genHWIntrinsicSimdBinaryOverlapOp(GenTreeHWIntrinsic* node)
++{
++    GenTree*  op1       = node->gtGetOp1();
++    GenTree*  op2       = node->gtGetOp2();
++    var_types baseType  = node->gtSIMDBaseType;
++    regNumber targetReg = node->gtRegNum;
++
++    assert(targetReg != REG_NA);
++
++    genConsumeOperands(node);
++
++    regNumber op1Reg = op1->gtRegNum;
++    regNumber op2Reg = op2->gtRegNum;
++
++    assert(genIsValidFloatReg(op1Reg));
++    assert(genIsValidFloatReg(op2Reg));
++    assert(genIsValidFloatReg(targetReg));
++
++    instruction ins = getOpForHWIntrinsic(node, baseType);
++    assert(ins != INS_invalid);
++
++    bool     is16Byte = (node->gtSIMDSize > 8);
++    emitAttr attr     = is16Byte ? EA_16BYTE : EA_8BYTE;
++    insOpts  opt      = genGetSimdInsOpt(is16Byte, baseType);
++
++    if(targetReg != op1Reg)
++    {
++        getEmitter()->emitIns_R_R(INS_mov, attr, targetReg, op1Reg);
++    }
++    getEmitter()->emitIns_R_R(ins, attr, targetReg, op2Reg, opt);
++
++    genProduceReg(node);
++}
++
+ #endif // FEATURE_HW_INTRINSICS
+ 
+ /*****************************************************************************
+diff --git a/src/jit/codegenlinear.h b/src/jit/codegenlinear.h
+index 3b37684..cd0aeac 100644
+--- a/src/jit/codegenlinear.h
++++ b/src/jit/codegenlinear.h
+@@ -145,6 +145,7 @@ void genHWIntrinsicSimdInsertOp(GenTreeHWIntrinsic* node);
+ void genHWIntrinsicSimdSelectOp(GenTreeHWIntrinsic* node);
+ void genHWIntrinsicSimdSetAllOp(GenTreeHWIntrinsic* node);
+ void genHWIntrinsicSimdUnaryOp(GenTreeHWIntrinsic* node);
++void genHWIntrinsicSimdBinaryOverlapOp(GenTreeHWIntrinsic* node);
+ template <typename HWIntrinsicSwitchCaseBody>
+ void genHWIntrinsicSwitchTable(regNumber swReg, regNumber tmpReg, int swMax, HWIntrinsicSwitchCaseBody emitSwCase);
+ #endif // defined(_TARGET_XARCH_)
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index 46782ae..a902d7a 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -548,6 +548,7 @@ void emitter::emitInsSanityCheck(instrDesc* id)
+ 
+         case IF_DV_2A: // DV_2A   .Q.......X...... ......nnnnnddddd      Vd Vn      (fabs, fcvt - vector)
+         case IF_DV_2M: // DV_2M   .Q......XX...... ......nnnnnddddd      Vd Vn      (abs, neg   - vector)
++        case IF_DV_2P: // DV_2P   ................ ......nnnnnddddd      Vd Vn      (aes)
+             assert(isValidVectorDatasize(id->idOpSize()));
+             assert(isValidArrangement(id->idOpSize(), id->idInsOpt()));
+             assert(isVectorRegister(id->idReg1()));
+@@ -829,6 +830,7 @@ bool emitter::emitInsMayWriteToGCReg(instrDesc* id)
+         case IF_DV_2K:  // DV_2K   .........X.mmmmm ......nnnnn.....      Vn Vm      (fcmp)
+         case IF_DV_2L:  // DV_2L   ........XX...... ......nnnnnddddd      Vd Vn      (abs, neg - scalar)
+         case IF_DV_2M:  // DV_2M   .Q......XX...... ......nnnnnddddd      Vd Vn      (abs, neg - vector)
++        case IF_DV_2P:  // DV_2P   ................ ......nnnnnddddd      Vd Vn      (aes) - Vd both source and dest
+         case IF_DV_3A:  // DV_3A   .Q......XX.mmmmm ......nnnnnddddd      Vd Vn Vm   (vector)
+         case IF_DV_3AI: // DV_3AI  .Q......XXLMmmmm ....H.nnnnnddddd      Vd Vn Vm[] (vector)
+         case IF_DV_3B:  // DV_3B   .Q.......X.mmmmm ......nnnnnddddd      Vd Vn Vm   (vector)
+@@ -1975,6 +1977,7 @@ emitter::code_t emitter::emitInsCode(instruction ins, insFormat fmt)
+         case IF_DV_2M:
+         case IF_DV_2N:
+         case IF_DV_2O:
++        case IF_DV_2P:
+         case IF_DV_3A:
+         case IF_DV_3AI:
+         case IF_DV_3B:
+@@ -4275,6 +4278,17 @@ void emitter::emitIns_R_R(
+                 fmt = IF_DV_2G;
+             }
+             break;
++        case INS_aesd:
++        case INS_aese:
++        case INS_aesmc:
++        case INS_aesimc:
++            assert(isVectorRegister(reg1));
++            assert(isVectorRegister(reg2));
++            assert(isValidVectorDatasize(size));
++            elemsize = optGetElemsize(opt);
++            assert(elemsize == EA_1BYTE);
++            fmt = IF_DV_2P;
++            break;
+ 
+         default:
+             unreached();
+@@ -9808,6 +9822,14 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
+             dst += emitOutput_Instr(dst, code);
+             break;
+ 
++        case IF_DV_2P: // DV_2P   ............... ......nnnnnddddd      Vd Vn      (aes)
++            elemsize = optGetElemsize(id->idInsOpt());
++            code     = emitInsCode(ins, fmt);
++            code |= insEncodeReg_Vd(id->idReg1());       // ddddd
++            code |= insEncodeReg_Vn(id->idReg2());       // nnnnn
++            dst += emitOutput_Instr(dst, code);
++            break;
++
+         case IF_DV_3A: // DV_3A   .Q......XX.mmmmm ......nnnnnddddd      Vd Vn Vm   (vector)
+             code     = emitInsCode(ins, fmt);
+             elemsize = optGetElemsize(id->idInsOpt());
+@@ -11196,6 +11218,7 @@ void emitter::emitDispIns(
+ 
+         case IF_DV_2A: // DV_2A   .Q.......X...... ......nnnnnddddd      Vd Vn   (fabs, fcvt - vector)
+         case IF_DV_2M: // DV_2M   .Q......XX...... ......nnnnnddddd      Vd Vn   (abs, neg   - vector)
++        case IF_DV_2P: // DV_2P   ................ ......nnnnnddddd      Vd Vn   (aes)
+             emitDispVectorReg(id->idReg1(), id->idInsOpt(), true);
+             emitDispVectorReg(id->idReg2(), id->idInsOpt(), false);
+             break;
+diff --git a/src/jit/emitfmtsarm64.h b/src/jit/emitfmtsarm64.h
+index 49b2dff..b2bf076 100644
+--- a/src/jit/emitfmtsarm64.h
++++ b/src/jit/emitfmtsarm64.h
+@@ -188,6 +188,7 @@ IF_DEF(DV_2L, IS_NONE, NONE) // DV_2L   ........XX...... ......nnnnnddddd      V
+ IF_DEF(DV_2M, IS_NONE, NONE) // DV_2M   .Q......XX...... ......nnnnnddddd      Vd Vn      (abs, neg - vector)
+ IF_DEF(DV_2N, IS_NONE, NONE) // DV_2N   .........iiiiiii ......nnnnnddddd      Vd Vn imm  (shift - scalar)
+ IF_DEF(DV_2O, IS_NONE, NONE) // DV_2O   .Q.......iiiiiii ......nnnnnddddd      Vd Vn imm  (shift - vector)
++IF_DEF(DV_2P, IS_NONE, NONE) // DV_2P   .,.............. ......nnnnnddddd      Vd Vn      (Vd used as both source and destination)
+ 
+ IF_DEF(DV_3A, IS_NONE, NONE)  // DV_3A   .Q......XX.mmmmm ......nnnnnddddd      Vd Vn Vm   (vector)
+ IF_DEF(DV_3AI, IS_NONE, NONE) // DV_3AI  .Q......XXLMmmmm ....H.nnnnnddddd      Vd Vn Vm[] (vector by elem)
+diff --git a/src/jit/hwintrinsicArm64.cpp b/src/jit/hwintrinsicArm64.cpp
+index 394ab21..3ec9f59 100644
+--- a/src/jit/hwintrinsicArm64.cpp
++++ b/src/jit/hwintrinsicArm64.cpp
+@@ -166,6 +166,7 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
+         case HWIntrinsicInfo::SimdSelectOp:
+         case HWIntrinsicInfo::SimdSetAllOp:
+         case HWIntrinsicInfo::SimdUnaryOp:
++        case HWIntrinsicInfo::SimdBinaryOverlapOp:
+             simdClass = sig->retTypeClass;
+             break;
+         case HWIntrinsicInfo::SimdExtractOp:
+@@ -196,6 +197,7 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
+             return impUnsupportedHWIntrinsic(CORINFO_HELP_THROW_PLATFORM_NOT_SUPPORTED, method, sig, mustExpand);
+ 
+         case HWIntrinsicInfo::SimdBinaryOp:
++        case HWIntrinsicInfo::SimdBinaryOverlapOp:
+             // op1 is the first operand
+             // op2 is the second operand
+             op2 = impSIMDPopStack(simdType);
+diff --git a/src/jit/hwintrinsicArm64.h b/src/jit/hwintrinsicArm64.h
+index 7fcde60..f8e84d7 100644
+--- a/src/jit/hwintrinsicArm64.h
++++ b/src/jit/hwintrinsicArm64.h
+@@ -23,6 +23,7 @@ struct HWIntrinsicInfo
+         // SIMD common forms
+         SimdBinaryOp, // SIMD intrinsics which take two vector operands and return a vector
+         SimdUnaryOp,  // SIMD intrinsics which take one vector operand and return a vector
++        SimdBinaryOverlapOp, // Same as SimdBinaryOp , with destination vector same as first source vector
+         // SIMD custom forms
+         SimdExtractOp, // SIMD intrinsics which take one vector operand and a lane index and return an element
+         SimdInsertOp,  // SIMD intrinsics which take one vector operand and a lane index and value and return a vector
+diff --git a/src/jit/hwintrinsiclistArm64.h b/src/jit/hwintrinsiclistArm64.h
+index 082bfe1..7868a5f 100644
+--- a/src/jit/hwintrinsiclistArm64.h
++++ b/src/jit/hwintrinsiclistArm64.h
+@@ -80,6 +80,11 @@ HARDWARE_INTRINSIC(NI_ARM64_SIMD_GetItem,         Simd,     Extract,
+ HARDWARE_INTRINSIC(NI_ARM64_SIMD_SetItem,         Simd,     Insert,                         SimdInsertOp,  INS_mov,     INS_mov,     INS_mov,      None )
+ HARDWARE_INTRINSIC(NI_ARM64_SIMD_SetAllVector64,  Simd,     SetAllVector64,                 SimdSetAllOp,  INS_dup,     INS_dup,     INS_dup,      None )
+ HARDWARE_INTRINSIC(NI_ARM64_SIMD_SetAllVector128, Simd,     SetAllVector128,                SimdSetAllOp,  INS_dup,     INS_dup,     INS_dup,      None )
++//Aes
++HARDWARE_INTRINSIC(NI_ARM64_AesEncrypt,           Aes,      Encrypt,                        SimdBinaryOverlapOp,   INS_invalid,    INS_invalid, INS_aese,      None )
++HARDWARE_INTRINSIC(NI_ARM64_AesDecrypt,           Aes,      Decrypt,                        SimdBinaryOverlapOp,   INS_invalid,    INS_invalid, INS_aesd,      None )
++HARDWARE_INTRINSIC(NI_ARM64_AesMixColumns,        Aes,      MixColumns,                     SimdUnaryOp,           INS_invalid,    INS_invalid, INS_aesmc,     None )
++HARDWARE_INTRINSIC(NI_ARM64_AesInvMixColumns,     Aes,      InverseMixColumns,              SimdUnaryOp,           INS_invalid,    INS_invalid, INS_aesimc,    None )
+ 
+ #endif
+ 
+diff --git a/src/jit/instrsarm64.h b/src/jit/instrsarm64.h
+index 433bde7..fcc2246 100644
+--- a/src/jit/instrsarm64.h
++++ b/src/jit/instrsarm64.h
+@@ -828,6 +828,18 @@ INST1(cset,    "cset",   0, 0, IF_DR_1D,  0x1A9F07E0)
+ INST1(csetm,   "csetm",  0, 0, IF_DR_1D,  0x5A9F03E0)
+                                    //  csetm   Rd,cond              DR_1D  X101101010011111 cccc0011111ddddd   5A9F 03E0   Rd cond
+ 
++INST1(aese,    "aese",   0, 0, IF_DV_2P,  0x4E284800)
++                                   //  aese   Vd.16B,Vn.16B         DV_2P  0100111000101000 010010nnnnnddddd   4E28 4800   Vd.16B Vn.16B  (vector)
++
++INST1(aesd,    "aesd",   0, 0, IF_DV_2P,  0x4E285800)
++                                   //  aesd   Vd.16B,Vn.16B         DV_2P  0100111000101000 010110nnnnnddddd   4E28 5800   Vd.16B Vn.16B  (vector)
++
++INST1(aesmc,   "aesmc",  0, 0, IF_DV_2P,  0x4E286800)
++                                   //  aesmc  Vd.16B,Vn.16B         DV_2P  0100111000101000 011010nnnnnddddd   4E28 6800   Vd.16B Vn.16B  (vector)
++
++INST1(aesimc,  "aesimc", 0, 0, IF_DV_2P,  0x4E287800)
++                                   //  aesimc Vd.16B,Vn.16B         DV_2P  0100111000101000 011110nnnnnddddd   4E28 7800   Vd.16B Vn.16B  (vector)
++
+ INST1(rev,     "rev",    0, 0, IF_DR_2G,  0x5AC00800)
+                                    //  rev     Rd,Rm                DR_2G  X101101011000000 00001Xnnnnnddddd   5AC0 0800   Rd Rn
+ 
+diff --git a/src/mscorlib/System.Private.CoreLib.csproj b/src/mscorlib/System.Private.CoreLib.csproj
+index aec27ca..a9821ce 100644
+--- a/src/mscorlib/System.Private.CoreLib.csproj
++++ b/src/mscorlib/System.Private.CoreLib.csproj
+@@ -298,9 +298,11 @@
+   </ItemGroup>
+   <ItemGroup Condition="'$(Platform)' == 'arm64'">
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Simd.cs" />
++    <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Aes.cs" />
+   </ItemGroup>
+   <ItemGroup Condition="'$(Platform)' != 'arm64'">
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Simd.PlatformNotSupported.cs" />
++    <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Aes.PlatformNotSupported.cs" />
+   </ItemGroup>
+   <ItemGroup>
+     <Compile Include="$(BclSourcesRoot)\System\AppContext\AppContext.cs" />
+@@ -669,4 +671,4 @@
+   </ItemGroup>
+ 
+   <Import Project="GenerateCompilerResponseFile.targets" />
+-</Project>
+\ No newline at end of file
++</Project>
+diff --git a/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Aes.PlatformNotSupported.cs b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Aes.PlatformNotSupported.cs
+new file mode 100644
+index 0000000..0ad9634
+--- /dev/null
++++ b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Aes.PlatformNotSupported.cs
+@@ -0,0 +1,40 @@
++using System.Runtime.CompilerServices;
++using System.Runtime.Intrinsics;
++
++namespace System.Runtime.Intrinsics.Arm.Arm64
++{
++    /// <summary>
++    /// This class provides access to the Arm64 AES Crypto intrinsics
++    ///
++    /// Arm64 CPU indicate support for this feature by setting
++    /// ID_AA64ISAR0_EL1.AES is 1 or better
++    /// </summary>
++    [CLSCompliant(false)]
++    public static class Aes
++    {
++        public static bool IsSupported {  get { return false; } }
++        // <summary>
++        /// Performs AES single round decryption
++        /// vaesdq_u8 (uint8x16_t data, uint8x16_t key)
++        ///</summary>
++        public static Vector128<byte> Decrypt(Vector128<byte> value, Vector128<byte> roundKey) { throw new PlatformNotSupportedException(); }
++
++        // <summary>
++        /// Performs AES single round encryption
++        /// vaeseq_u8 (uint8x16_t data, uint8x16_t key)
++        ///</summary>
++        public static Vector128<byte> Encrypt(Vector128<byte> value, Vector128<byte> roundKey) { throw new PlatformNotSupportedException(); }
++
++        // <summary>
++        /// Performs AES  Mix Columns
++        /// vaesmcq_u8 (uint8x16_t data)
++        ///</summary>
++        public static Vector128<byte> MixColumns(Vector128<byte> value) { throw new PlatformNotSupportedException(); }
++
++        // <summary>
++        /// Performs AES inverse mix columns
++        /// vaesimcq_u8  (uint8x16_t data)
++        ///</summary>
++        public static Vector128<byte> InverseMixColumns(Vector128<byte> value) { throw new PlatformNotSupportedException(); }
++    }
++}
+diff --git a/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Aes.cs b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Aes.cs
+new file mode 100644
+index 0000000..24c9342
+--- /dev/null
++++ b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Aes.cs
+@@ -0,0 +1,40 @@
++using System.Runtime.CompilerServices;
++using System.Runtime.Intrinsics;
++
++namespace System.Runtime.Intrinsics.Arm.Arm64
++{
++    /// <summary>
++    /// This class provides access to the Arm64 AES Crypto intrinsics
++    ///
++    /// Arm64 CPU indicate support for this feature by setting
++    /// ID_AA64ISAR0_EL1.AES is 1 or better
++    /// </summary>
++    [CLSCompliant(false)]
++    public static class Aes
++    {
++        public static bool IsSupported { get => IsSupported; }
++        // <summary>
++        /// Performs AES single round decryption
++        /// vaesdq_u8 (uint8x16_t data, uint8x16_t key)
++        ///</summary>
++        public static Vector128<byte> Decrypt(Vector128<byte> value, Vector128<byte> roundKey) => Decrypt(value, roundKey);
++
++        // <summary>
++        /// Performs AES single round encryption
++        /// vaeseq_u8 (uint8x16_t data, uint8x16_t key)
++        ///</summary>
++        public static Vector128<byte> Encrypt(Vector128<byte> value, Vector128<byte> roundKey) => Encrypt(value, roundKey);
++
++        // <summary>
++        /// Performs AES  Mix Columns
++        /// vaesmcq_u8 (uint8x16_t data)
++        ///</summary>
++        public static Vector128<byte> MixColumns(Vector128<byte> value) => MixColumns(value);
++
++        // <summary>
++        /// Performs AES inverse mix columns
++        /// vaesimcq_u8  (uint8x16_t data)
++        ///</summary>
++        public static Vector128<byte> InverseMixColumns(Vector128<byte> value) => InverseMixColumns(value);
++    }
++}
+-- 
+2.7.4
+

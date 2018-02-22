@@ -1,0 +1,301 @@
+From f0adfb16fa2f2aa247120d49ce30fe97f9e12604 Mon Sep 17 00:00:00 2001
+From: Debayan Ghosh <debayang.qdt@qualcommdatacenter.com>
+Date: Wed, 21 Feb 2018 12:24:26 +0530
+Subject: [PATCH 3/4] ARM64 SHA256 Crypto intrinsics implementation
+
+---
+ src/jit/emitarm64.cpp                              | 27 ++++++++++++++
+ src/jit/emitfmtsarm64.h                            |  1 +
+ src/jit/hwintrinsiclistArm64.h                     |  8 ++++-
+ src/jit/instr.h                                    |  2 +-
+ src/jit/instrsarm64.h                              | 12 +++++++
+ src/jit/jitee.h                                    |  2 +-
+ src/mscorlib/System.Private.CoreLib.csproj         |  2 ++
+ .../Arm/Arm64/Sha256.PlatformNotSupported.cs       | 41 ++++++++++++++++++++++
+ .../System/Runtime/Intrinsics/Arm/Arm64/Sha256.cs  | 41 ++++++++++++++++++++++
+ 9 files changed, 133 insertions(+), 3 deletions(-)
+ create mode 100644 src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Sha256.PlatformNotSupported.cs
+ create mode 100644 src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Sha256.cs
+
+diff --git a/src/jit/emitarm64.cpp b/src/jit/emitarm64.cpp
+index 09c9735..f362203 100644
+--- a/src/jit/emitarm64.cpp
++++ b/src/jit/emitarm64.cpp
+@@ -774,6 +774,7 @@ void emitter::emitInsSanityCheck(instrDesc* id)
+             break;
+ 
+         case IF_DV_3G: // DV_3G   ...........mmmmm ......nnnnnddddd      Vd Vn Vm
++        case IF_DV_3H: // DV_3H   ...........mmmmm ......nnnnnddddd      Qd Qn Vm
+             assert(isValidVectorDatasize(id->idOpSize()));
+             assert(isValidArrangement(id->idOpSize(), id->idInsOpt()));
+             assert(isVectorRegister(id->idReg1()));
+@@ -836,6 +837,7 @@ bool emitter::emitInsMayWriteToGCReg(instrDesc* id)
+         case IF_DR_3E: // DR_3E   X........X.mmmmm ssssssnnnnnddddd      Rd Rn Rm imm(0-63)
+         case IF_DV_3F: // DV_3F   ...........mmmmm ......nnnnnddddd      Qd Sn Vm (vector) - Qd both source and dest
+         case IF_DV_3G: // DV_3G   ...........mmmmm ......nnnnnddddd      Vd Vn Vm (vector) - Vd both source and dest
++        case IF_DV_3H: // DV_3H   ...........mmmmm ......nnnnnddddd      Qd Qn Vm (vector) - Qd both source and dest
+ 
+         case IF_DR_4A: // DR_4A   X..........mmmmm .aaaaannnnnddddd      Rd Rn Rm Ra
+ 
+@@ -2013,6 +2015,7 @@ emitter::code_t emitter::emitInsCode(instruction ins, insFormat fmt)
+         case IF_DV_3E:
+         case IF_DV_3F:
+         case IF_DV_3G:
++        case IF_DV_3H:
+         case IF_DV_4A:
+         case IF_SN_0A:
+         case IF_SI_0A:
+@@ -4324,6 +4327,7 @@ void emitter::emitIns_R_R(
+             fmt = IF_DR_2J;
+             break;
+ 
++        case INS_sha256su0:
+         case INS_sha1su1:
+             assert(isVectorRegister(reg1));
+             assert(isVectorRegister(reg2));
+@@ -5395,6 +5399,22 @@ void emitter::emitIns_R_R_R(
+             fmt = IF_LS_3D;
+             break;
+ 
++        case INS_sha256h:
++        case INS_sha256h2:
++            assert(isValidVectorDatasize(size));
++            assert(isVectorRegister(reg1));
++            assert(isVectorRegister(reg2));
++            assert(isVectorRegister(reg3));
++            if (opt == INS_OPTS_NONE)
++            {
++                elemsize = EA_4BYTE;
++                opt      = optMakeArrangement(size, elemsize);
++            }
++            assert(isValidArrangement(size, opt));
++            fmt = IF_DV_3H;
++            break;
++
++        case INS_sha256su1:
+         case INS_sha1su0:
+             assert(isValidVectorDatasize(size));
+             assert(isVectorRegister(reg1));
+@@ -9994,6 +10014,7 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
+         case IF_DV_3E: // DV_3E   ...........mmmmm ......nnnnnddddd      Vd Vn Vm   (scalar)
+         case IF_DV_3F: // DV_3F   ...........mmmmm ......nnnnnddddd      Vd Sn Vm   (vector)
+         case IF_DV_3G: // DV_3G   ...........mmmmm ......nnnnnddddd      Vd Vn Vm   (vector) - source dest regs overlap
++        case IF_DV_3H: // DV_3H   ...........mmmmm ......nnnnnddddd      Qd Qn Vm   (vector) - source dest regs overlap
+             code = emitInsCode(ins, fmt);
+             code |= insEncodeReg_Vd(id->idReg1()); // ddddd
+             code |= insEncodeReg_Vn(id->idReg2()); // nnnnn
+@@ -11464,6 +11485,12 @@ void emitter::emitDispIns(
+             emitDispVectorReg(id->idReg3(), id->idInsOpt(), false);
+             break;
+ 
++        case IF_DV_3H: // DV_3H   ...........mmmmm ......nnnnnddddd      Qd Qn Vm (vector)
++            emitDispReg(id->idReg1(), size, true);
++            emitDispReg(id->idReg2(), size, true);
++            emitDispVectorReg(id->idReg3(), id->idInsOpt(), false);
++            break;
++
+         case IF_DV_3DI: // DV_3DI  .........XLmmmmm ....H.nnnnnddddd      Vd Vn Vm[] (scalar by elem)
+             emitDispReg(id->idReg1(), size, true);
+             emitDispReg(id->idReg2(), size, true);
+diff --git a/src/jit/emitfmtsarm64.h b/src/jit/emitfmtsarm64.h
+index 31b95b9..d1aef13 100644
+--- a/src/jit/emitfmtsarm64.h
++++ b/src/jit/emitfmtsarm64.h
+@@ -201,6 +201,7 @@ IF_DEF(DV_3DI, IS_NONE, NONE) // DV_3DI  .........XLmmmmm ....H.nnnnnddddd
+ IF_DEF(DV_3E, IS_NONE, NONE)  // DV_3E   ...........mmmmm ......nnnnnddddd      Vd Vn Vm   (scalar)
+ IF_DEF(DV_3F, IS_NONE, NONE)  // DV_3F   ...........mmmmm ......nnnnnddddd      Qd Sn Vm   (Qd used as both source and destination)
+ IF_DEF(DV_3G, IS_NONE, NONE)  // DV_3G   ...........mmmmm ......nnnnnddddd      Vd Vn Vm   (Vd used as both source and destination)
++IF_DEF(DV_3H, IS_NONE, NONE)  // DV_3H   ...........mmmmm ......nnnnnddddd      Qd Qn Vm   (Qd used as both source and destination)
+ 
+ IF_DEF(DV_4A, IS_NONE, NONE) // DV_4A   .........X.mmmmm .aaaaannnnnddddd      Vd Vn Vm Va (scalar)
+ 
+diff --git a/src/jit/hwintrinsiclistArm64.h b/src/jit/hwintrinsiclistArm64.h
+index 8d8b5b9..ea69ee9 100644
+--- a/src/jit/hwintrinsiclistArm64.h
++++ b/src/jit/hwintrinsiclistArm64.h
+@@ -23,7 +23,7 @@ HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_JSCVT     , Jscvt    )
+ HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_LRCPC     , Lrcpc    )
+ HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_PMULL     , Pmull    )
+ HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA1      , Sha1     )
+-HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA2      , Sha2     )
++HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA256    , Sha256   )
+ HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA512    , Sha512   )
+ HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SHA3      , Sha3     )
+ HARDWARE_INTRINSIC_CLASS(JIT_FLAG_HAS_ARM64_SIMD      , Simd     )
+@@ -94,6 +94,12 @@ HARDWARE_INTRINSIC(NI_ARM64_Sha1FixedRotate,     Sha1,      FixedRotate,
+ HARDWARE_INTRINSIC(NI_ARM64_Sha1SchedulePart1,   Sha1,      SchedulePart1,                 SimdTernaryOverlapOp,   INS_invalid,    INS_invalid, INS_sha1su0,    None )
+ HARDWARE_INTRINSIC(NI_ARM64_Sha1SchedulePart2,   Sha1,      SchedulePart2,                 SimdBinaryOverlapOp,    INS_invalid,    INS_invalid, INS_sha1su1,    None )
+ 
++//Sha256
++HARDWARE_INTRINSIC(NI_ARM64_Sha256HashLower,       Sha256,      HashLower,                      SimdTernaryOverlapOp,   INS_invalid,    INS_invalid, INS_sha256h,    None )
++HARDWARE_INTRINSIC(NI_ARM64_Sha256HashUpper,       Sha256,      HashUpper,                      SimdTernaryOverlapOp,   INS_invalid,    INS_invalid, INS_sha256h2,   None )
++HARDWARE_INTRINSIC(NI_ARM64_Sha256SchedulePart1,   Sha256,      SchedulePart1,                  SimdBinaryOverlapOp,    INS_invalid,    INS_invalid, INS_sha256su0,  None )
++HARDWARE_INTRINSIC(NI_ARM64_Sha256SchedulePart2,   Sha256,      SchedulePart2,                  SimdTernaryOverlapOp,   INS_invalid,    INS_invalid, INS_sha256su1,  None )
++
+ #endif
+ 
+ 
+diff --git a/src/jit/instr.h b/src/jit/instr.h
+index 7838fa4..c7be413 100644
+--- a/src/jit/instr.h
++++ b/src/jit/instr.h
+@@ -314,7 +314,7 @@ enum InstructionSet
+     InstructionSet_Lrcpc,     // ID_AA64ISAR1_EL1.LRCPC is 1 or better
+     InstructionSet_Pmull,     // ID_AA64ISAR0_EL1.AES is 2 or better
+     InstructionSet_Sha1,      // ID_AA64ISAR0_EL1.SHA1 is 1 or better
+-    InstructionSet_Sha2,      // ID_AA64ISAR0_EL1.SHA2 is 1 or better
++    InstructionSet_Sha256,    // ID_AA64ISAR0_EL1.SHA2 is 1 or better
+     InstructionSet_Sha512,    // ID_AA64ISAR0_EL1.SHA2 is 2 or better
+     InstructionSet_Sha3,      // ID_AA64ISAR0_EL1.SHA3 is 1 or better
+     InstructionSet_Simd,      // ID_AA64PFR0_EL1.AdvSIMD is 0 or better
+diff --git a/src/jit/instrsarm64.h b/src/jit/instrsarm64.h
+index 8300f65..5282ce1 100644
+--- a/src/jit/instrsarm64.h
++++ b/src/jit/instrsarm64.h
+@@ -935,6 +935,18 @@ INST1(sha1su0, "sha1su0",  0, 0, IF_DV_3G,  0x5E003000)
+ 
+ INST1(sha1su1, "sha1su1",  0, 0, IF_DV_2P,  0x5E281800)
+                                    //  sha1su1 Vd.4S, Vn.4S         DV_2P  0101111000101000 000110nnnnnddddd   5E28 1800   Vd.4S Vn.4S   (vector)
++
++INST1(sha256h, "sha256h",  0, 0, IF_DV_3H,  0x5E004000)
++                                   //  sha256h  Qd,Qn,Vm.4S         DV_3H  01011110000mmmmm 010000nnnnnddddd   5E00 4000  Qd Qn Vm.4S   (vector)
++
++INST1(sha256h2, "sha256h2",  0, 0, IF_DV_3H,  0x5E005000)
++                                   //  sha256h  Qd,Qn,Vm.4S         DV_3H  01011110000mmmmm 010100nnnnnddddd   5E00 5000  Qd Qn Vm.4S   (vector)
++
++INST1(sha256su0, "sha256su0",  0, 0, IF_DV_2P,  0x5E282800)
++                                   // sha256su0  Vd.4S,Vn.4S        DV_2P  0101111000101000 001010nnnnnddddd   5E28 2800  Vd.4S Vn.4S   (vector)
++
++INST1(sha256su1, "sha256su1",  0, 0, IF_DV_3G,  0x5E006000)
++                                   // sha256su1  Vd.4S,Vn.4S,Vm.4S  DV_3G  01011110000mmmmm 011000nnnnnddddd   5E00 6000  Vd.4S Vn.4S Vm.4S   (vector)
+    
+ INST1(sbfm,    "sbfm",   0, 0, IF_DI_2D,  0x13000000)
+                                    //  sbfm    Rd,Rn,imr,ims        DI_2D  X00100110Nrrrrrr ssssssnnnnnddddd   1300 0000   imr, ims
+diff --git a/src/jit/jitee.h b/src/jit/jitee.h
+index b36e766..903b3cf 100644
+--- a/src/jit/jitee.h
++++ b/src/jit/jitee.h
+@@ -107,7 +107,7 @@ public:
+         JIT_FLAG_HAS_ARM64_LRCPC         = 52, // ID_AA64ISAR1_EL1.LRCPC is 1 or better
+         JIT_FLAG_HAS_ARM64_PMULL         = 53, // ID_AA64ISAR0_EL1.AES is 2 or better
+         JIT_FLAG_HAS_ARM64_SHA1          = 54, // ID_AA64ISAR0_EL1.SHA1 is 1 or better
+-        JIT_FLAG_HAS_ARM64_SHA2          = 55, // ID_AA64ISAR0_EL1.SHA2 is 1 or better
++        JIT_FLAG_HAS_ARM64_SHA256        = 55, // ID_AA64ISAR0_EL1.SHA2 is 1 or better
+         JIT_FLAG_HAS_ARM64_SHA512        = 56, // ID_AA64ISAR0_EL1.SHA2 is 2 or better
+         JIT_FLAG_HAS_ARM64_SHA3          = 57, // ID_AA64ISAR0_EL1.SHA3 is 1 or better
+         JIT_FLAG_HAS_ARM64_SIMD          = 58, // ID_AA64PFR0_EL1.AdvSIMD is 0 or better
+diff --git a/src/mscorlib/System.Private.CoreLib.csproj b/src/mscorlib/System.Private.CoreLib.csproj
+index 44a432f..1da5ccb 100644
+--- a/src/mscorlib/System.Private.CoreLib.csproj
++++ b/src/mscorlib/System.Private.CoreLib.csproj
+@@ -300,11 +300,13 @@
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Simd.cs" />
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Aes.cs" />
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Sha1.cs" />
++    <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Sha256.cs" />
+   </ItemGroup>
+   <ItemGroup Condition="'$(Platform)' != 'arm64'">
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Simd.PlatformNotSupported.cs" />
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Aes.PlatformNotSupported.cs" />
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Sha1.PlatformNotSupported.cs" />
++    <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Sha256.PlatformNotSupported.cs" />
+   </ItemGroup>
+   <ItemGroup>
+     <Compile Include="$(BclSourcesRoot)\System\AppContext\AppContext.cs" />
+diff --git a/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Sha256.PlatformNotSupported.cs b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Sha256.PlatformNotSupported.cs
+new file mode 100644
+index 0000000..052a1d2
+--- /dev/null
++++ b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Sha256.PlatformNotSupported.cs
+@@ -0,0 +1,41 @@
++using System.Runtime.CompilerServices;
++using System.Runtime.Intrinsics;
++
++namespace System.Runtime.Intrinsics.Arm.Arm64
++{
++    /// <summary>
++    /// This class provides access to the Arm64 SHA256 Crypto intrinsics
++    ///
++    /// Arm64 CPU indicate support for this feature by setting
++    /// ID_AA64ISAR0_EL1.SHA2 is 1 or better
++    /// </summary>
++    [CLSCompliant(false)]
++    public static class Sha256
++    {
++        public static bool IsSupported { get { return false; } }
++
++        // <summary>
++        /// Performs SHA256 hash update (part 1).
++        /// vsha256hq_u32 (uint32x4_t hash_abcd, uint32x4_t hash_efgh, uint32x4_t wk)
++        ///</summary>
++        public static Vector128<uint> HashLower(Vector128<uint> hash_abcd, Vector128<uint> hash_efgh, Vector128<uint> wk) { throw new PlatformNotSupportedException(); }
++
++        // <summary>
++        /// Performs SHA256 hash update (part 2).
++        /// vsha256h2q_u32 (uint32x4_t hash_efgh, uint32x4_t hash_abcd, uint32x4_t wk)
++        ///</summary>
++        public static Vector128<uint> HashUpper(Vector128<uint> hash_efgh, Vector128<uint> hash_abcd, Vector128<uint> wk) { throw new PlatformNotSupportedException(); }
++
++        // <summary>
++        /// Performs SHA256 schedule update 0
++        /// vsha256su0q_u32 (uint32x4_t w0_3, uint32x4_t w4_7)
++        ///</summary>
++        public static Vector128<uint> SchedulePart1(Vector128<uint> w0_3, Vector128<uint> w4_7) { throw new PlatformNotSupportedException(); }
++
++        // <summary>
++        /// Performs SHA256 schedule update 1
++        /// vsha256su1q_u32 (uint32x4_t w0_3, uint32x4_t w8_11, uint32x4_t w12_15)
++        ///</summary>
++        public static Vector128<uint> SchedulePart2(Vector128<uint> w0_3, Vector128<uint> w8_11, Vector128<uint> w12_15) { throw new PlatformNotSupportedException(); }
++    }
++}
+diff --git a/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Sha256.cs b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Sha256.cs
+new file mode 100644
+index 0000000..4e7e51d
+--- /dev/null
++++ b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Sha256.cs
+@@ -0,0 +1,41 @@
++using System.Runtime.CompilerServices;
++using System.Runtime.Intrinsics;
++
++namespace System.Runtime.Intrinsics.Arm.Arm64
++{
++    /// <summary>
++    /// This class provides access to the Arm64 SHA256 Crypto intrinsics
++    ///
++    /// Arm64 CPU indicate support for this feature by setting
++    /// ID_AA64ISAR0_EL1.SHA2 is 1 or better
++    /// </summary>
++    [CLSCompliant(false)]
++    public static class Sha256
++    {
++        public static bool IsSupported { get => IsSupported; }
++
++        // <summary>
++        /// Performs SHA256 hash update (part 1).
++        /// vsha256hq_u32 (uint32x4_t hash_abcd, uint32x4_t hash_efgh, uint32x4_t wk)
++        ///</summary>
++        public static Vector128<uint> HashLower(Vector128<uint> hash_abcd, Vector128<uint> hash_efgh, Vector128<uint> wk) => HashLower(hash_abcd, hash_efgh, wk);
++
++        // <summary>
++        /// Performs SHA256 hash update (part 2).
++        /// vsha256h2q_u32 (uint32x4_t hash_efgh, uint32x4_t hash_abcd, uint32x4_t wk)
++        ///</summary>
++        public static Vector128<uint> HashUpper(Vector128<uint> hash_efgh, Vector128<uint> hash_abcd, Vector128<uint> wk) => HashUpper(hash_efgh, hash_abcd, wk);
++
++        // <summary>
++        /// Performs SHA256 schedule update 0
++        /// vsha256su0q_u32 (uint32x4_t w0_3, uint32x4_t w4_7)
++        ///</summary>
++        public static Vector128<uint> SchedulePart1(Vector128<uint> w0_3, Vector128<uint> w4_7) => SchedulePart1(w0_3, w4_7);
++
++        // <summary>
++        /// Performs SHA256 schedule update 1
++        /// vsha256su1q_u32 (uint32x4_t tw0_3, uint32x4_t w8_11, uint32x4_t w12_15)
++        ///</summary>
++        public static Vector128<uint> SchedulePart2(Vector128<uint> w0_3, Vector128<uint> w8_11, Vector128<uint> w12_15) => SchedulePart2(w0_3, w8_11, w12_15);
++    }
++}
+-- 
+2.7.4
+
