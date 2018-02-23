@@ -1,0 +1,25 @@
+From a653e6ce88977b75ef0aa59f7b826927202c7f8a Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 22 Feb 2018 16:03:08 -0500
+Subject: [PATCH] [Arm64/Arm32] Add MemoryBarrier to ErectWriteBarrierForMT
+
+---
+ src/vm/gchelpers.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/vm/gchelpers.cpp b/src/vm/gchelpers.cpp
+index 4684ede..5f24ccf 100644
+--- a/src/vm/gchelpers.cpp
++++ b/src/vm/gchelpers.cpp
+@@ -1514,7 +1514,7 @@ void ErectWriteBarrierForMT(MethodTable **dst, MethodTable *ref)
+     STATIC_CONTRACT_GC_NOTRIGGER;
+     STATIC_CONTRACT_SO_TOLERANT;
+ 
+-    *dst = ref;
++    VolatileStore(dst, ref);
+ 
+ #ifdef WRITE_BARRIER_CHECK
+     updateGCShadow((Object **)dst, (Object *)ref);     // support debugging write barrier, updateGCShadow only cares that these are pointers
+-- 
+2.7.4
+
