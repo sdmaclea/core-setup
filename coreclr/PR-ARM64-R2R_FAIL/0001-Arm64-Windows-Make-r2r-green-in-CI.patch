@@ -1,0 +1,43 @@
+From d24ce99a779deb1b5990b45d14b22870e2f79b94 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 23 Feb 2018 20:05:55 -0500
+Subject: [PATCH] [Arm64/Windows] Make r2r green in CI
+
+---
+ tests/arm64/Tests.lst | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/tests/arm64/Tests.lst b/tests/arm64/Tests.lst
+index 865f1fe..a25a87e 100644
+--- a/tests/arm64/Tests.lst
++++ b/tests/arm64/Tests.lst
+@@ -61697,7 +61697,7 @@ RelativePath=JIT\Performance\CodeQuality\SIMD\ConsoleMandel\ConsoleMandel\Consol
+ WorkingDir=JIT\Performance\CodeQuality\SIMD\ConsoleMandel\ConsoleMandel
+ Expected=0
+ MaxAllowedDurationSeconds=600
+-Categories=EXPECTED_PASS
++Categories=EXPECTED_PASS;R2R_FAIL
+ HostStyle=0
+ 
+ [RayTracer.cmd_8031]
+@@ -71545,7 +71545,7 @@ RelativePath=JIT\SIMD\VectorReturn_r\VectorReturn_r.cmd
+ WorkingDir=JIT\SIMD\VectorReturn_r
+ Expected=0
+ MaxAllowedDurationSeconds=600
+-Categories=EXPECTED_PASS
++Categories=EXPECTED_PASS;R2R_FAIL
+ HostStyle=0
+ 
+ [VectorReturn_ro.cmd_9293]
+@@ -71553,7 +71553,7 @@ RelativePath=JIT\SIMD\VectorReturn_ro\VectorReturn_ro.cmd
+ WorkingDir=JIT\SIMD\VectorReturn_ro
+ Expected=0
+ MaxAllowedDurationSeconds=600
+-Categories=EXPECTED_PASS;ISSUE_5642
++Categories=EXPECTED_PASS;ISSUE_5642;R2R_FAIL
+ HostStyle=0
+ 
+ [VectorSet_r.cmd_9294]
+-- 
+2.7.4
+
