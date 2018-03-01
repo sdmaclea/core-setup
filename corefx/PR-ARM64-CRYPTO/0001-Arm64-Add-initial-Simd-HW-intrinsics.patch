@@ -1,17 +1,17 @@
-From c6f85980ed47906372badc350ba13f1a8af8b021 Mon Sep 17 00:00:00 2001
+From 4401ae76c2a90d70b17d022e69bfa640ca18fc77 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 20 Dec 2017 14:04:47 -0500
 Subject: [PATCH] [Arm64] Add initial Simd HW intrinsics
 
 ---
- .../ref/System.Runtime.Intrinsics.cs               | 145 +++++++++++++++++++++
- 1 file changed, 145 insertions(+)
+ .../ref/System.Runtime.Intrinsics.cs               | 142 +++++++++++++++++++++
+ 1 file changed, 142 insertions(+)
 
 diff --git a/src/System.Runtime.Intrinsics.Experimental/ref/System.Runtime.Intrinsics.cs b/src/System.Runtime.Intrinsics.Experimental/ref/System.Runtime.Intrinsics.cs
-index d65691f..564e62f 100644
+index d65691f..dd92460 100644
 --- a/src/System.Runtime.Intrinsics.Experimental/ref/System.Runtime.Intrinsics.cs
 +++ b/src/System.Runtime.Intrinsics.Experimental/ref/System.Runtime.Intrinsics.cs
-@@ -25,6 +25,151 @@ namespace System.Runtime.Intrinsics
+@@ -25,6 +25,148 @@ namespace System.Runtime.Intrinsics
           private int _dummy;
      }
  }
@@ -69,7 +69,6 @@ index d65691f..564e62f 100644
 +        public static Vector128<sbyte> LeadingSignCount(Vector128<sbyte> value) { throw null; }
 +        public static Vector128<short> LeadingSignCount(Vector128<short> value) { throw null; }
 +        public static Vector128<int>   LeadingSignCount(Vector128<int>   value) { throw null; }
-+        public static Vector128<long>  LeadingSignCount(Vector128<long>  value) { throw null; }
 +        public static Vector64<byte>    LeadingZeroCount(Vector64<byte>    value) { throw null; }
 +        public static Vector64<sbyte>   LeadingZeroCount(Vector64<sbyte>   value) { throw null; }
 +        public static Vector64<ushort>  LeadingZeroCount(Vector64<ushort>  value) { throw null; }
@@ -82,8 +81,6 @@ index d65691f..564e62f 100644
 +        public static Vector128<short>  LeadingZeroCount(Vector128<short>  value) { throw null; }
 +        public static Vector128<uint>   LeadingZeroCount(Vector128<uint>   value) { throw null; }
 +        public static Vector128<int>    LeadingZeroCount(Vector128<int>    value) { throw null; }
-+        public static Vector128<ulong>  LeadingZeroCount(Vector128<ulong>  value) { throw null; }
-+        public static Vector128<long>   LeadingZeroCount(Vector128<long>   value) { throw null; }
 +        public static Vector64<byte>    Max(Vector64<byte>    left, Vector64<byte>    right) { throw null; }
 +        public static Vector64<sbyte>   Max(Vector64<sbyte>   left, Vector64<sbyte>   right) { throw null; }
 +        public static Vector64<ushort>  Max(Vector64<ushort>  left, Vector64<ushort>  right) { throw null; }
