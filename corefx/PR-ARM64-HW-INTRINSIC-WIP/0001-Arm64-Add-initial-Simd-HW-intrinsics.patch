@@ -1,4 +1,4 @@
-From 774683f4c30836f69f2bcca66ce0354d23730056 Mon Sep 17 00:00:00 2001
+From a878804fdd72479cb9ea80583f9c7e9d113c5a2b Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 20 Dec 2017 14:04:47 -0500
 Subject: [PATCH] [Arm64] Add initial Simd HW intrinsics
@@ -7,10 +7,10 @@ Subject: [PATCH] [Arm64] Add initial Simd HW intrinsics
  .../ref/System.Runtime.Intrinsics.cs               | 145 +++++++++++++++++++++
  1 file changed, 145 insertions(+)
 
-diff --git a/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.cs b/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.cs
+diff --git a/src/System.Runtime.Intrinsics.Experimental/ref/System.Runtime.Intrinsics.cs b/src/System.Runtime.Intrinsics.Experimental/ref/System.Runtime.Intrinsics.cs
 index d65691f..564e62f 100644
---- a/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.cs
-+++ b/src/System.Runtime.Intrinsics/ref/System.Runtime.Intrinsics.cs
+--- a/src/System.Runtime.Intrinsics.Experimental/ref/System.Runtime.Intrinsics.cs
++++ b/src/System.Runtime.Intrinsics.Experimental/ref/System.Runtime.Intrinsics.cs
 @@ -25,6 +25,151 @@ namespace System.Runtime.Intrinsics
           private int _dummy;
      }
