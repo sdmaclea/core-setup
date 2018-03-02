@@ -1,0 +1,176 @@
+From 30fd822a4b9717e885bd7c91c00b16a4488c974b Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 2 Mar 2018 12:38:00 -0500
+Subject: [PATCH] [Arm64/Linux] Enable CI
+
+---
+ buildpipeline/pipeline.json | 14 ++++++++++
+ cross/arm64_ci_script.sh    | 64 +++++++++++++++++++++++++++++++++++++++++++++
+ netci.groovy                | 55 ++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 133 insertions(+)
+ create mode 100755 cross/arm64_ci_script.sh
+
+diff --git a/buildpipeline/pipeline.json b/buildpipeline/pipeline.json
+index b6c834b..c34b4de 100644
+--- a/buildpipeline/pipeline.json
++++ b/buildpipeline/pipeline.json
+@@ -74,6 +74,20 @@
+             "Platform": "arm",
+             "Type": "build/product/"
+           }
++        },
++        {
++          "Name": "DotNet-CoreFx-Trusted-Linux-Crossbuild-arm64",
++          "Parameters": {
++            "PB_DockerTag": "hseok82/dotnet-buildtools-prereqs:ubuntu-16.04-crossx86-ef0ac75-20175511035548",
++            "PB_Architecture": "arm64",
++            "PB_BuildArguments": "-buildArch=arm64 -$(PB_ConfigurationGroup) -stripSymbols",
++            "PB_SyncArguments": "-p -- /p:ArchGroup=arm64 /p:DotNetRestoreSources=$(PB_RestoreSource) /p:DotNetAssetRootUrl=$(PB_AssetRootUrl)"
++          },
++          "ReportingParameters": {
++            "OperatingSystem": "Linux",
++            "Platform": "arm64",
++            "Type": "build/product/"
++          }
+         }
+       ]
+     },
+diff --git a/cross/arm64_ci_script.sh b/cross/arm64_ci_script.sh
+new file mode 100755
+index 0000000..7010cccd
+--- /dev/null
++++ b/cross/arm64_ci_script.sh
+@@ -0,0 +1,64 @@
++#!/bin/bash
++
++function exit_with_error {
++    set +x
++
++    local errorMessage="$1"
++
++    echo "ERROR: $errorMessage"
++    exit 1
++}
++
++#Exit if input string is empty
++function exit_if_empty {
++    local inputString="$1"
++    local errorMessage="$2"
++
++    if [ -z "$inputString" ]; then
++        exit_with_error "$errorMessage"
++    fi
++}
++
++# Cross builds corefx using Docker image
++function cross_build_native_with_docker {
++    __currentWorkingDirectory=`pwd`
++
++    # choose Docker image
++    __dockerImage=" hseok82/dotnet-buildtools-prereqs:ubuntu-16.04-crossx86-ef0ac75-20175511035548"
++    __dockerEnvironmentVariables="-e ROOTFS_DIR=/crossrootfs/arm64"
++    __runtimeOS="ubuntu.16.04"
++
++    __dockerCmd="docker run ${__dockerEnvironmentVariables} -i --rm -v $__currentWorkingDirectory:/opt/code -w /opt/code $__dockerImage"
++
++    # Cross building corefx with rootfs in Docker
++    __buildNativeCmd="./build-native.sh -buildArch=arm64 -$__buildConfig -- cross"
++
++    $__dockerCmd $__buildNativeCmd
++    sudo chown -R $(id -u -n) ./bin
++}
++
++__buildConfig=
++for arg in "$@"
++do
++    case $arg in
++        --buildConfig=*)
++            __buildConfig="$(echo ${arg#*=} | awk '{print tolower($0)}')"
++            if [[ "$__buildConfig" != "debug" && "$__buildConfig" != "release" ]]; then
++                exit_with_error "--buildConfig can be only Debug or Release" true
++            fi
++            ;;
++        *)
++            ;;
++    esac
++done
++
++set -x
++set -e
++
++exit_if_empty "$__buildConfig" "--buildConfig is a mandatory argument, not provided"
++
++#Complete the cross build
++(set +x; echo 'Building corefx...')
++cross_build_native_with_docker
++
++(set +x; echo 'Build complete')
+diff --git a/netci.groovy b/netci.groovy
+index c741fcf..0e68f95 100644
+--- a/netci.groovy
++++ b/netci.groovy
+@@ -346,6 +346,61 @@ def targetGroupOsMapInnerloop = ['netcoreapp': ['Windows_NT', 'Ubuntu14.04', 'Ub
+ } // isPR
+ 
+ // **************************
++// Define Linux ARM64 cross builds. These jobs run on every merge.
++// Some jobs run on every PR. The ones that don't run per PR can be requested via a phrase.
++// **************************
++[true, false].each { isPR ->
++    ['netcoreapp'].each { targetGroup ->
++        ['Debug', 'Release'].each { configurationGroup ->
++            def osGroup = "Linux"
++            def osName = 'Ubuntu16.04'
++
++            def newJobName = "${osName.toLowerCase()}_arm64_cross_${configurationGroup.toLowerCase()}"
++
++            def newJob = job(Utilities.getFullJobName(project, newJobName, isPR)) {
++                steps {
++                    // Call the arm64_ci_script.sh script to perform the cross build of native corefx
++                    def script = "./cross/arm64_ci_script.sh --buildConfig=${configurationGroup.toLowerCase()}"
++                    shell(script)
++
++                    // Tar up the appropriate bits.
++                    shell("tar -czf bin/build.tar.gz --directory=\"bin/runtime/${targetGroup}-${osGroup}-${configurationGroup}-arm64\" .")
++                }
++            }
++
++            // The cross build jobs run on Ubuntu. The arm-cross-latest version
++            // contains the packages needed for cross building corefx
++            Utilities.setMachineAffinity(newJob, 'Ubuntu14.04', 'arm-cross-latest')
++
++            // Set up standard options.
++            Utilities.standardJobSetup(newJob, project, isPR, "*/${branch}")
++
++            // Add archival for the built binaries
++            def archiveContents = "bin/build.tar.gz"
++            Utilities.addArchival(newJob, archiveContents)
++
++            newJob.with {
++                publishers {
++                    azureVMAgentPostBuildAction {
++                        agentPostBuildAction('Delete agent after build execution (when idle).')
++                    }
++                }
++            }
++
++            // Set up triggers
++            if (isPR) {
++                // We run Arm64 Debug and Linux Release as default PR builds
++                Utilities.addGithubPRTriggerForBranch(newJob, branch, "${osName} arm64 ${configurationGroup} Build")
++            }
++            else {
++                // Set a push trigger
++                Utilities.addGithubPushTrigger(newJob)
++            }
++        } // configurationGroup
++    } // targetGroup
++} // isPR
++
++// **************************
+ // Define Linux x86 builds. These jobs run daily and results will be used for CoreCLR test
+ // TODO: innerloop & outerloop testing & merge to general job generation routine
+ // **************************
+-- 
+2.7.4
+
