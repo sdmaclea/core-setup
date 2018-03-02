@@ -1,0 +1,42 @@
+From 48763cf4d08e02d727c50f249121ee4d42c9f980 Mon Sep 17 00:00:00 2001
+From: Dan Seefeldt <Dan.Seefeldt@microsoft.com>
+Date: Thu, 18 Jan 2018 20:23:36 -0600
+Subject: [PATCH] Fix roslyn and nuget client output problems (#310)
+
+* Define the order of GatherBuiltPackages and Package targets and fix output path for nuget-client.
+
+* Remove "Build" from WriteVersions AfterTargets and fixup GatherBuiltPackages
+---
+ repos/dir.targets       | 2 +-
+ repos/nuget-client.proj | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/repos/dir.targets b/repos/dir.targets
+index e8d536d..ef6f267 100644
+--- a/repos/dir.targets
++++ b/repos/dir.targets
+@@ -166,7 +166,7 @@
+   </Target>
+ 
+   <Target Name="WriteVersions"
+-          AfterTargets="Build;CopyPackage"
++          AfterTargets="CopyPackage"
+           DependsOnTargets="GatherBuiltPackages">
+     <WriteVersionsFile NugetPackages="@(_BuiltPackages)"
+                        OutputPath="$(VersionFileLocation)"
+diff --git a/repos/nuget-client.proj b/repos/nuget-client.proj
+index d0212c3..fcad8f1 100644
+--- a/repos/nuget-client.proj
++++ b/repos/nuget-client.proj
+@@ -2,7 +2,7 @@
+ <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))/dir.props" />
+   <PropertyGroup>
+-    <PackagesOutput>$(ProjectDirectory)Nupkgs/</PackagesOutput>
++    <PackagesOutput>$(ProjectDirectory)artifacts/nupkgs/</PackagesOutput>
+     <NuGetCoreSourceDirectory>$(ProjectDirectory)src/NuGet.Core/</NuGetCoreSourceDirectory>
+     <ToolsDirectory>$(ProjectDirectory)cli/</ToolsDirectory>
+     <NuGetKeyFilePath>$(KeysDir)NuGet.Client.snk</NuGetKeyFilePath>
+-- 
+2.7.4
+

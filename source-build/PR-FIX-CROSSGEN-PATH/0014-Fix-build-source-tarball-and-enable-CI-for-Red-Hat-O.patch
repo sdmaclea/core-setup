@@ -1,0 +1,195 @@
+From 567d5f5a75559b1b6010eb61c39c7147fb06429d Mon Sep 17 00:00:00 2001
+From: Dan Seefeldt <Dan.Seefeldt@microsoft.com>
+Date: Fri, 17 Nov 2017 11:53:19 -0600
+Subject: [PATCH] Fix build source tarball and enable CI for Red Hat Offline
+ build (#288)
+
+* Fixes to build-source-tarball.sh and support/tarball/build.sh
+---
+ build-source-tarball.sh                        | 29 ++++++++----------
+ netci.groovy                                   | 42 ++++++++++++++++++++++++++
+ src/reference-assemblies/Directory.Build.props |  4 +++
+ support/tarball/build.sh                       |  4 +--
+ tools-local/init-build.proj                    |  4 +--
+ 5 files changed, 63 insertions(+), 20 deletions(-)
+
+diff --git a/build-source-tarball.sh b/build-source-tarball.sh
+index c58a2e9..878566c 100755
+--- a/build-source-tarball.sh
++++ b/build-source-tarball.sh
+@@ -21,6 +21,7 @@ if [ -e "$TARBALL_ROOT" ]; then
+ fi
+ 
+ SCRIPT_ROOT="$(cd -P "$( dirname "$0" )" && pwd)"
++SDK_VERSION=$(cat $SCRIPT_ROOT/DotnetCLIVersion.txt)
+ 
+ if [ $SKIP_BUILD -ne 1 ]; then
+ 
+@@ -32,39 +33,35 @@ if [ $SKIP_BUILD -ne 1 ]; then
+     $SCRIPT_ROOT/build.sh /p:ArchiveDownloadedPackages=true /flp:v=detailed
+ fi
+ 
+-$SCRIPT_ROOT/clean.sh
++git submodule foreach --recursive git clean -xdf
++git submodule foreach --recursive git reset --hard
+ 
+ mkdir -p "$TARBALL_ROOT"
+ 
+-mkdir -p $TARBALL_ROOT/Tools
+-cp -rf $SCRIPT_ROOT/Tools/* $TARBALL_ROOT/Tools/
+-
+-rm -f $TARBALL_ROOT/Tools/dotnetcli/dotnet.tar
+-
+-cp -r $SCRIPT_ROOT/build.proj $TARBALL_ROOT/
+-cp -r $SCRIPT_ROOT/dir.props $TARBALL_ROOT/
++cp $SCRIPT_ROOT/build.proj $TARBALL_ROOT/
++cp $SCRIPT_ROOT/dir.props $TARBALL_ROOT/
++cp $SCRIPT_ROOT/DotnetCLIVersion.txt $TARBALL_ROOT/
+ cp -r $SCRIPT_ROOT/keys $TARBALL_ROOT/
+ cp -r $SCRIPT_ROOT/patches $TARBALL_ROOT/
+-cp -r $SCRIPT_ROOT/repositories.props $TARBALL_ROOT/
+ cp -r $SCRIPT_ROOT/scripts $TARBALL_ROOT/
+ cp -r $SCRIPT_ROOT/src $TARBALL_ROOT/
+-cp -r $SCRIPT_ROOT/targets $TARBALL_ROOT/
+-cp -r $SCRIPT_ROOT/tasks $TARBALL_ROOT/
+-cp -r $SCRIPT_ROOT/Tools $TARBALL_ROOT/
++cp -r $SCRIPT_ROOT/repos $TARBALL_ROOT/
++cp -r $SCRIPT_ROOT/tools-local $TARBALL_ROOT/
+ 
+ find $TARBALL_ROOT/src -maxdepth 2 -name '.git' -exec rm {} \;
+ 
+-rm -rf $TARBALL_ROOT/Tools/dotnetcli/dotnet.tar
+-rm -rf $TARBALL_ROOT/Tools/dotnetcli/sdk/2.0.0-preview3-006845/nuGetPackagesArchive.lzma
++cp -r $SCRIPT_ROOT/Tools $TARBALL_ROOT/
++rm -f $TARBALL_ROOT/Tools/dotnetcli/dotnet.tar
++rm -f $TARBALL_ROOT/Tools/dotnetcli/sdk/$SDK_VERSION/nuGetPackagesArchive.lzma
+ rm -rf $TARBALL_ROOT/Tools/dotnetcli/store
+ rm -rf $TARBALL_ROOT/Tools/dotnetcli/additionalDeps
+ 
+ cp $SCRIPT_ROOT/support/tarball/build.sh $TARBALL_ROOT/build.sh
+ 
+ mkdir -p $TARBALL_ROOT/prebuilt/nuget-packages
+-find $SCRIPT_ROOT/bin/obj/x64/Release/nuget-packages -name '*.nupkg' -exec cp {} $TARBALL_ROOT/prebuilt/nuget-packages/ \;
++find $SCRIPT_ROOT/packages -name '*.nupkg' -exec cp {} $TARBALL_ROOT/prebuilt/nuget-packages/ \;
+ 
+-for built_package in $(find $SCRIPT_ROOT/bin/obj/x64/Release/source-built -name '*.nupkg' | tr '[:upper:]' '[:lower:]')
++for built_package in $(find $SCRIPT_ROOT/bin/obj/x64/Release/blob-feed/packages/ -name '*.nupkg' | tr '[:upper:]' '[:lower:]')
+ do
+     if [ -e $TARBALL_ROOT/prebuilt/nuget-packages/$(basename $built_package) ]; then
+         rm $TARBALL_ROOT/prebuilt/nuget-packages/$(basename $built_package)
+diff --git a/netci.groovy b/netci.groovy
+index 82c07e9..8678150 100644
+--- a/netci.groovy
++++ b/netci.groovy
+@@ -59,6 +59,47 @@ def addPushJob(String project, String branch, String os, String configuration)
+ };
+ 
+ [true, false].each { isPR ->
++  ["RHEL7.2"].each { os->
++    ["Release", "Debug"].each { configuration ->
++
++      def shortJobName = "${os}_Offline_${configuration}";
++      def contextString = "${os} Offline ${configuration}";
++      def triggerPhrase = "(?i).*test\\W+${contextString}.*";
++
++      def newJob = job(Utilities.getFullJobName(project, shortJobName, isPR)){
++        steps{
++            shell("cd ./source-build;git submodule update --init --recursive");
++            shell("cd ./source-build;./build.sh /p:ArchiveDownloadedPackages=true /p:Configuration=${configuration} ${loggingOptions}");
++            shell("cd ./source-build;./build-source-tarball.sh ../tarball-output --skip-build");
++
++            // For now, perform offline build up to corefx until we work through issues with other repos
++            shell("cd ./tarball-output;./build.sh /p:RootRepo=corefx /p:Configuration=${configuration} ${loggingOptions}")
++        }
++      }
++
++      Utilities.setMachineAffinity(newJob, os, 'latest-or-auto');
++
++      Utilities.standardJobSetup(newJob, project, isPR, "*/${branch}");
++
++      // Clone into the source-build directory
++      Utilities.addScmInSubDirectory(newJob, project, isPR, 'source-build');
++      if(isPR){
++        if(configuration == "Release"){
++          Utilities.addGithubPRTriggerForBranch(newJob, branch, contextString);
++        }
++        else{
++          Utilities.addGithubPRTriggerForBranch(newJob, branch, contextString, triggerPhrase);
++        }
++      }
++      else{
++        Utilities.addGithubPushTrigger(newJob);
++      }
++
++    }
++  }
++}
++
++[true, false].each { isPR ->
+   ["Linux_ARM"].each { os->
+     ["Release", "Debug"].each { configuration ->
+ 
+@@ -99,3 +140,4 @@ def addPushJob(String project, String branch, String os, String configuration)
+   }
+ }
+ 
++
+diff --git a/src/reference-assemblies/Directory.Build.props b/src/reference-assemblies/Directory.Build.props
+index ad146c0..42ba47e 100644
+--- a/src/reference-assemblies/Directory.Build.props
++++ b/src/reference-assemblies/Directory.Build.props
+@@ -1,5 +1,9 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++    <PropertyGroup>
++        <!-- We use dotnet-cli to build reference-assemblies, so we need to disable BuildTools Roslyn properties. -->
++        <DisableBuildToolsRoslynVersion>true</DisableBuildToolsRoslynVersion>
++    </PropertyGroup>
+     <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
+     <PropertyGroup>
+         <ReferenceAssemblyPath>$(MSBuildProjectDirectoryNoRoot.Substring($(MSBuildThisFileDirectoryNoRoot.LastIndexOf("reference-assemblies"))))</ReferenceAssemblyPath>
+diff --git a/support/tarball/build.sh b/support/tarball/build.sh
+index aeaeb01..e1a0a47 100755
+--- a/support/tarball/build.sh
++++ b/support/tarball/build.sh
+@@ -3,7 +3,7 @@ set -euo pipefail
+ IFS=$'\n\t'
+ 
+ SCRIPT_ROOT="$(cd -P "$( dirname "$0" )" && pwd)"
+-CLI_VERSION="2.0.0-preview3-006845"
++CLI_VERSION=$(cat $SCRIPT_ROOT/DotnetCLIVersion.txt)
+ CLI_ROOT="$SCRIPT_ROOT/Tools/dotnetcli"
+ 
+ export DOTNET_CLI_TELEMETRY_OPTOUT=1
+@@ -12,5 +12,5 @@ export NUGET_PACKAGES="$SCRIPT_ROOT/packages/"
+ 
+ MSBUILD_ARGUMENTS=("/p:OfflineBuild=true" "/flp:v=detailed" "/clp:v=detailed")
+ 
+-$CLI_ROOT/dotnet $CLI_ROOT/sdk/$CLI_VERSION/MSBuild.dll $SCRIPT_ROOT/build.proj /t:WriteDynamicPropsToStaticPropsFiles /p:GeneratingStaticPropertiesFile=true ${MSBUILD_ARGUMENTS[@]} "$@"
++$CLI_ROOT/dotnet $CLI_ROOT/sdk/$CLI_VERSION/MSBuild.dll $SCRIPT_ROOT/tools-local/init-build.proj /t:WriteDynamicPropsToStaticPropsFiles /p:GeneratingStaticPropertiesFile=true ${MSBUILD_ARGUMENTS[@]} "$@"
+ $CLI_ROOT/dotnet $CLI_ROOT/sdk/$CLI_VERSION/MSBuild.dll $SCRIPT_ROOT/build.proj ${MSBUILD_ARGUMENTS[@]} "$@"
+diff --git a/tools-local/init-build.proj b/tools-local/init-build.proj
+index 308d892..62972ab 100644
+--- a/tools-local/init-build.proj
++++ b/tools-local/init-build.proj
+@@ -44,7 +44,7 @@
+      <Exec Condition="'$(Platform)' == 'armel'" Command="$(ArmEnvironmentVariables) $(ProjectDir)cross/armel/tizen-build-rootfs.sh" />
+   </Target>
+ 
+-  <Target Name="BuildDummyPackages" Condition="'$(BuildOffline)' == 'true'">
++  <Target Name="BuildDummyPackages" Condition="'$(OfflineBuild)' == 'true'">
+     <ItemGroup>
+       <DummyPackage Include="Castle.Core" Version="3.3.3" />
+       <DummyPackage Include="Castle.Core" Version="4.0.0-beta001" />
+@@ -285,7 +285,7 @@
+                         OutputPath="$(SourceBuiltPackagesPath)" />
+   </Target>
+ 
+-  <Target Name="BuildReferenceAssemblies" Condition="'$(BuildOffline)' == 'true'">
++  <Target Name="BuildReferenceAssemblies" Condition="'$(OfflineBuild)' == 'true'">
+     <Exec Command="$(DotNetCliToolDir)/dotnet build $(SubmoduleDirectory)/reference-assemblies/build.proj" />
+     <Exec Command="$(DotNetCliToolDir)/dotnet restore $(SubmoduleDirectory)/reference-assemblies/nuspecs/pack.csproj" />
+     <Exec Command="$(DotNetCliToolDir)/dotnet pack $(SubmoduleDirectory)/reference-assemblies/nuspecs/PackAll.proj" />
+-- 
+2.7.4
+

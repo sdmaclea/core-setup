@@ -1,0 +1,38 @@
+From ee804f7405d611a227017b09a63f45ed70ceeb7e Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 2 Mar 2018 17:05:05 -0500
+Subject: [PATCH] Fix crossgen path
+
+---
+ scripts/bootstrap/buildbootstrapcli.sh | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/scripts/bootstrap/buildbootstrapcli.sh b/scripts/bootstrap/buildbootstrapcli.sh
+index 9946be8..4ac61ac 100755
+--- a/scripts/bootstrap/buildbootstrapcli.sh
++++ b/scripts/bootstrap/buildbootstrapcli.sh
+@@ -10,7 +10,6 @@ usage()
+     echo "Options:"
+     echo "  BuildType               Type of build (-debug, -release), default: -debug"
+     echo "  -clang <Major.Minor>    Override of the version of clang compiler to use"
+-    echo "  -config <Configuration> Build configuration (debug, release), default: debug"
+     echo "  -corelib <CoreLib>      Path to System.Private.CoreLib.dll, default: use the System.Private.CoreLib.dll from the seed CLI"
+     echo "  -os <OS>                Operating system (used for corefx build), default: Linux"
+     echo "  -rid <Rid>              Runtime identifier including the architecture part (e.g. rhel.6-x64)"
+@@ -300,11 +299,11 @@ sed -i \
+     -e 's/"runtimes": {/&\n    "'$__runtime_id'": [\n      "unix", "unix-'$__build_arch'", "any", "base"\n    ],/g' \
+ $__frameworkpath/Microsoft.NETCore.App.deps.json
+ 
+-__crossgentimeout=120
++__crossgentimeout=300
+ 
+ function crossgenone(){
+     echo $2/crossgen /MissingDependenciesOK /Platform_Assemblies_Paths $2:$3 /in $1 /out $1.ni >$1.log 2>&1
+-    timeout $__crossgentimeout $2/crossgen /MissingDependenciesOK /Platform_Assemblies_Paths $2:$3 /in $1 /out $1.ni >>$1.log 2>&1
++    timeout $__crossgentimeout $2/crossgen /MissingDependenciesOK /Platform_Assemblies_Paths $2:$(dirname $1) /in $1 /out $1.ni >>$1.log 2>&1
+     exitCode=$?
+     if [ "$exitCode" == "0" ]
+     then
+-- 
+2.7.4
+

@@ -1,0 +1,65 @@
+From 73d81eefe104f6584a6028281a045dc511726949 Mon Sep 17 00:00:00 2001
+From: Dan Seefeldt <Dan.Seefeldt@microsoft.com>
+Date: Thu, 8 Feb 2018 17:24:06 -0600
+Subject: [PATCH] Update PlatformApis.cs and others from core-setup (#321)
+
+* Update PlatformApis.cs and others from core-setup
+
+* Change Tasks to link to source under src/core-setup rather than copying the files directly.
+---
+ .../Microsoft.DotNet.SourceBuild.Tasks.csproj      |   9 +
+ .../Native/NativeMethods.Darwin.cs                 |  55 ------
+ .../Native/NativeMethods.Unix.cs                   |  39 -----
+ .../Native/NativeMethods.Windows.cs                |  43 -----
+ .../Native/PlatformApis.cs                         | 192 ---------------------
+ .../Platform.cs                                    |  13 --
+ .../RuntimeEnvironment.cs                          | 104 -----------
+ 7 files changed, 9 insertions(+), 446 deletions(-)
+ delete mode 100644 tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Native/NativeMethods.Darwin.cs
+ delete mode 100644 tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Native/NativeMethods.Unix.cs
+ delete mode 100644 tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Native/NativeMethods.Windows.cs
+ delete mode 100644 tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Native/PlatformApis.cs
+ delete mode 100644 tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Platform.cs
+ delete mode 100644 tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/RuntimeEnvironment.cs
+
+diff --git a/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/Microsoft.DotNet.SourceBuild.Tasks.csproj b/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/Microsoft.DotNet.SourceBuild.Tasks.csproj
+index f6c9086..f5ab1fa 100755
+--- a/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/Microsoft.DotNet.SourceBuild.Tasks.csproj
++++ b/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/Microsoft.DotNet.SourceBuild.Tasks.csproj
+@@ -5,6 +5,15 @@
+   </PropertyGroup>
+ 
+   <ItemGroup>
++    <Compile Include="../../../src/core-setup/src/managed/Microsoft.DotNet.PlatformAbstractions/Platform.cs" />
++    <Compile Include="../../../src/core-setup/src/managed/Microsoft.DotNet.PlatformAbstractions/RuntimeEnvironment.cs" />
++    <Compile Include="../../../src/core-setup/src/managed/Microsoft.DotNet.PlatformAbstractions/Native/NativeMethods.Darwin.cs" />
++    <Compile Include="../../../src/core-setup/src/managed/Microsoft.DotNet.PlatformAbstractions/Native/NativeMethods.Unix.cs" />
++    <Compile Include="../../../src/core-setup/src/managed/Microsoft.DotNet.PlatformAbstractions/Native/NativeMethods.Windows.cs" />
++    <Compile Include="../../../src/core-setup/src/managed/Microsoft.DotNet.PlatformAbstractions/Native/PlatformApis.cs" />
++  </ItemGroup>
++
++  <ItemGroup>
+     <PackageReference Include="Microsoft.Build">
+       <Version>15.1.0-preview-000370-00</Version>
+     </PackageReference>
+diff --git a/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Native/NativeMethods.Darwin.cs b/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Native/NativeMethods.Darwin.cs
+deleted file mode 100644
+index 348b8d1..0000000
+diff --git a/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Native/NativeMethods.Unix.cs b/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Native/NativeMethods.Unix.cs
+deleted file mode 100644
+index ff58ae7..0000000
+diff --git a/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Native/NativeMethods.Windows.cs b/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Native/NativeMethods.Windows.cs
+deleted file mode 100644
+index 17ff642..0000000
+diff --git a/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Native/PlatformApis.cs b/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Native/PlatformApis.cs
+deleted file mode 100644
+index f982012..0000000
+diff --git a/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Platform.cs b/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/Platform.cs
+deleted file mode 100644
+index 93f3dbb..0000000
+diff --git a/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/RuntimeEnvironment.cs b/tools-local/tasks/Microsoft.DotNet.SourceBuild.Tasks/vendor/Microsoft.DotNet.PlatformAbstractions/RuntimeEnvironment.cs
+deleted file mode 100644
+index 7bc731a..0000000
+-- 
+2.7.4
+

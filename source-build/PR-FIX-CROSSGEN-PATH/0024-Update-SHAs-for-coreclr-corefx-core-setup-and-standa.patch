@@ -1,0 +1,133 @@
+From c6e4cef43370b33c8b3db7873808b02b89841c45 Mon Sep 17 00:00:00 2001
+From: Dan Seefeldt <Dan.Seefeldt@microsoft.com>
+Date: Thu, 8 Feb 2018 15:25:42 -0600
+Subject: [PATCH] Update SHAs for coreclr, corefx, core-setup and standard to
+ pick up source-build fixes (#313)
+
+* Move SHAs forward for core-setup and corefx to get source-build changes
+
+* Update other versions
+
+* Change core-setup to build with "BuildAllPackages" = true
+
+* Move SHAs forward for core-setup and corefx to get source-build changes
+
+* Update other versions
+
+* Change core-setup to build with "BuildAllPackages" = true
+
+* Update cli SHA to more recent SHA to get new version of Microsoft.Build.Runtime to fix sporadic
+issue with CI where a broken version of Microsoft.Build.Runtime.15.4.8 was being installed from
+the msbuild myget feed.
+Add cli-deps to NuGet.Config for cli update-dependencies.
+Add ExternalRestoreSource to repo build command for cli.
+
+* Update SHAs for corefx and core-setup to pickup fixes.  Build corefx with BuildTest=false
+---
+ BuildToolsVersion.txt | 2 +-
+ NuGet.Config          | 1 +
+ repos/cli.proj        | 2 +-
+ repos/core-setup.proj | 2 +-
+ repos/corefx.proj     | 2 +-
+ src/cli               | 2 +-
+ src/core-setup        | 2 +-
+ src/coreclr           | 2 +-
+ src/corefx            | 2 +-
+ src/standard          | 2 +-
+ 10 files changed, 10 insertions(+), 9 deletions(-)
+
+diff --git a/BuildToolsVersion.txt b/BuildToolsVersion.txt
+index 67ce4c9..26ce316 100644
+--- a/BuildToolsVersion.txt
++++ b/BuildToolsVersion.txt
+@@ -1 +1 @@
+-2.0.0-servicing-02221-03
++2.0.0-servicing-02312-03
+diff --git a/NuGet.Config b/NuGet.Config
+index 1fa93e9..38c8303 100644
+--- a/NuGet.Config
++++ b/NuGet.Config
+@@ -5,5 +5,6 @@
+     <clear />
+     <add key="api.nuget.org" value="https://api.nuget.org/v3/index.json" />
+     <add key="nuget-build" value="https://dotnet.myget.org/F/nuget-build/api/v3/index.json" />
++    <add key="cli-deps" value="https://dotnet.myget.org/F/cli-deps/api/v3/index.json" />
+   </packageSources>
+ </configuration>
+diff --git a/repos/cli.proj b/repos/cli.proj
+index 752f3c6..dc784a2 100644
+--- a/repos/cli.proj
++++ b/repos/cli.proj
+@@ -4,7 +4,7 @@
+   <PropertyGroup>
+     <CLITargetsArgument Condition="'$(OS)' == 'Windows_NT'">'/p:CLITargets=\&quot;\&quot;\&quot;Prepare;Compile;Package\&quot;\&quot;\&quot;'</CLITargetsArgument>
+     <CLITargetsArgument Condition="'$(OS)' != 'Windows_NT'">'/p:CLITargets=&quot;Prepare;Compile;Package&quot;'</CLITargetsArgument>
+-    <BuildCommand>$(ProjectDirectory)build$(ShellExtension) $(CLITargetsArgument) /v:detailed /p:SkipBuildingInstallers=true /p:IncludeNuGetPackageArchive=false /p:IncludeAdditionalSharedFrameworks=false /flp:v=detailed /p:CoreSetupBlobRootUrl=file:%2F%2F$(LocalBlobStorageRoot) /p:UsePortableLinuxSharedFramework=false /p:IncludeSharedFrameworksForBackwardsCompatibilityTests=false /p:IncludeAspNetCoreRuntime=false /p:IncludeMSBuildSdkResolver=false</BuildCommand>
++    <BuildCommand>$(ProjectDirectory)build$(ShellExtension) $(CLITargetsArgument) /v:detailed /p:SkipBuildingInstallers=true /p:IncludeNuGetPackageArchive=false /p:IncludeAdditionalSharedFrameworks=false /flp:v=detailed /p:CoreSetupBlobRootUrl=file:%2F%2F$(LocalBlobStorageRoot) /p:ExternalRestoreSources=$(SourceBuiltPackagesPath) /p:UsePortableLinuxSharedFramework=false /p:IncludeSharedFrameworksForBackwardsCompatibilityTests=false /p:IncludeAspNetCoreRuntime=false /p:IncludeMSBuildSdkResolver=false</BuildCommand>
+     <PackagesOutput>$(ProjectDirectory)artifacts/linux-x64/packages/</PackagesOutput>
+     <TarBallOutput>$(PackagesOutput)</TarBallOutput>
+     <GitCommitCount>6908</GitCommitCount>
+diff --git a/repos/core-setup.proj b/repos/core-setup.proj
+index 65b67c0..fa44267 100644
+--- a/repos/core-setup.proj
++++ b/repos/core-setup.proj
+@@ -4,7 +4,7 @@
+   <PropertyGroup>
+     <BuildArguments>-ConfigurationGroup=$(Configuration) -PortableBuild=false -SkipTests=true </BuildArguments>
+     <BuildArguments Condition="$(Platform.Contains('arm'))">$(BuildArguments) -TargetArchitecture=$(Platform) -DisableCrossgen=true -CrossBuild=true</BuildArguments>
+-    <BuildCommand>$(ProjectDirectory)/build$(ShellExtension) $(BuildArguments) -- /p:BuildDebPackage=false</BuildCommand>
++    <BuildCommand>$(ProjectDirectory)/build$(ShellExtension) $(BuildArguments) -- /p:BuildDebPackage=false /p:BuildAllPackages=true</BuildCommand>
+     <BuildCommand Condition="$(Platform.Contains('arm'))">$(ArmEnvironmentVariables) $(BuildCommand)</BuildCommand>
+     <LatestCommit>82b22fa44e46d624ebeddf156f33e9cfb317bd57</LatestCommit>
+     <VersionSeedDate>2017-07-20</VersionSeedDate>
+diff --git a/repos/corefx.proj b/repos/corefx.proj
+index 24d22e0..59a15f0 100644
+--- a/repos/corefx.proj
++++ b/repos/corefx.proj
+@@ -2,7 +2,7 @@
+ <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))/dir.props" />
+   <PropertyGroup>
+-    <BuildCommand>$(ProjectDirectory)/build$(ShellExtension) -$(Configuration) -buildArch=$(Platform) -portable=false -- /p:ILLinkTrimAssembly=false</BuildCommand>
++    <BuildCommand>$(ProjectDirectory)/build$(ShellExtension) -$(Configuration) -buildArch=$(Platform) -portable=false -BuildTests=false -- /p:ILLinkTrimAssembly=false </BuildCommand>
+     <BuildCommand Condition="$(Platform.Contains('arm'))">$(ArmEnvironmentVariables) $(BuildCommand)</BuildCommand>
+     <FrameworkBuildCommand>$(ProjectDirectory)/build$(ShellExtension) -$(Configuration) -buildArch=$(Platform) -Framework=netfx -OSGroup=Windows_NT -- /p:ILLinkTrimAssembly=false</FrameworkBuildCommand>
+     <PackagesOutput>$(ProjectDirectory)/bin/packages/$(Configuration)</PackagesOutput>
+diff --git a/src/cli b/src/cli
+index b18db61..7fa7f6c 160000
+--- a/src/cli
++++ b/src/cli
+@@ -1 +1 @@
+-Subproject commit b18db615946288f2f9028dfe333d775b7f180598
++Subproject commit 7fa7f6c89b40a3e4edb3865d03ebeb4f2002e977
+diff --git a/src/core-setup b/src/core-setup
+index 1732b0a..7c54c3c 160000
+--- a/src/core-setup
++++ b/src/core-setup
+@@ -1 +1 @@
+-Subproject commit 1732b0ab678f1460cfb94d8688077edcb7c8d0f1
++Subproject commit 7c54c3ccb3da9f44abd4339f878462491448128a
+diff --git a/src/coreclr b/src/coreclr
+index 0e39e21..fcdc1ec 160000
+--- a/src/coreclr
++++ b/src/coreclr
+@@ -1 +1 @@
+-Subproject commit 0e39e2118f2a5bfd7d0c96e2d289e70823d6d1d4
++Subproject commit fcdc1ecab67568ea26ac03ee20e1da616d81ff1b
+diff --git a/src/corefx b/src/corefx
+index 0912774..62a4132 160000
+--- a/src/corefx
++++ b/src/corefx
+@@ -1 +1 @@
+-Subproject commit 091277427f67e2f9fc25c78d5640ea3a930ace72
++Subproject commit 62a413228e3f79b6d2eb854f50824b9e38bfdef1
+diff --git a/src/standard b/src/standard
+index f521a0e..330eb8d 160000
+--- a/src/standard
++++ b/src/standard
+@@ -1 +1 @@
+-Subproject commit f521a0ed6bcf6326bee829bc478c9e6529c2b0e2
++Subproject commit 330eb8d1678c95759fba4727e13fb7531c118727
+-- 
+2.7.4
+

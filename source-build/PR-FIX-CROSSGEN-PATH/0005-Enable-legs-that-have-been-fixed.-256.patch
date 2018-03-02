@@ -1,0 +1,35 @@
+From 89a38bf12f2f411764ab2fcedc0efbf130eda5af Mon Sep 17 00:00:00 2001
+From: Chris Rummel <crummel@microsoft.com>
+Date: Wed, 1 Nov 2017 14:51:30 -0500
+Subject: [PATCH] Enable legs that have been fixed. (#256)
+
+* Enable build legs that have been fixed since we initially looked at them.
+
+* Remove EOL legs.
+---
+ netci.groovy | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/netci.groovy b/netci.groovy
+index 619d443..82c07e9 100644
+--- a/netci.groovy
++++ b/netci.groovy
+@@ -46,13 +46,13 @@ def addPushJob(String project, String branch, String os, String configuration)
+     Utilities.addGithubPushTrigger(newJob);
+ }
+ 
+-["RHEL7.2", "Windows_NT", "CentOS7.1"].each { os ->
++["Ubuntu16.04", "Fedora24", "Debian8.4", "RHEL7.2", "Windows_NT", "CentOS7.1", "OSX10.12"].each { os ->
+   addPullRequestJob(project, branch, os, "Release", true);
+   addPullRequestJob(project, branch, os, "Debug", false);
+ };
+ 
+ // Per push, run all the jobs
+-["Ubuntu14.04", "RHEL7.2", "Windows_NT", "CentOS7.1", "OSX10.12"].each { os ->
++["Ubuntu16.04", "Fedora24", "Debian8.4", "RHEL7.2", "Windows_NT", "CentOS7.1", "OSX10.12"].each { os ->
+   ["Release", "Debug"].each { configuration ->
+     addPushJob(project, branch, os, configuration);
+   };
+-- 
+2.7.4
+
