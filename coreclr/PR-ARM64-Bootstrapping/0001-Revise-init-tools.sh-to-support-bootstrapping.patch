@@ -1,0 +1,45 @@
+From 948f89149785a6a27cb83e610d10ad2b65eed529 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 28 Feb 2018 12:00:31 -0500
+Subject: [PATCH] Revise init-tools.sh to support bootstrapping
+
+Add $DotNetBootstrapCliTarPath
+Disable ILAsm nuget fetch while bootstrapping
+---
+ init-tools.sh | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/init-tools.sh b/init-tools.sh
+index 1df4f25..d8b0b33 100755
+--- a/init-tools.sh
++++ b/init-tools.sh
+@@ -132,7 +132,13 @@ if [ ! -e $__DOTNET_PATH ]; then
+         cd $__DOTNET_PATH
+         tar -xf $__DOTNET_PATH/dotnet.tar
+     }
+-    execute_with_retry install_dotnet_cli >> "$__init_tools_log" 2>&1
++
++    if [[ "$DotNetBootstrapCliTarPath" = "" ]]; then
++        __execute_with_retry install_dotnet_cli >> "$__init_tools_log" 2>&1
++    else
++        cd $__DOTNET_PATH
++        tar -xf $DotNetBootstrapCliTarPath
++    fi
+ 
+     cd $__scriptpath
+ fi
+@@ -156,6 +162,11 @@ echo "Using RID $__ILASM_RID for BuildTools native tools"
+ export ILASMCOMPILER_VERSION=$__ILASM_VERSION
+ export NATIVE_TOOLS_RID=$__ILASM_RID
+ 
++if [ ! "$DotNetBootstrapCliTarPath" = "" ]; then
++    # Assume ilasm is not in nuget yet when bootstrapping...
++    unset ILASMCOMPILER_VERSION
++fi
++
+ echo "Initializing BuildTools..."
+ echo "Running: $__BUILD_TOOLS_PATH/init-tools.sh $__scriptpath $__DOTNET_CMD $__TOOLRUNTIME_DIR $__PACKAGES_DIR" >> $__init_tools_log
+ 
+-- 
+2.7.4
+
