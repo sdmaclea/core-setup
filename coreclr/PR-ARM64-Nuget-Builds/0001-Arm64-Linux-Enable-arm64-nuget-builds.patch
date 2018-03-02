@@ -1,0 +1,38 @@
+From 12986596aeeafb7d8d5bc52e4694fb67e676d3e5 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 2 Mar 2018 12:14:02 -0500
+Subject: [PATCH] [Arm64/Linux] Enable arm64 nuget builds
+
+---
+ buildpipeline/pipelines.json | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/buildpipeline/pipelines.json b/buildpipeline/pipelines.json
+index e48305d..3b68f12 100644
+--- a/buildpipeline/pipelines.json
++++ b/buildpipeline/pipelines.json
+@@ -141,6 +141,21 @@
+             "Architecture": "arm",
+             "PB_BuildType": null
+           }
++        },
++        {
++          "Name": "DotNet-CoreClr-Trusted-Linux-Crossbuild-arm64",
++          "Parameters": {
++            "DockerTag": "hseok82/dotnet-buildtools-prereqs:ubuntu-16.04-crossx86-ef0ac75-20175511035548",
++            "Architecture": "arm64",
++            "Rid": "linux"
++          },
++          "ReportingParameters": {
++            "OperatingSystem": "Linux",
++            "SubType": "PortableCrossBuild",
++            "Type": "build/product/",
++            "Architecture": "arm64",
++            "PB_BuildType": null
++          }
+         }
+       ]
+     }
+-- 
+2.7.4
+
