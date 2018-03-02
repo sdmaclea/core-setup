@@ -1,0 +1,81 @@
+From d16b9e144b7299aa5eb5d616604ba1f4dbd3a4e0 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 28 Feb 2018 12:00:31 -0500
+Subject: [PATCH] Revise init-tools.sh
+
+Allow DotNetBuildToolsDir to only contain dotnetcli
+This is useful for bootstrapping
+
+if [ "$(uname -m}" ==  "aarch64" ];then
+    __PKG_ARCH=arm64;
+fi
+---
+ init-tools.sh | 30 +++++++++++++++---------------
+ 1 file changed, 15 insertions(+), 15 deletions(-)
+
+diff --git a/init-tools.sh b/init-tools.sh
+index 1df4f25..c280825 100755
+--- a/init-tools.sh
++++ b/init-tools.sh
+@@ -22,7 +22,7 @@ fi
+ 
+ if [ -e $__TOOLRUNTIME_DIR ]; then rm -rf -- $__TOOLRUNTIME_DIR; fi
+ 
+-if [ -d "$DotNetBuildToolsDir" ]; then
++if [ "$DotNetBuildToolsDir" != "" ]; then
+     echo "Using tools from '$DotNetBuildToolsDir'."
+     ln -s "$DotNetBuildToolsDir" "$__TOOLRUNTIME_DIR"
+ 
+@@ -30,10 +30,6 @@ if [ -d "$DotNetBuildToolsDir" ]; then
+         echo "ERROR: Ensure that $DotNetBuildToolsDir contains the .NET Core SDK at $__DOTNET_PATH"
+         exit 1
+     fi
+-
+-    echo "Done initializing tools."
+-    mkdir -p "$(dirname "$__BUILD_TOOLS_SEMAPHORE")" && touch $__BUILD_TOOLS_SEMAPHORE
+-    return #return instead of exit because this script is inlined in other scripts which we don't want to exit
+ fi
+ 
+ echo "Running: $__scriptpath/init-tools.sh" > $__init_tools_log
+@@ -65,16 +61,13 @@ execute_with_retry() {
+     return 0
+ }
+ 
+-if [ ! -e $__DOTNET_PATH ]; then
+-    if [ -z "$__DOTNET_PKG" ]; then
+-        if [ "$(uname -m | grep "i[3456]86")" = "i686" ]; then
+-            echo "Warning: build not supported on 32 bit Unix"
+-        fi
+-
+-        __PKG_ARCH=x64
++__PKG_ARCH=x64
++if [ "$(uname -m)" == "aarch64" ]; then
++    __PKG_ARCH=arm64
++fi
+ 
+-        OSName=$(uname -s)
+-        case $OSName in
++OSName=$(uname -s)
++case $OSName in
+     Darwin)
+         OS=OSX
+         __PKG_RID=osx
+@@ -112,7 +105,14 @@ if [ ! -e $__DOTNET_PATH ]; then
+         OS=Linux
+         __PKG_RID=linux
+         ;;
+-      esac
++esac
++
++if [ ! -e $__DOTNET_PATH ]; then
++    if [ -z "$__DOTNET_PKG" ]; then
++        if [ "$(uname -m | grep "i[3456]86")" = "i686" ]; then
++            echo "Warning: build not supported on 32 bit Unix"
++        fi
++
+             __DOTNET_PKG=dotnet-sdk-${__DOTNET_TOOLS_VERSION}-$__PKG_RID-$__PKG_ARCH
+     fi
+     mkdir -p "$__DOTNET_PATH"
+-- 
+2.7.4
+
