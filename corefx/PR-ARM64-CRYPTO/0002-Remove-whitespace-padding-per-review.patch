@@ -1,4 +1,4 @@
-From 0234a04673a8f4a49511cc0c5eccd8f2ed9711b1 Mon Sep 17 00:00:00 2001
+From fd2939303b0a9b83e620497967bf1d0fb5c41409 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Mon, 5 Mar 2018 12:59:02 -0500
 Subject: [PATCH] Remove whitespace padding per review
