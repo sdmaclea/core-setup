@@ -1,4 +1,4 @@
-From 3084cbb3bc09870e515e18ad11de7804de61d327 Mon Sep 17 00:00:00 2001
+From ae8f2a29b0daed80ca68e64b40de88394aa262cc Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Thu, 8 Feb 2018 13:38:22 -0500
 Subject: [PATCH] [Arm64] Treat Short Vectors as HFA
@@ -343,7 +343,7 @@ index dc68ce0..20ddd44 100644
  #if defined LEGACY_BACKEND
          if (!IsHfa(clsHnd))
 diff --git a/src/jit/compiler.h b/src/jit/compiler.h
-index 7b9313a..81f9469 100644
+index 7b9313a..30297f8 100644
 --- a/src/jit/compiler.h
 +++ b/src/jit/compiler.h
 @@ -302,9 +302,7 @@ public:

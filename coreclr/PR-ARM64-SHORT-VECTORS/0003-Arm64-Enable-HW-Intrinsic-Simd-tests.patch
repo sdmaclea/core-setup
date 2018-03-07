@@ -1,4 +1,4 @@
-From 5001baeac40ceb8cf4af99f2cb0dd66660431495 Mon Sep 17 00:00:00 2001
+From ea14dcf59cb3c5c4c834b14db19bc74b1a4fe303 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 7 Mar 2018 16:15:00 -0500
 Subject: [PATCH] [Arm64] Enable HW Intrinsic Simd tests
