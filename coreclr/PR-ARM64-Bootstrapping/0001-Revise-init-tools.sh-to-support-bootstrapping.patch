@@ -1,4 +1,4 @@
-From 948f89149785a6a27cb83e610d10ad2b65eed529 Mon Sep 17 00:00:00 2001
+From ecacf891bb5c3cae4af748407d345a8944fa41e5 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 28 Feb 2018 12:00:31 -0500
 Subject: [PATCH] Revise init-tools.sh to support bootstrapping
@@ -10,24 +10,24 @@ Disable ILAsm nuget fetch while bootstrapping
  1 file changed, 12 insertions(+), 1 deletion(-)
 
 diff --git a/init-tools.sh b/init-tools.sh
-index 1df4f25..d8b0b33 100755
+index 1df4f25..2f04fdf 100755
 --- a/init-tools.sh
 +++ b/init-tools.sh
-@@ -132,7 +132,13 @@ if [ ! -e $__DOTNET_PATH ]; then
-         cd $__DOTNET_PATH
-         tar -xf $__DOTNET_PATH/dotnet.tar
-     }
--    execute_with_retry install_dotnet_cli >> "$__init_tools_log" 2>&1
-+
-+    if [[ "$DotNetBootstrapCliTarPath" = "" ]]; then
-+        __execute_with_retry install_dotnet_cli >> "$__init_tools_log" 2>&1
-+    else
-+        cd $__DOTNET_PATH
-+        tar -xf $DotNetBootstrapCliTarPath
-+    fi
+@@ -121,7 +121,13 @@ if [ ! -e $__DOTNET_PATH ]; then
+     __DOTNET_LOCATION="https://dotnetcli.azureedge.net/dotnet/Sdk/${__DOTNET_TOOLS_VERSION}/${__DOTNET_PKG}.tar.gz"
  
-     cd $__scriptpath
- fi
+     install_dotnet_cli() {
+-        echo "Installing '${__DOTNET_LOCATION}' to '$__DOTNET_PATH/dotnet.tar'" >> "$__init_tools_log"
++        if [[ ! "$DotNetBootstrapCliTarPath" = "" ]]; then
++            echo "Running 'tar -xf $DotNetBootstrapCliTarPath' in '$__DOTNET_PATH'"
++            cd $__DOTNET_PATH
++            tar -xf $DotNetBootstrapCliTarPath
++            return
++        fi
++        echo "Installing '${__DOTNET_LOCATION}' to '$__DOTNET_PATH/dotnet.tar'"
+         rm -rf -- "$__DOTNET_PATH/*"
+         # curl has HTTPS CA trust-issues less often than wget, so lets try that first.
+         if command -v curl > /dev/null; then
 @@ -156,6 +162,11 @@ echo "Using RID $__ILASM_RID for BuildTools native tools"
  export ILASMCOMPILER_VERSION=$__ILASM_VERSION
  export NATIVE_TOOLS_RID=$__ILASM_RID
