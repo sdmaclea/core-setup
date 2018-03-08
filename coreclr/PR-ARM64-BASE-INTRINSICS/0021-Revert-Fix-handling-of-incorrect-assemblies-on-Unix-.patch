@@ -1,0 +1,113 @@
+From 47bef69b68a35eafa069d08187727684a5f47901 Mon Sep 17 00:00:00 2001
+From: Jan Kotas <jkotas@microsoft.com>
+Date: Tue, 6 Mar 2018 16:37:51 -0800
+Subject: [PATCH] Revert "Fix handling of incorrect assemblies on Unix
+ (#16747)" (#16790)
+
+This reverts commit 383736b96b643ba46ad290fc86601fc2d62a9436.
+---
+ src/debug/daccess/nidump.cpp                       |  2 +-
+ src/inc/pedecoder.h                                |  2 +-
+ src/inc/pedecoder.inl                              |  2 +-
+ src/utilcode/pedecoder.cpp                         |  3 +-
+ src/vm/peimage.cpp                                 |  7 ++--
+ tests/src/Loader/regressions/GitHub_15544/main.cs  | 37 ----------------------
+ .../Loader/regressions/GitHub_15544/main.csproj    | 31 ------------------
+ 7 files changed, 7 insertions(+), 77 deletions(-)
+ delete mode 100644 tests/src/Loader/regressions/GitHub_15544/main.cs
+ delete mode 100644 tests/src/Loader/regressions/GitHub_15544/main.csproj
+
+diff --git a/src/debug/daccess/nidump.cpp b/src/debug/daccess/nidump.cpp
+index e948687..45320dc 100644
+--- a/src/debug/daccess/nidump.cpp
++++ b/src/debug/daccess/nidump.cpp
+@@ -720,7 +720,7 @@ NativeImageDumper::DumpNativeImage()
+ 
+     for (COUNT_T i = 0; i < m_decoder.GetNumberOfSections(); i++)
+     {
+-        PTR_IMAGE_SECTION_HEADER section = m_decoder.FindFirstSection() + i;
++        PTR_IMAGE_SECTION_HEADER section = dptr_add(m_decoder.FindFirstSection(), i);
+         m_display->Section(reinterpret_cast<char *>(section->Name),
+                            section->VirtualAddress,
+                            section->SizeOfRawData);
+diff --git a/src/inc/pedecoder.h b/src/inc/pedecoder.h
+index 8163fff..01375e6 100644
+--- a/src/inc/pedecoder.h
++++ b/src/inc/pedecoder.h
+@@ -182,7 +182,7 @@ class PEDecoder
+     UINT32 GetWin32VersionValue() const;
+     COUNT_T GetNumberOfRvaAndSizes() const;
+     COUNT_T GetNumberOfSections() const;
+-    PTR_IMAGE_SECTION_HEADER FindFirstSection() const;
++    IMAGE_SECTION_HEADER *FindFirstSection() const;
+     IMAGE_SECTION_HEADER *FindSection(LPCSTR sectionName) const;
+ 
+     DWORD GetImageIdentity() const;
+diff --git a/src/inc/pedecoder.inl b/src/inc/pedecoder.inl
+index c8400af..7f3c79b 100644
+--- a/src/inc/pedecoder.inl
++++ b/src/inc/pedecoder.inl
+@@ -1178,7 +1178,7 @@ inline DWORD PEDecoder::GetImageIdentity() const
+ }
+ 
+ 
+-inline PTR_IMAGE_SECTION_HEADER PEDecoder::FindFirstSection() const
++inline IMAGE_SECTION_HEADER *PEDecoder::FindFirstSection() const
+ {
+     CONTRACT(IMAGE_SECTION_HEADER *)
+     {
+diff --git a/src/utilcode/pedecoder.cpp b/src/utilcode/pedecoder.cpp
+index e5e8ddc..ddd65d3 100644
+--- a/src/utilcode/pedecoder.cpp
++++ b/src/utilcode/pedecoder.cpp
+@@ -445,7 +445,6 @@ BOOL PEDecoder::HasWriteableSections() const
+     CONTRACT_CHECK
+     {
+         INSTANCE_CHECK;
+-        PRECONDITION(CheckNTHeaders());
+         PRECONDITION(CheckFormat());
+         NOTHROW;
+         GC_NOTRIGGER;
+@@ -454,7 +453,7 @@ BOOL PEDecoder::HasWriteableSections() const
+     }
+     CONTRACT_CHECK_END;
+ 
+-    PTR_IMAGE_SECTION_HEADER pSection = FindFirstSection();
++    PTR_IMAGE_SECTION_HEADER pSection = FindFirstSection(FindNTHeaders());
+     _ASSERTE(pSection != NULL);
+ 
+     PTR_IMAGE_SECTION_HEADER pSectionEnd = pSection + VAL16(FindNTHeaders()->FileHeader.NumberOfSections);
+diff --git a/src/vm/peimage.cpp b/src/vm/peimage.cpp
+index 83989f0..3536b08 100644
+--- a/src/vm/peimage.cpp
++++ b/src/vm/peimage.cpp
+@@ -1029,9 +1029,7 @@ PTR_PEImageLayout PEImage::CreateLayoutFlat(BOOL bPermitWriteableSections)
+ 
+     PTR_PEImageLayout pFlatLayout = PEImageLayout::LoadFlat(GetFileHandle(),this);
+ 
+-    if (!bPermitWriteableSections
+-        && pFlatLayout->CheckNTHeaders()
+-        && pFlatLayout->HasWriteableSections())
++    if (!bPermitWriteableSections && pFlatLayout->HasWriteableSections())
+     {
+         pFlatLayout->Release();
+ 
+@@ -1116,7 +1114,8 @@ void PEImage::Load()
+ 
+ #ifdef PLATFORM_UNIX
+     if (m_pLayouts[IMAGE_FLAT] != NULL
+-        && m_pLayouts[IMAGE_FLAT]->CheckILOnlyFormat()
++        && m_pLayouts[IMAGE_FLAT]->CheckFormat()
++        && m_pLayouts[IMAGE_FLAT]->IsILOnly()
+         && !m_pLayouts[IMAGE_FLAT]->HasWriteableSections())
+     {
+         // IL-only images with writeable sections are mapped in general way,
+diff --git a/tests/src/Loader/regressions/GitHub_15544/main.cs b/tests/src/Loader/regressions/GitHub_15544/main.cs
+deleted file mode 100644
+index 25e7d79..0000000
+diff --git a/tests/src/Loader/regressions/GitHub_15544/main.csproj b/tests/src/Loader/regressions/GitHub_15544/main.csproj
+deleted file mode 100644
+index e46a44c..0000000
+-- 
+2.7.4
+

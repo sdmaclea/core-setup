@@ -1,0 +1,235 @@
+From c4046a44afbcc3758ba035add7073fbd66ad8e81 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 7 Mar 2018 19:07:51 -0500
+Subject: [PATCH] [Arm64] Add Base HW intrinsic tests
+
+---
+ tests/src/JIT/HardwareIntrinsics/Arm64/Base.cs     | 170 +++++++++++++++++++++
+ tests/src/JIT/HardwareIntrinsics/Arm64/Base.csproj |  38 +++++
+ 2 files changed, 208 insertions(+)
+ create mode 100644 tests/src/JIT/HardwareIntrinsics/Arm64/Base.cs
+ create mode 100644 tests/src/JIT/HardwareIntrinsics/Arm64/Base.csproj
+
+diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Base.cs b/tests/src/JIT/HardwareIntrinsics/Arm64/Base.cs
+new file mode 100644
+index 0000000..d19f7eb
+--- /dev/null
++++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Base.cs
+@@ -0,0 +1,170 @@
++using System;
++using System.Diagnostics;
++using System.Runtime.CompilerServices;
++using System.Runtime.InteropServices;
++using System.Runtime.Intrinsics;
++using System.Runtime.Intrinsics.Arm.Arm64;
++
++namespace Arm64intrisicsTest
++{
++    class Program
++    {
++        static void testUnaryOp<T>(String testCaseDescription, Func<T, int> binOp, Func<T, int> check, T value)
++        {
++            bool failed = false;
++            try
++            {
++                int expected = check(value);
++                int result = binOp(value);
++
++                if (result != expected)
++                {
++                    Console.WriteLine($"testUnaryOp<{typeof(T).Name}>{testCaseDescription}: Check Failed");
++                    Console.WriteLine($"    result = {result}, expected = {expected}");
++                    throw new Exception($"testUnaryOp<{typeof(T).Name}>{testCaseDescription}: Failed");
++                }
++            }
++            catch
++            {
++                Console.WriteLine($"testUnaryOp<{typeof(T).Name}>{testCaseDescription}: Unexpected exception");
++                throw;
++            }
++        }
++
++        static void testThrowsPlatformNotSupported<T>(String testCaseDescription, Func<T, int> unaryOp, T value)
++        {
++            bool notSupported = false;
++
++            try
++            {
++                unaryOp(value);
++            }
++            catch (PlatformNotSupportedException)
++            {
++                notSupported = true;
++            }
++            catch
++            {
++                Console.WriteLine($"testThrowsPlatformNotSupported: Unexpected exception");
++                throw;
++            }
++
++            if (notSupported == false)
++            {
++                throw new Exception($"testThrowsPlatformNotSupported<{typeof(TVectorType).Name} >{testCaseDescription}: Failed");
++            }
++        }
++
++        static T leadingZero<T>(T x)
++            where T : IConvertible
++        {
++            ulong compare = 0x1UL << (8*Unsafe.SizeOf<T>() - 1);
++            ulong result = 0;
++            ulong value = bitsToUint64(x);
++
++            while(value < compare)
++            {
++                result++;
++                compare >>= 1;
++            }
++
++            return (T) Convert.ChangeType(result,  typeof(T));
++
++            throw new Exception("Unexpected Type");
++        }
++
++        static T leadingSign<T>(T x)
++            where T : IConvertible
++        {
++            ulong value = bitsToUint64(x);
++            ulong signBit = value & (0x1UL << (8*Unsafe.SizeOf<T>() - 1));
++            ulong result = 0;
++
++            if (signBit == 0)
++            {
++                result = (ulong) Convert.ChangeType(leadingZero(x), typeof(ulong));
++            }
++            else
++            {
++                result = (ulong) Convert.ChangeType(leadingZero((T) Convert.ChangeType(value ^ (signBit + (signBit - 1)),  typeof(T))), typeof(ulong));
++            }
++
++            return (T) Convert.ChangeType(result - 1, typeof(T));
++        }
++
++        static void TestLeadingSignCount()
++        {
++            String name = "LeadingSignCount";
++
++            if (Simd.IsSupported)
++            {
++                testBinOp<int >(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x),  0);
++                testBinOp<int >(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x), -1);
++                testBinOp<int >(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x),  1 << 30);
++                testBinOp<int >(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x), -1 << 30);
++                testBinOp<long>(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x),  0);
++                testBinOp<long>(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x), -1);
++                testBinOp<long>(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x),  1L << 60);
++                testBinOp<long>(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x), -1L << 60);
++            }
++            else
++            {
++                testThrowsPlatformNotSupported<int >(name, (x) => Base.LeadingSignCount(x), 0);
++                testThrowsPlatformNotSupported<long>(name, (x) => Base.LeadingSignCount)x), 0);
++            }
++
++            Console.WriteLine($"Test{name} passed");
++        }
++
++        static void TestLeadingZeroCount()
++        {
++            String name = "LeadingZeroCount";
++
++            if (Simd.IsSupported)
++            {
++                testBinOp<int  >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  0);
++                testBinOp<int  >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x), -1);
++                testBinOp<int  >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  1 << 30);
++                testBinOp<int  >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x), -1 << 30);
++                testBinOp<uint >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  0);
++                testBinOp<uint >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  1 << 30);
++                testBinOp<long >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  0);
++                testBinOp<long >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x), -1);
++                testBinOp<long >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  1L << 60);
++                testBinOp<long >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x), -1L << 60);
++                testBinOp<ulong>(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  0);
++                testBinOp<ulong>(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  1L << 60);
++            }
++            else
++            {
++                testThrowsPlatformNotSupported<int  >(name, (x) => Base.LeadingZeroCount(x), 0);
++                testThrowsPlatformNotSupported<uint >(name, (x) => Base.LeadingZeroCount(x), 0);
++                testThrowsPlatformNotSupported<long >(name, (x) => Base.LeadingZeroCount(x), 0);
++                testThrowsPlatformNotSupported<ulong>(name, (x) => Base.LeadingZeroCount(x), 0);
++            }
++
++            Console.WriteLine($"Test{name} passed");
++        }
++
++        static void ExecuteAllTests()
++        {
++            TestLeadingSignCount();
++            TestLeadingZeroCount();
++        }
++
++        static int Main(string[] args)
++        {
++            Console.WriteLine($"System.Runtime.Intrinsics.Arm.Arm64.Base.IsSupported = {Base.IsSupported}");
++
++            // Reflection call
++            var issupported = "get_IsSupported";
++            bool reflectedIsSupported = Convert.ToBoolean(typeof(Simd).GetMethod(issupported).Invoke(null, null));
++
++            Debug.Assert(reflectedIsSupported == Base.IsSupported, "Reflection result does not match");
++
++            ExecuteAllTests();
++
++            return 100;
++        }
++    }
++}
+diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Base.csproj b/tests/src/JIT/HardwareIntrinsics/Arm64/Base.csproj
+new file mode 100644
+index 0000000..e4ea6cc
+--- /dev/null
++++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Base.csproj
+@@ -0,0 +1,38 @@
++<?xml version="1.0" encoding="utf-8"?>
++<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
++  <PropertyGroup>
++    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
++    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
++    <SchemaVersion>2.0</SchemaVersion>
++    <ProjectGuid>{95DFC527-4DC1-495E-97D7-E94EE1F7140D}</ProjectGuid>
++    <OutputType>Exe</OutputType>
++    <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
++    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
++    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
++    <!-- TODO-ARM64 Remove when Base intrinsics are present in corefx -->
++    <ReferenceSystemPrivateCoreLib>true</ReferenceSystemPrivateCoreLib>
++  </PropertyGroup>
++  <!-- Default configurations to help VS understand the configurations -->
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' "></PropertyGroup>
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />
++  <ItemGroup>
++    <CodeAnalysisDependentAssemblyPaths Condition=" '$(VS100COMNTOOLS)' != '' " Include="$(VS100COMNTOOLS)..\IDE\PrivateAssemblies">
++      <Visible>False</Visible>
++    </CodeAnalysisDependentAssemblyPaths>
++  </ItemGroup>
++  <PropertyGroup>
++    <DebugType>None</DebugType>
++    <Optimize>True</Optimize>
++  </PropertyGroup>
++  <ItemGroup>
++    <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
++  </ItemGroup>
++  <ItemGroup>
++    <Compile Include="Base.cs" />
++  </ItemGroup>
++  <ItemGroup>
++  </ItemGroup>
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
++  <PropertyGroup Condition=" '$(MsBuildProjectDirOverride)' != '' "></PropertyGroup>
++</Project>
+-- 
+2.7.4
+

@@ -1,0 +1,119 @@
+From 19414cb0e9a75914815945e8528107ffb969d9a7 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 7 Mar 2018 19:01:57 -0500
+Subject: [PATCH] [Arm64] Add Base HW intrinsics
+
+---
+ src/mscorlib/System.Private.CoreLib.csproj         |  6 ++--
+ .../Arm/Arm64/Base.PlatformNotSupported.cs         | 33 ++++++++++++++++++++++
+ .../System/Runtime/Intrinsics/Arm/Arm64/Base.cs    | 33 ++++++++++++++++++++++
+ 3 files changed, 70 insertions(+), 2 deletions(-)
+ create mode 100644 src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Base.PlatformNotSupported.cs
+ create mode 100644 src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Base.cs
+
+diff --git a/src/mscorlib/System.Private.CoreLib.csproj b/src/mscorlib/System.Private.CoreLib.csproj
+index 46ccdf1..c1de9e4 100644
+--- a/src/mscorlib/System.Private.CoreLib.csproj
++++ b/src/mscorlib/System.Private.CoreLib.csproj
+@@ -297,16 +297,18 @@
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\X86\Ssse3.PlatformNotSupported.cs" />
+   </ItemGroup>
+   <ItemGroup Condition="'$(Platform)' == 'arm64'">
+-    <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Simd.cs" />
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Aes.cs" />
++    <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Base.cs" />
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Sha1.cs" />
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Sha256.cs" />
++    <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Simd.cs" />
+   </ItemGroup>
+   <ItemGroup Condition="'$(Platform)' != 'arm64'">
+-    <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Simd.PlatformNotSupported.cs" />
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Aes.PlatformNotSupported.cs" />
++    <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Base.PlatformNotSupported.cs" />
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Sha1.PlatformNotSupported.cs" />
+     <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Sha256.PlatformNotSupported.cs" />
++    <Compile Include="$(BclSourcesRoot)\System\Runtime\Intrinsics\Arm\Arm64\Simd.PlatformNotSupported.cs" />
+   </ItemGroup>
+   <ItemGroup>
+     <Compile Include="$(BclSourcesRoot)\System\AppContext\AppContext.cs" />
+diff --git a/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Base.PlatformNotSupported.cs b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Base.PlatformNotSupported.cs
+new file mode 100644
+index 0000000..0a13828
+--- /dev/null
++++ b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Base.PlatformNotSupported.cs
+@@ -0,0 +1,33 @@
++using System.Runtime.CompilerServices;
++using System.Runtime.Intrinsics;
++
++
++namespace System.Runtime.Intrinsics.Arm.Arm64
++{
++    /// <summary>
++    /// This class provides access to the Arm64 Base intrinsics
++    ///
++    /// These intrinsics are supported by all Arm64 CPUs
++    /// </summary>
++    [CLSCompliant(false)]
++    public static class Base
++    {
++        public static bool IsSupported { get { return false; }}
++
++        /// <summary>
++        /// Vector LeadingSignCount
++        /// Corresponds to integer forms of ARM64 CLS
++        /// </summary>
++        public static int LeadingSignCount(int  value) { throw new PlatformNotSupportedException(); }
++        public static int LeadingSignCount(long value) { throw new PlatformNotSupportedException(); }
++
++        /// <summary>
++        /// Vector LeadingZeroCount
++        /// Corresponds to integer forms of ARM64 CLZ
++        /// </summary>
++        public static int LeadingZeroCount(int   value) { throw new PlatformNotSupportedException(); }
++        public static int LeadingZeroCount(uint  value) { throw new PlatformNotSupportedException(); }
++        public static int LeadingZeroCount(long  value) { throw new PlatformNotSupportedException(); }
++        public static int LeadingZeroCount(ulong value) { throw new PlatformNotSupportedException(); }
++    }
++}
+diff --git a/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Base.cs b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Base.cs
+new file mode 100644
+index 0000000..fc0a190
+--- /dev/null
++++ b/src/mscorlib/src/System/Runtime/Intrinsics/Arm/Arm64/Base.cs
+@@ -0,0 +1,33 @@
++using System.Runtime.CompilerServices;
++using System.Runtime.Intrinsics;
++
++
++namespace System.Runtime.Intrinsics.Arm.Arm64
++{
++    /// <summary>
++    /// This class provides access to the Arm64 Base intrinsics
++    ///
++    /// These intrinsics are supported by all Arm64 CPUs
++    /// </summary>
++    [CLSCompliant(false)]
++    public static class Base
++    {
++        public static bool IsSupported { get { return false; }}
++
++        /// <summary>
++        /// Vector LeadingSignCount
++        /// Corresponds to integer forms of ARM64 CLS
++        /// </summary>
++        public static int LeadingSignCount(int  value) => LeadingSignCount(value);
++        public static int LeadingSignCount(long value) => LeadingSignCount(value);
++
++        /// <summary>
++        /// Vector LeadingZeroCount
++        /// Corresponds to integer forms of ARM64 CLZ
++        /// </summary>
++        public static int LeadingZeroCount(int   value) => LeadingZeroCount(value);
++        public static int LeadingZeroCount(uint  value) => LeadingZeroCount(value);
++        public static int LeadingZeroCount(long  value) => LeadingZeroCount(value);
++        public static int LeadingZeroCount(ulong value) => LeadingZeroCount(value);
++    }
++}
+-- 
+2.7.4
+

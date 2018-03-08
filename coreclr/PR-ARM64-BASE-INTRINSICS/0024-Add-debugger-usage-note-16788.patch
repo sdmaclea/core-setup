@@ -1,0 +1,24 @@
+From 250e31704f38e73f7cd342af22491b57a9fe3d13 Mon Sep 17 00:00:00 2001
+From: Noah Falk <noahfalk@users.noreply.github.com>
+Date: Tue, 6 Mar 2018 19:02:44 -0800
+Subject: [PATCH] Add debugger usage note (#16788)
+
+---
+ src/mscorlib/src/System/Threading/Tasks/Task.cs | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/mscorlib/src/System/Threading/Tasks/Task.cs b/src/mscorlib/src/System/Threading/Tasks/Task.cs
+index 56ae63f..4e8de99 100644
+--- a/src/mscorlib/src/System/Threading/Tasks/Task.cs
++++ b/src/mscorlib/src/System/Threading/Tasks/Task.cs
+@@ -6192,6 +6192,7 @@ namespace System.Threading.Tasks
+             return null;
+         }
+ 
++        //Do not remove: VS debugger calls this API directly using func-eval to populate data in the tasks window
+         private static Task GetActiveTaskFromId(int taskId)
+         {
+             Task task = null;
+-- 
+2.7.4
+

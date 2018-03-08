@@ -1,0 +1,25 @@
+From a2628fc507df0c011383dd0c275bfb0d51bcd060 Mon Sep 17 00:00:00 2001
+From: JC Aguilera <juanam@microsoft.com>
+Date: Mon, 5 Mar 2018 16:35:20 -0800
+Subject: [PATCH] SCEP package version update
+
+---
+ buildpipeline/Dotnet-CoreClr-Trusted-BuildTests.json | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/buildpipeline/Dotnet-CoreClr-Trusted-BuildTests.json b/buildpipeline/Dotnet-CoreClr-Trusted-BuildTests.json
+index 71eaabb..28614b6 100644
+--- a/buildpipeline/Dotnet-CoreClr-Trusted-BuildTests.json
++++ b/buildpipeline/Dotnet-CoreClr-Trusted-BuildTests.json
+@@ -196,7 +196,7 @@
+         "definitionType": "task"
+       },
+       "inputs": {
+-        "solution": "$(Build.StagingDirectory)\\Microsoft.DotNet.Build.Tasks.ScepOps.1.0.0\\build\\Microsoft.DotNet.Build.Tasks.ScepOps.targets",
++        "solution": "$(Build.StagingDirectory)\\Microsoft.DotNet.Build.Tasks.ScepOps.1.0.1\\build\\Microsoft.DotNet.Build.Tasks.ScepOps.targets",
+         "msbuildLocationMethod": "version",
+         "msbuildVersion": "14.0",
+         "msbuildArchitecture": "x64",
+-- 
+2.7.4
+

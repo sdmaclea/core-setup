@@ -1,0 +1,769 @@
+From a13719b13434059db6fb67334c2409467d4c2970 Mon Sep 17 00:00:00 2001
+From: Jacek Blaszczynski <biosciencenow@outlook.com>
+Date: Thu, 1 Mar 2018 19:27:49 +0100
+Subject: [PATCH] Add LoadHigh, LoadLow, and SetScalarVector128 SSE2 HW
+ intrinsics tests
+
+---
+ .../JIT/HardwareIntrinsics/X86/Sse2/LoadHigh.cs    |  84 ++++++++++++++++
+ .../HardwareIntrinsics/X86/Sse2/LoadHigh_r.csproj  |  37 +++++++
+ .../HardwareIntrinsics/X86/Sse2/LoadHigh_ro.csproj |  36 +++++++
+ .../src/JIT/HardwareIntrinsics/X86/Sse2/LoadLow.cs |  84 ++++++++++++++++
+ .../HardwareIntrinsics/X86/Sse2/LoadLow_r.csproj   |  37 +++++++
+ .../HardwareIntrinsics/X86/Sse2/LoadLow_ro.csproj  |  36 +++++++
+ .../X86/Sse2/SetScalarVector128.cs                 |  72 ++++++++++++++
+ .../X86/Sse2/SetScalarVector128_r.csproj           |  37 +++++++
+ .../X86/Sse2/SetScalarVector128_ro.csproj          |  36 +++++++
+ .../HardwareIntrinsics/X86/Sse2/TestTableSse2.cs   | 108 ++++++++++++---------
+ 10 files changed, 523 insertions(+), 44 deletions(-)
+ create mode 100644 tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadHigh.cs
+ create mode 100644 tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadHigh_r.csproj
+ create mode 100644 tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadHigh_ro.csproj
+ create mode 100644 tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadLow.cs
+ create mode 100644 tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadLow_r.csproj
+ create mode 100644 tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadLow_ro.csproj
+ create mode 100644 tests/src/JIT/HardwareIntrinsics/X86/Sse2/SetScalarVector128.cs
+ create mode 100644 tests/src/JIT/HardwareIntrinsics/X86/Sse2/SetScalarVector128_r.csproj
+ create mode 100644 tests/src/JIT/HardwareIntrinsics/X86/Sse2/SetScalarVector128_ro.csproj
+
+diff --git a/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadHigh.cs b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadHigh.cs
+new file mode 100644
+index 0000000..4d2671a
+--- /dev/null
++++ b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadHigh.cs
+@@ -0,0 +1,84 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++//
++
++using System;
++using System.Runtime.CompilerServices;
++using System.Runtime.InteropServices;
++using System.Runtime.Intrinsics.X86;
++using System.Runtime.Intrinsics;
++
++namespace IntelHardwareIntrinsicTest
++{
++    class Program
++    {
++        const int Pass = 100;
++        const int Fail = 0;
++
++        static unsafe int Main(string[] args)
++        {
++            int testResult = Pass;
++
++            if (Sse2.IsSupported)
++            {
++                using (TestTable<double> doubleTable = new TestTable<double>(new double[2] { 1, -5 }, new double[2] { 22, -1 }, new double[2]))
++                {
++                    var vf1 = Unsafe.Read<Vector128<double>>(doubleTable.inArray1Ptr);
++                    var vf2 = Sse2.LoadHigh(vf1, (double*)(doubleTable.inArray2Ptr));
++                    Unsafe.Write(doubleTable.outArrayPtr, vf2);
++
++                    if (!doubleTable.CheckResult((x, y, z) => z[0] == x[0] && z[1] == y[0]))
++                    {
++                        Console.WriteLine("SSE2 LoadHigh failed on double:");
++                        foreach (var item in doubleTable.outArray)
++                        {
++                            Console.Write(item + ", ");
++                        }
++                        Console.WriteLine();
++                        testResult = Fail;
++                    }
++                }
++            }
++
++            return testResult;
++        }
++
++        public unsafe struct TestTable<T> : IDisposable where T : struct
++        {
++            public T[] inArray1;
++            public T[] inArray2;
++            public T[] outArray;
++
++            public void* inArray1Ptr => inHandle1.AddrOfPinnedObject().ToPointer();
++            public void* inArray2Ptr => inHandle2.AddrOfPinnedObject().ToPointer();
++            public void* outArrayPtr => outHandle.AddrOfPinnedObject().ToPointer();
++
++            GCHandle inHandle1;
++            GCHandle inHandle2;
++            GCHandle outHandle;
++            public TestTable(T[] a, T[] b, T[] c)
++            {
++                this.inArray1 = a;
++                this.inArray2 = b;
++                this.outArray = c;
++
++                inHandle1 = GCHandle.Alloc(inArray1, GCHandleType.Pinned);
++                inHandle2 = GCHandle.Alloc(inArray2, GCHandleType.Pinned);
++                outHandle = GCHandle.Alloc(outArray, GCHandleType.Pinned);
++            }
++            public bool CheckResult(Func<T[], T[], T[], bool> check)
++            {
++                return check(inArray1, inArray2, outArray);
++            }
++
++            public void Dispose()
++            {
++                inHandle1.Free();
++                inHandle2.Free();
++                outHandle.Free();
++            }
++        }
++
++    }
++}
+diff --git a/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadHigh_r.csproj b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadHigh_r.csproj
+new file mode 100644
+index 0000000..eeea480
+--- /dev/null
++++ b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadHigh_r.csproj
+@@ -0,0 +1,37 @@
++﻿<?xml version="1.0" encoding="utf-8"?>
++<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
++  <PropertyGroup>
++    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
++    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
++    <SchemaVersion>2.0</SchemaVersion>
++    <ProjectGuid>{D66EC32E-2B69-42CB-8FED-468315ACC6E6}</ProjectGuid>
++    <OutputType>Exe</OutputType>
++    <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
++    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
++    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
++  </PropertyGroup>
++  <!-- Default configurations to help VS understand the configurations -->
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
++  </PropertyGroup>
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />
++  <ItemGroup>
++    <CodeAnalysisDependentAssemblyPaths Condition=" '$(VS100COMNTOOLS)' != '' " Include="$(VS100COMNTOOLS)..\IDE\PrivateAssemblies">
++      <Visible>False</Visible>
++    </CodeAnalysisDependentAssemblyPaths>
++  </ItemGroup>
++  <PropertyGroup>
++    <DebugType>None</DebugType>
++    <Optimize>
++    </Optimize>
++  </PropertyGroup>
++  <ItemGroup>
++    <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
++  </ItemGroup>
++  <ItemGroup>
++    <Compile Include="LoadHigh.cs" />
++  </ItemGroup>
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
++  <PropertyGroup Condition=" '$(MsBuildProjectDirOverride)' != '' ">
++  </PropertyGroup>
++</Project>
+\ No newline at end of file
+diff --git a/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadHigh_ro.csproj b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadHigh_ro.csproj
+new file mode 100644
+index 0000000..18cd26e
+--- /dev/null
++++ b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadHigh_ro.csproj
+@@ -0,0 +1,36 @@
++﻿<?xml version="1.0" encoding="utf-8"?>
++<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
++  <PropertyGroup>
++    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
++    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
++    <SchemaVersion>2.0</SchemaVersion>
++    <ProjectGuid>{B18176AA-379C-4342-B935-F7EA744FBF1C}</ProjectGuid>
++    <OutputType>Exe</OutputType>
++    <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
++    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
++    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
++  </PropertyGroup>
++  <!-- Default configurations to help VS understand the configurations -->
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
++  </PropertyGroup>
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />
++  <ItemGroup>
++    <CodeAnalysisDependentAssemblyPaths Condition=" '$(VS100COMNTOOLS)' != '' " Include="$(VS100COMNTOOLS)..\IDE\PrivateAssemblies">
++      <Visible>False</Visible>
++    </CodeAnalysisDependentAssemblyPaths>
++  </ItemGroup>
++  <PropertyGroup>
++    <DebugType>None</DebugType>
++    <Optimize>True</Optimize>
++  </PropertyGroup>
++  <ItemGroup>
++    <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
++  </ItemGroup>
++  <ItemGroup>
++    <Compile Include="LoadHigh.cs" />
++  </ItemGroup>
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
++  <PropertyGroup Condition=" '$(MsBuildProjectDirOverride)' != '' ">
++  </PropertyGroup>
++</Project>
+\ No newline at end of file
+diff --git a/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadLow.cs b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadLow.cs
+new file mode 100644
+index 0000000..29c75c6
+--- /dev/null
++++ b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadLow.cs
+@@ -0,0 +1,84 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++//
++
++using System;
++using System.Runtime.CompilerServices;
++using System.Runtime.InteropServices;
++using System.Runtime.Intrinsics.X86;
++using System.Runtime.Intrinsics;
++
++namespace IntelHardwareIntrinsicTest
++{
++    class Program
++    {
++        const int Pass = 100;
++        const int Fail = 0;
++
++        static unsafe int Main(string[] args)
++        {
++            int testResult = Pass;
++
++            if (Sse2.IsSupported)
++            {
++                using (TestTable<double> doubleTable = new TestTable<double>(new double[2] { 1, -5 }, new double[2] { 22, -1 }, new double[2]))
++                {
++                    var vf1 = Unsafe.Read<Vector128<double>>(doubleTable.inArray1Ptr);
++                    var vf2 = Sse2.LoadLow(vf1, (double*)(doubleTable.inArray2Ptr));
++                    Unsafe.Write(doubleTable.outArrayPtr, vf2);
++
++                    if (!doubleTable.CheckResult((x, y, z) => z[0] == y[0] && z[1] == x[1]))
++                    {
++                        Console.WriteLine("SSE2 LoadLow failed on double:");
++                        foreach (var item in doubleTable.outArray)
++                        {
++                            Console.Write(item + ", ");
++                        }
++                        Console.WriteLine();
++                        testResult = Fail;
++                    }
++                }
++            }
++
++            return testResult;
++        }
++
++        public unsafe struct TestTable<T> : IDisposable where T : struct
++        {
++            public T[] inArray1;
++            public T[] inArray2;
++            public T[] outArray;
++
++            public void* inArray1Ptr => inHandle1.AddrOfPinnedObject().ToPointer();
++            public void* inArray2Ptr => inHandle2.AddrOfPinnedObject().ToPointer();
++            public void* outArrayPtr => outHandle.AddrOfPinnedObject().ToPointer();
++
++            GCHandle inHandle1;
++            GCHandle inHandle2;
++            GCHandle outHandle;
++            public TestTable(T[] a, T[] b, T[] c)
++            {
++                this.inArray1 = a;
++                this.inArray2 = b;
++                this.outArray = c;
++
++                inHandle1 = GCHandle.Alloc(inArray1, GCHandleType.Pinned);
++                inHandle2 = GCHandle.Alloc(inArray2, GCHandleType.Pinned);
++                outHandle = GCHandle.Alloc(outArray, GCHandleType.Pinned);
++            }
++            public bool CheckResult(Func<T[], T[], T[], bool> check)
++            {
++                return check(inArray1, inArray2, outArray);
++            }
++
++            public void Dispose()
++            {
++                inHandle1.Free();
++                inHandle2.Free();
++                outHandle.Free();
++            }
++        }
++
++    }
++}
+diff --git a/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadLow_r.csproj b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadLow_r.csproj
+new file mode 100644
+index 0000000..e7a1951
+--- /dev/null
++++ b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadLow_r.csproj
+@@ -0,0 +1,37 @@
++﻿<?xml version="1.0" encoding="utf-8"?>
++<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
++  <PropertyGroup>
++    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
++    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
++    <SchemaVersion>2.0</SchemaVersion>
++    <ProjectGuid>{6E924376-838A-4BB6-92D2-21CE6113B7CF}</ProjectGuid>
++    <OutputType>Exe</OutputType>
++    <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
++    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
++    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
++  </PropertyGroup>
++  <!-- Default configurations to help VS understand the configurations -->
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
++  </PropertyGroup>
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />
++  <ItemGroup>
++    <CodeAnalysisDependentAssemblyPaths Condition=" '$(VS100COMNTOOLS)' != '' " Include="$(VS100COMNTOOLS)..\IDE\PrivateAssemblies">
++      <Visible>False</Visible>
++    </CodeAnalysisDependentAssemblyPaths>
++  </ItemGroup>
++  <PropertyGroup>
++    <DebugType>None</DebugType>
++    <Optimize>
++    </Optimize>
++  </PropertyGroup>
++  <ItemGroup>
++    <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
++  </ItemGroup>
++  <ItemGroup>
++    <Compile Include="LoadLow.cs" />
++  </ItemGroup>
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
++  <PropertyGroup Condition=" '$(MsBuildProjectDirOverride)' != '' ">
++  </PropertyGroup>
++</Project>
+\ No newline at end of file
+diff --git a/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadLow_ro.csproj b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadLow_ro.csproj
+new file mode 100644
+index 0000000..7877609
+--- /dev/null
++++ b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/LoadLow_ro.csproj
+@@ -0,0 +1,36 @@
++﻿<?xml version="1.0" encoding="utf-8"?>
++<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
++  <PropertyGroup>
++    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
++    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
++    <SchemaVersion>2.0</SchemaVersion>
++    <ProjectGuid>{4E630B88-6F20-428D-A8F0-7A4B24C4BCE8}</ProjectGuid>
++    <OutputType>Exe</OutputType>
++    <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
++    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
++    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
++  </PropertyGroup>
++  <!-- Default configurations to help VS understand the configurations -->
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
++  </PropertyGroup>
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />
++  <ItemGroup>
++    <CodeAnalysisDependentAssemblyPaths Condition=" '$(VS100COMNTOOLS)' != '' " Include="$(VS100COMNTOOLS)..\IDE\PrivateAssemblies">
++      <Visible>False</Visible>
++    </CodeAnalysisDependentAssemblyPaths>
++  </ItemGroup>
++  <PropertyGroup>
++    <DebugType>None</DebugType>
++    <Optimize>True</Optimize>
++  </PropertyGroup>
++  <ItemGroup>
++    <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
++  </ItemGroup>
++  <ItemGroup>
++    <Compile Include="LoadLow.cs" />
++  </ItemGroup>
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
++  <PropertyGroup Condition=" '$(MsBuildProjectDirOverride)' != '' ">
++  </PropertyGroup>
++</Project>
+\ No newline at end of file
+diff --git a/tests/src/JIT/HardwareIntrinsics/X86/Sse2/SetScalarVector128.cs b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/SetScalarVector128.cs
+new file mode 100644
+index 0000000..4c5e209
+--- /dev/null
++++ b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/SetScalarVector128.cs
+@@ -0,0 +1,72 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++// See the LICENSE file in the project root for more information.
++//
++
++using System;
++using System.Runtime.CompilerServices;
++using System.Runtime.InteropServices;
++using System.Runtime.Intrinsics.X86;
++using System.Runtime.Intrinsics;
++
++namespace IntelHardwareIntrinsicTest
++{
++    class Program
++    {
++        const int Pass = 100;
++        const int Fail = 0;
++
++        static unsafe int Main(string[] args)
++        {
++            int testResult = Pass;
++
++            if (Sse2.IsSupported)
++            {
++                using (TestTable<double> doubleTable = new TestTable<double>(new double[2] { double.NaN, double.NaN, }))
++                {
++                    var vf1 = Sse2.SetScalarVector128(3);
++                    Unsafe.Write(doubleTable.outArrayPtr, vf1);
++
++                    if (!doubleTable.CheckResult((x) => (x[0] == 3) && (BitConverter.DoubleToInt64Bits(x[1]) == 0)))
++                    {
++                        Console.WriteLine("SSE2 SetScalarVector128 failed on double:");
++                        foreach (var item in doubleTable.outArray)
++                        {
++                            Console.Write(item + ", ");
++                        }
++                        Console.WriteLine();
++                        testResult = Fail;
++                    }
++                }
++            }
++
++
++            return testResult;
++        }
++
++        public unsafe struct TestTable<T> : IDisposable where T : struct
++        {
++            public T[] outArray;
++
++            public void* outArrayPtr => outHandle.AddrOfPinnedObject().ToPointer();
++
++            GCHandle outHandle;
++            public TestTable(T[] a)
++            {
++                this.outArray = a;
++
++                outHandle = GCHandle.Alloc(outArray, GCHandleType.Pinned);
++            }
++            public bool CheckResult(Func<T[], bool> check)
++            {
++                return check(outArray);
++            }
++
++            public void Dispose()
++            {
++                outHandle.Free();
++            }
++        }
++
++    }
++}
+diff --git a/tests/src/JIT/HardwareIntrinsics/X86/Sse2/SetScalarVector128_r.csproj b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/SetScalarVector128_r.csproj
+new file mode 100644
+index 0000000..25f2f14
+--- /dev/null
++++ b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/SetScalarVector128_r.csproj
+@@ -0,0 +1,37 @@
++﻿<?xml version="1.0" encoding="utf-8"?>
++<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
++  <PropertyGroup>
++    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
++    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
++    <SchemaVersion>2.0</SchemaVersion>
++    <ProjectGuid>{84BA61FF-08AD-4FB6-8BB3-94E9939122AC}</ProjectGuid>
++    <OutputType>Exe</OutputType>
++    <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
++    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
++    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
++  </PropertyGroup>
++  <!-- Default configurations to help VS understand the configurations -->
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
++  </PropertyGroup>
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />
++  <ItemGroup>
++    <CodeAnalysisDependentAssemblyPaths Condition=" '$(VS100COMNTOOLS)' != '' " Include="$(VS100COMNTOOLS)..\IDE\PrivateAssemblies">
++      <Visible>False</Visible>
++    </CodeAnalysisDependentAssemblyPaths>
++  </ItemGroup>
++  <PropertyGroup>
++    <DebugType>None</DebugType>
++    <Optimize>
++    </Optimize>
++  </PropertyGroup>
++  <ItemGroup>
++    <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
++  </ItemGroup>
++  <ItemGroup>
++    <Compile Include="SetScalarVector128.cs" />
++  </ItemGroup>
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
++  <PropertyGroup Condition=" '$(MsBuildProjectDirOverride)' != '' ">
++  </PropertyGroup>
++</Project>
+\ No newline at end of file
+diff --git a/tests/src/JIT/HardwareIntrinsics/X86/Sse2/SetScalarVector128_ro.csproj b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/SetScalarVector128_ro.csproj
+new file mode 100644
+index 0000000..9f1fd35
+--- /dev/null
++++ b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/SetScalarVector128_ro.csproj
+@@ -0,0 +1,36 @@
++﻿<?xml version="1.0" encoding="utf-8"?>
++<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
++  <PropertyGroup>
++    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
++    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
++    <SchemaVersion>2.0</SchemaVersion>
++    <ProjectGuid>{FA416B03-0EE9-4464-8799-3B353DE97BC4}</ProjectGuid>
++    <OutputType>Exe</OutputType>
++    <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
++    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
++    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
++  </PropertyGroup>
++  <!-- Default configurations to help VS understand the configurations -->
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
++  </PropertyGroup>
++  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' " />
++  <ItemGroup>
++    <CodeAnalysisDependentAssemblyPaths Condition=" '$(VS100COMNTOOLS)' != '' " Include="$(VS100COMNTOOLS)..\IDE\PrivateAssemblies">
++      <Visible>False</Visible>
++    </CodeAnalysisDependentAssemblyPaths>
++  </ItemGroup>
++  <PropertyGroup>
++    <DebugType>None</DebugType>
++    <Optimize>True</Optimize>
++  </PropertyGroup>
++  <ItemGroup>
++    <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
++  </ItemGroup>
++  <ItemGroup>
++    <Compile Include="SetScalarVector128.cs" />
++  </ItemGroup>
++  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
++  <PropertyGroup Condition=" '$(MsBuildProjectDirOverride)' != '' ">
++  </PropertyGroup>
++</Project>
+\ No newline at end of file
+diff --git a/tests/src/JIT/HardwareIntrinsics/X86/Sse2/TestTableSse2.cs b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/TestTableSse2.cs
+index 00b7e00..866a8c7 100644
+--- a/tests/src/JIT/HardwareIntrinsics/X86/Sse2/TestTableSse2.cs
++++ b/tests/src/JIT/HardwareIntrinsics/X86/Sse2/TestTableSse2.cs
+@@ -26,6 +26,8 @@ namespace IntelHardwareIntrinsicTest
+ 
+     public delegate bool CheckMethodFour<T, U>(T x1, T x2, U z1, U z2, ref U c1, ref U c2);
+ 
++    public delegate bool CheckMethodFour<T, U, V>(Span<T> x, Span<T> y, V value, Span<U> z, Span<U> a);
++
+     public delegate bool CheckMethodFive<T, U>(T x1, T x2, T y1, T y2, U z1, U z2, ref U c1, ref U c2);
+ 
+     public delegate bool CheckMethodFive<T, U, V>(Span<T> x, V imm, Span<U> z, Span<U> a);
+@@ -93,6 +95,7 @@ namespace IntelHardwareIntrinsicTest
+     {
+         private const int _stepSize = 16;
+         private int _scalarStepSize;
++        public static int ElementCount;
+ 
+         private GCHandle _inHandle1;
+         private GCHandle _inHandle2;
+@@ -137,38 +140,36 @@ namespace IntelHardwareIntrinsicTest
+             }
+         }
+ 
+-        public ValueTuple<T, T, T, T> GetDataPoint(int index)
++        public Memory<T> GetAssignmentData(int index)
+         {
+-            return (inArray1[index], inArray2[index], outArray[index], checkArray[index]);
++            return new Memory<T>(inArray1, index * ElementCount, ElementCount);
+         }
+ 
+-        public Memory<T> GetAssignmentData(int index)
++        public ValueTuple<Memory<T>, Memory<T>, Memory<T>, Memory<T>> GetAssignmentDataPoint(int index)
+         {
+-            _index = index;
+-            return new Memory<T>(inArray2, index * _stepSize, _stepSize);
++            return (new Memory<T>(inArray1, index, ElementCount), new Memory<T>(inArray2, index, ElementCount),
++                    new Memory<T>(outArray, index, ElementCount), new Memory<T>(outArray, index, ElementCount));
+         }
+ 
+-        public ValueTuple<Memory<T>, Memory<T>, Memory<T>, Memory<T>> GetAssignmentDataPoint(int index)
++        public ValueTuple<T, T, T, T> GetDataPoint(int index)
+         {
+-            return (new Memory<T>(inArray1, index, _stepSize), new Memory<T>(inArray2, index, _stepSize),
+-                    new Memory<T>(outArray, index, _stepSize), new Memory<T>(outArray, index, _stepSize));
++            return (inArray1[index], inArray2[index], outArray[index], checkArray[index]);
+         }
+ 
+         public static TestTableSse2<T> Create(int lengthInVectors)
+         {
+-            int length = _stepSize / Marshal.SizeOf<T>() * lengthInVectors;
+-            var table = new TestTableSse2<T>(new T[length], new T[length], new T[length], new T[length]);
+-            table.Initialize();
+-            return table;
++            return new TestTableSse2<T>(lengthInVectors);
+         }
+ 
+-        public TestTableSse2(T[] a, T[] b, T[] c, T[] d)
++        public TestTableSse2(int lengthInVectors)
+         {
+-            inArray1 = a;
+-            inArray2 = b;
+-            outArray = c;
+-            checkArray = d;
+             _scalarStepSize = Marshal.SizeOf<T>();
++            ElementCount = _stepSize / _scalarStepSize;
++            int length = ElementCount * lengthInVectors;
++            inArray1 = new T[length];
++            inArray2 = new T[length];
++            outArray = new T[length];
++            checkArray = new T[length];
+             _index = 0;
+             _inHandle1 = GCHandle.Alloc(inArray1, GCHandleType.Pinned);
+             _inHandle2 = GCHandle.Alloc(inArray2, GCHandleType.Pinned);
+@@ -223,13 +224,12 @@ namespace IntelHardwareIntrinsicTest
+         public bool CheckResult(CheckMethodSpan<T> check)
+         {
+             bool result = true;
+-            for (int i = 0; i < inArray1.Length; i += _stepSize)
++            for (int i = 0; i < inArray1.Length; i++)
+             {
+-                var x = new Span<T>(inArray1, i, _stepSize);
+-                var y = new Span<T>(inArray2, i, _stepSize);
+-                var z = new Span<T>(inArray2, i, _stepSize);
+-                var a = new Span<T>(inArray2, i, _stepSize);
+-
++                var x = new Span<T>(inArray1, i, ElementCount);
++                var y = new Span<T>(inArray2, i, ElementCount);
++                var z = new Span<T>(outArray, i, ElementCount);
++                var a = new Span<T>(checkArray, i, ElementCount);
+                 if (!check(x, y, z, a))
+                 {
+                     result = false;
+@@ -1648,7 +1648,7 @@ namespace IntelHardwareIntrinsicTest
+     {
+         private const int _vectorSize = 16;
+         private static int _tSize;
+-        private static int _elementsNo;
++        public static int ElementsNo;
+         private static int _lengthInVectors;
+ 
+         private GCHandle _inHandle1;
+@@ -1715,6 +1715,12 @@ namespace IntelHardwareIntrinsicTest
+             }
+         }
+ 
++        public (Memory<T>, Memory<T>, V, Memory<U>, Memory<U>) GetDataPoint(int index)
++        {
++            return (new Memory<T>(inArray1, index, ElementsNo), new Memory<T>(inArray2, index, ElementsNo), immArray[index/ElementsNo],
++                new Memory<U>(outArray, index, ElementsNo), new Memory<U>(checkArray, index, ElementsNo));
++        }
++
+         public unsafe ValueTuple<T, V, U, U> GetQuad22DataPoint(int index)
+         {
+             return (inArray1[index], immArray[index / (_vectorSize / _tSize)], outArray[index], checkArray[index]);
+@@ -1755,8 +1761,8 @@ namespace IntelHardwareIntrinsicTest
+         {
+             _lengthInVectors = lengthInVectors;
+             _tSize = Marshal.SizeOf<T>();
+-            _elementsNo = _vectorSize / _tSize;
+-            int length = _elementsNo * lengthInVectors;
++            ElementsNo = _vectorSize / _tSize;
++            int length = ElementsNo * lengthInVectors;
+             inArray1 = new T[length];
+             inArray2 = new T[length];
+             immArray = new V[lengthInVectors];
+@@ -1801,10 +1807,10 @@ namespace IntelHardwareIntrinsicTest
+             for (int i = 0; i < inArray1.Length; i++)
+             {
+                 if (!check(
+-                    new Span<T>(inArray1, Index * _elementsNo, _elementsNo),
++                    new Span<T>(inArray1, Index * ElementsNo, ElementsNo),
+                     inArray2[i], immArray[i],
+-                    new Span<U>(outArray, Index * _elementsNo, _elementsNo),
+-                    new Span<U>(checkArray, Index * _elementsNo, _elementsNo)))
++                    new Span<U>(outArray, Index * ElementsNo, ElementsNo),
++                    new Span<U>(checkArray, Index * ElementsNo, ElementsNo)))
+                 {
+                     result = false;
+                 }
+@@ -1815,13 +1821,13 @@ namespace IntelHardwareIntrinsicTest
+         public bool CheckResultShuffle(CheckMethodFive<T, U, V> check)
+         {
+             bool result = true;
+-            for (int i = 0; i < inArray1.Length; i += _elementsNo)
++            for (int i = 0; i < inArray1.Length; i += ElementsNo)
+             {
+                 if (!check(
+-                    new Span<T>(inArray1, i, _elementsNo),
+-                    immArray[i / _elementsNo],
+-                    new Span<U>(outArray, i, _elementsNo),
+-                    new Span<U>(checkArray, i, _elementsNo)))
++                    new Span<T>(inArray1, i, ElementsNo),
++                    immArray[i / ElementsNo],
++                    new Span<U>(outArray, i, ElementsNo),
++                    new Span<U>(checkArray, i, ElementsNo)))
+                 {
+                     result = false;
+                 }
+@@ -1832,14 +1838,14 @@ namespace IntelHardwareIntrinsicTest
+         public bool CheckResultShuffle(CheckMethodFiveDouble<T, U, V> check)
+         {
+             bool result = true;
+-            for (int i = 0; i < inArray1.Length; i += _elementsNo)
++            for (int i = 0; i < inArray1.Length; i += ElementsNo)
+             {
+                 if (!check(
+-                    new Span<T>(inArray1, i, _elementsNo),
+-                    new Span<T>(inArray2, i, _elementsNo),
+-                    immArray[i / _elementsNo],
+-                    new Span<U>(outArray, i, _elementsNo),
+-                    new Span<U>(checkArray, i, _elementsNo)))
++                    new Span<T>(inArray1, i, ElementsNo),
++                    new Span<T>(inArray2, i, ElementsNo),
++                    immArray[i / ElementsNo],
++                    new Span<U>(outArray, i, ElementsNo),
++                    new Span<U>(checkArray, i, ElementsNo)))
+                 {
+                     result = false;
+                 }
+@@ -2086,12 +2092,12 @@ namespace IntelHardwareIntrinsicTest
+             CheckMethodSpan<T> check = null) where T : struct
+         {
+             PrintErrorHeaderTu<T>(functionName, testFuncString);
+-            for (int i = 0; i < testTable.outArray.Length; i++)
++            for (int i = 0; i < testTable.outArray.Length; i+= TestTableSse2<T>.ElementCount)
+             {
+-                (Memory<T>, Memory<T>, Memory<T>, Memory<T>) item = testTable.GetAssignmentDataPoint(i);
++                var item = testTable.GetAssignmentDataPoint(i);
+                 Console.Write(
+-                    $"({(PrintMemory<T>(item.Item1), PrintMemory<T>(item.Item2), PrintMemory<T>(item.Item3), PrintMemory<T>(item.Item4))})" +
+-                    (check != null ? $"->{check(item.Item1.Span, item.Item2.Span, item.Item3.Span, item.Item4.Span)}, " : ", "));
++                    $"(x{PrintMemory(item.Item1)}, y{PrintMemory(item.Item2)}, z{PrintMemory(item.Item3)}, a{PrintMemory(item.Item4)})" +
++                    (check != null ? $"->{check(item.Item1.Span, item.Item2.Span, item.Item3.Span,item.Item4.Span)}, " : ", "));
+             }
+             Console.WriteLine("\n");
+         }
+@@ -2160,6 +2166,20 @@ namespace IntelHardwareIntrinsicTest
+             Console.WriteLine();
+         }
+ 
++        private static void PrintError<T, U, V>(TestTableTuvImmSse2<T, U, V> testTable, string functionName = "", string testFuncString = "",
++            CheckMethodFour<T, U, V> check = null) where T : struct where U : struct where V : struct
++        {
++            PrintErrorHeaderTu<T>(functionName, testFuncString);
++            for (int i = 0; i < testTable.inArray1.Length - 1; i += TestTableTuvImmSse2<T, U, V>.ElementsNo)
++            {
++                var item = testTable.GetDataPoint(i);
++                Console.Write(
++                    $"(x{PrintMemory(item.Item1)}, y{PrintMemory(item.Item2)}, z{PrintMemory(item.Item4)}, a{PrintMemory(item.Item5)})" +
++                    (check != null ? $"->{check(item.Item1.Span, item.Item2.Span, item.Item3, item.Item4.Span, item.Item5.Span)}, " : ", "));
++            }
++            Console.WriteLine();
++        }
++
+         private static void PrintError<T, U>(TestTableSse2<T, U> testTable, string functionName = "", string testFuncString = "",
+             CheckMethodFourTFourU<T, U> check = null) where T : struct where U : struct
+         {
+-- 
+2.7.4
+

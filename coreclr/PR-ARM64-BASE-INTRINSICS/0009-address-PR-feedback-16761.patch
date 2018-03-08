@@ -1,0 +1,67 @@
+From 5b553b8149dd0d8ab87394d7974afaeff41a5f46 Mon Sep 17 00:00:00 2001
+From: Marco Rossignoli <marco.rossignoli@gmail.com>
+Date: Tue, 6 Mar 2018 04:31:06 +0100
+Subject: [PATCH] address PR feedback (#16761)
+
+---
+ src/mscorlib/src/System/Reflection/Emit/GenericTypeParameterBuilder.cs  | 2 +-
+ src/mscorlib/src/System/Reflection/Emit/MethodBuilderInstantiation.cs   | 2 +-
+ src/mscorlib/src/System/Reflection/Emit/TypeBuilderInstantiation.cs     | 2 +-
+ .../src/System/Reflection/Emit/XXXOnTypeBuilderInstantiation.cs         | 2 +-
+ 4 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/mscorlib/src/System/Reflection/Emit/GenericTypeParameterBuilder.cs b/src/mscorlib/src/System/Reflection/Emit/GenericTypeParameterBuilder.cs
+index c22cbe5..4da7b65 100644
+--- a/src/mscorlib/src/System/Reflection/Emit/GenericTypeParameterBuilder.cs
++++ b/src/mscorlib/src/System/Reflection/Emit/GenericTypeParameterBuilder.cs
+@@ -192,7 +192,7 @@ namespace System.Reflection.Emit
+ 
+         public override Type GetGenericTypeDefinition() { throw new InvalidOperationException(); }
+ 
+-        public override Type MakeGenericType(params Type[] typeArguments) { throw new InvalidOperationException(SR.Format(SR.Arg_NotGenericTypeDefinition, this.GetType().ToString())); }
++        public override Type MakeGenericType(params Type[] typeArguments) { throw new InvalidOperationException(SR.Format(SR.Arg_NotGenericTypeDefinition, this)); }
+ 
+         protected override bool IsValueTypeImpl() { return false; }
+ 
+diff --git a/src/mscorlib/src/System/Reflection/Emit/MethodBuilderInstantiation.cs b/src/mscorlib/src/System/Reflection/Emit/MethodBuilderInstantiation.cs
+index de7ad2c..63f299a 100644
+--- a/src/mscorlib/src/System/Reflection/Emit/MethodBuilderInstantiation.cs
++++ b/src/mscorlib/src/System/Reflection/Emit/MethodBuilderInstantiation.cs
+@@ -85,7 +85,7 @@ namespace System.Reflection.Emit
+ 
+         public override MethodInfo MakeGenericMethod(params Type[] arguments)
+         {
+-            throw new InvalidOperationException(SR.Format(SR.Arg_NotGenericMethodDefinition, this.GetType().ToString()));
++            throw new InvalidOperationException(SR.Format(SR.Arg_NotGenericMethodDefinition, this));
+         }
+ 
+         public override bool IsGenericMethod { get { return true; } }
+diff --git a/src/mscorlib/src/System/Reflection/Emit/TypeBuilderInstantiation.cs b/src/mscorlib/src/System/Reflection/Emit/TypeBuilderInstantiation.cs
+index e46b051..d674f34 100644
+--- a/src/mscorlib/src/System/Reflection/Emit/TypeBuilderInstantiation.cs
++++ b/src/mscorlib/src/System/Reflection/Emit/TypeBuilderInstantiation.cs
+@@ -220,7 +220,7 @@ namespace System.Reflection.Emit
+         }
+         public override MethodBase DeclaringMethod { get { return null; } }
+         public override Type GetGenericTypeDefinition() { return m_type; }
+-        public override Type MakeGenericType(params Type[] inst) { throw new InvalidOperationException(SR.Format(SR.Arg_NotGenericTypeDefinition, this.GetType().ToString())); }
++        public override Type MakeGenericType(params Type[] inst) { throw new InvalidOperationException(SR.Format(SR.Arg_NotGenericTypeDefinition, this)); }
+         public override bool IsAssignableFrom(Type c) { throw new NotSupportedException(); }
+ 
+         public override bool IsSubclassOf(Type c)
+diff --git a/src/mscorlib/src/System/Reflection/Emit/XXXOnTypeBuilderInstantiation.cs b/src/mscorlib/src/System/Reflection/Emit/XXXOnTypeBuilderInstantiation.cs
+index e170ac8..715fe01 100644
+--- a/src/mscorlib/src/System/Reflection/Emit/XXXOnTypeBuilderInstantiation.cs
++++ b/src/mscorlib/src/System/Reflection/Emit/XXXOnTypeBuilderInstantiation.cs
+@@ -70,7 +70,7 @@ namespace System.Reflection.Emit
+         public override MethodInfo MakeGenericMethod(params Type[] typeArgs)
+         {
+             if (!IsGenericMethodDefinition)
+-                throw new InvalidOperationException(SR.Format(SR.Arg_NotGenericMethodDefinition, this.GetType().ToString()));
++                throw new InvalidOperationException(SR.Format(SR.Arg_NotGenericMethodDefinition, this));
+ 
+             return MethodBuilderInstantiation.MakeGenericMethod(this, typeArgs);
+         }
+-- 
+2.7.4
+

@@ -1,0 +1,241 @@
+From bf37beb54ef828e0400a3cd1a9f06f07e8ff8197 Mon Sep 17 00:00:00 2001
+From: Fei Peng <fei.peng@intel.com>
+Date: Mon, 5 Mar 2018 13:23:15 -0800
+Subject: [PATCH] Simplify SSE/SSE4.1 intrinsics
+
+---
+ src/jit/compiler.h                  |  4 ---
+ src/jit/hwintrinsiccodegenxarch.cpp | 41 ------------------------
+ src/jit/hwintrinsiclistxarch.h      | 20 ++++++------
+ src/jit/hwintrinsicxarch.cpp        | 64 -------------------------------------
+ 4 files changed, 10 insertions(+), 119 deletions(-)
+
+diff --git a/src/jit/compiler.h b/src/jit/compiler.h
+index 20f71b7..05d5f93 100644
+--- a/src/jit/compiler.h
++++ b/src/jit/compiler.h
+@@ -3059,10 +3059,6 @@ protected:
+                               CORINFO_METHOD_HANDLE method,
+                               CORINFO_SIG_INFO*     sig,
+                               bool                  mustExpand);
+-    GenTree* impSSE41Intrinsic(NamedIntrinsic        intrinsic,
+-                               CORINFO_METHOD_HANDLE method,
+-                               CORINFO_SIG_INFO*     sig,
+-                               bool                  mustExpand);
+     GenTree* impSSE42Intrinsic(NamedIntrinsic        intrinsic,
+                                CORINFO_METHOD_HANDLE method,
+                                CORINFO_SIG_INFO*     sig,
+diff --git a/src/jit/hwintrinsiccodegenxarch.cpp b/src/jit/hwintrinsiccodegenxarch.cpp
+index acaf89b..232bcd7 100644
+--- a/src/jit/hwintrinsiccodegenxarch.cpp
++++ b/src/jit/hwintrinsiccodegenxarch.cpp
+@@ -735,24 +735,6 @@ void CodeGen::genSSEIntrinsic(GenTreeHWIntrinsic* node)
+             break;
+         }
+ 
+-        case NI_SSE_ReciprocalScalar:
+-        case NI_SSE_ReciprocalSqrtScalar:
+-        case NI_SSE_SqrtScalar:
+-        {
+-            assert(baseType == TYP_FLOAT);
+-            instruction ins = Compiler::insOfHWIntrinsic(intrinsicID, node->gtSIMDBaseType);
+-
+-            if (op2 == nullptr)
+-            {
+-                emit->emitIns_SIMD_R_R_R(ins, emitTypeSize(TYP_SIMD16), targetReg, op1Reg, op1Reg);
+-            }
+-            else
+-            {
+-                genHWIntrinsic_R_R_RM(node, ins);
+-            }
+-            break;
+-        }
+-
+         case NI_SSE_SetScalarVector128:
+         {
+             assert(baseType == TYP_FLOAT);
+@@ -1066,29 +1048,6 @@ void CodeGen::genSSE41Intrinsic(GenTreeHWIntrinsic* node)
+ 
+     switch (intrinsicID)
+     {
+-        case NI_SSE41_CeilingScalar:
+-        case NI_SSE41_FloorScalar:
+-        case NI_SSE41_RoundCurrentDirectionScalar:
+-        case NI_SSE41_RoundToNearestIntegerScalar:
+-        case NI_SSE41_RoundToNegativeInfinityScalar:
+-        case NI_SSE41_RoundToPositiveInfinityScalar:
+-        case NI_SSE41_RoundToZeroScalar:
+-        {
+-            assert((baseType == TYP_FLOAT) || (baseType == TYP_DOUBLE));
+-            instruction ins = Compiler::insOfHWIntrinsic(intrinsicID, node->gtSIMDBaseType);
+-
+-            if (op2 == nullptr)
+-            {
+-                int ival = Compiler::ivalOfHWIntrinsic(intrinsicID);
+-                emit->emitIns_SIMD_R_R_R_I(ins, emitTypeSize(TYP_SIMD16), targetReg, op1Reg, op1Reg, ival);
+-            }
+-            else
+-            {
+-                genHWIntrinsic_R_R_RM_I(node, ins);
+-            }
+-            break;
+-        }
+-
+         case NI_SSE41_TestAllOnes:
+         {
+             regNumber tmpReg = node->GetSingleTempReg();
+diff --git a/src/jit/hwintrinsiclistxarch.h b/src/jit/hwintrinsiclistxarch.h
+index 4680938..aa4fe5b 100644
+--- a/src/jit/hwintrinsiclistxarch.h
++++ b/src/jit/hwintrinsiclistxarch.h
+@@ -97,16 +97,16 @@ HARDWARE_INTRINSIC(SSE_Prefetch1,                                    "Prefetch1"
+ HARDWARE_INTRINSIC(SSE_Prefetch2,                                    "Prefetch2",                                        SSE,        -1,            0,           1,           {INS_invalid,   INS_prefetcht2,  INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},           HW_Category_Special,                           HW_Flag_NoRMWSemantics)
+ HARDWARE_INTRINSIC(SSE_PrefetchNonTemporal,                          "PrefetchNonTemporal",                              SSE,        -1,            0,           1,           {INS_invalid,   INS_prefetchnta, INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},           HW_Category_Special,                           HW_Flag_NoRMWSemantics)
+ HARDWARE_INTRINSIC(SSE_Reciprocal,                                   "Reciprocal",                                       SSE,        -1,           16,           1,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_rcpps,     INS_invalid},           HW_Category_SimpleSIMD,                        HW_Flag_NoRMWSemantics)
+-HARDWARE_INTRINSIC(SSE_ReciprocalScalar,                             "ReciprocalScalar",                                 SSE,        -1,           16,          -1,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_rcpss,     INS_invalid},           HW_Category_Special,                           HW_Flag_CopyUpperBits)
++HARDWARE_INTRINSIC(SSE_ReciprocalScalar,                             "ReciprocalScalar",                                 SSE,        -1,           16,          -1,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_rcpss,     INS_invalid},           HW_Category_SIMDScalar,                        HW_Flag_CopyUpperBits)
+ HARDWARE_INTRINSIC(SSE_ReciprocalSqrt,                               "ReciprocalSqrt",                                   SSE,        -1,           16,           1,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_rsqrtps,   INS_invalid},           HW_Category_SimpleSIMD,                        HW_Flag_NoRMWSemantics)
+-HARDWARE_INTRINSIC(SSE_ReciprocalSqrtScalar,                         "ReciprocalSqrtScalar",                             SSE,        -1,           16,          -1,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_rsqrtss,   INS_invalid},           HW_Category_Special,                           HW_Flag_CopyUpperBits)
++HARDWARE_INTRINSIC(SSE_ReciprocalSqrtScalar,                         "ReciprocalSqrtScalar",                             SSE,        -1,           16,          -1,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_rsqrtss,   INS_invalid},           HW_Category_SIMDScalar,                        HW_Flag_CopyUpperBits)
+ HARDWARE_INTRINSIC(SSE_SetAllVector128,                              "SetAllVector128",                                  SSE,        -1,           16,           1,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},           HW_Category_Helper,                            HW_Flag_NoCodeGen|HW_Flag_NoRMWSemantics)
+ HARDWARE_INTRINSIC(SSE_SetScalarVector128,                           "SetScalarVector128",                               SSE,        -1,           16,           1,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_movss,     INS_invalid},           HW_Category_Helper,                            HW_Flag_MultiIns|HW_Flag_NoRMWSemantics)
+ HARDWARE_INTRINSIC(SSE_SetVector128,                                 "SetVector128",                                     SSE,        -1,           16,           4,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},           HW_Category_Helper,                            HW_Flag_NoCodeGen)
+ HARDWARE_INTRINSIC(SSE_SetZeroVector128,                             "SetZeroVector128",                                 SSE,        -1,           16,           0,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_xorps,     INS_invalid},           HW_Category_Helper,                            HW_Flag_NoRMWSemantics)
+ HARDWARE_INTRINSIC(SSE_Shuffle,                                      "Shuffle",                                          SSE,        -1,           16,           3,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_shufps,    INS_invalid},           HW_Category_IMM,                               HW_Flag_FullRangeIMM)
+ HARDWARE_INTRINSIC(SSE_Sqrt,                                         "Sqrt",                                             SSE,        -1,           16,           1,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_sqrtps,    INS_invalid},           HW_Category_SimpleSIMD,                        HW_Flag_NoRMWSemantics)
+-HARDWARE_INTRINSIC(SSE_SqrtScalar,                                   "SqrtScalar",                                       SSE,        -1,           16,          -1,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_sqrtss,    INS_invalid},           HW_Category_Special,                           HW_Flag_CopyUpperBits)
++HARDWARE_INTRINSIC(SSE_SqrtScalar,                                   "SqrtScalar",                                       SSE,        -1,           16,          -1,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_sqrtss,    INS_invalid},           HW_Category_SIMDScalar,                        HW_Flag_CopyUpperBits)
+ HARDWARE_INTRINSIC(SSE_StaticCast,                                   "StaticCast",                                       SSE,        -1,           16,           1,           {INS_movaps,    INS_movaps,      INS_movaps,    INS_movaps,    INS_movaps,    INS_movaps,    INS_movaps,    INS_movaps,    INS_movaps,    INS_movaps},            HW_Category_Helper,                            HW_Flag_TwoTypeGeneric|HW_Flag_NoRMWSemantics)
+ HARDWARE_INTRINSIC(SSE_Store,                                        "Store",                                            SSE,        -1,           16,           2,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_movups,    INS_invalid},           HW_Category_MemoryStore,                       HW_Flag_NoRMWSemantics)
+ HARDWARE_INTRINSIC(SSE_StoreAligned,                                 "StoreAligned",                                     SSE,        -1,           16,           2,           {INS_invalid,   INS_invalid,     INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_movaps,    INS_invalid},           HW_Category_MemoryStore,                       HW_Flag_NoRMWSemantics)
+@@ -276,7 +276,7 @@ HARDWARE_INTRINSIC(SSE41_IsSupported,                                "get_IsSupp
+ HARDWARE_INTRINSIC(SSE41_Blend,                                      "Blend",                                            SSE41,      -1,           16,           3,           {INS_invalid,   INS_invalid,   INS_pblendw,   INS_pblendw,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_blendps,   INS_blendpd},          HW_Category_IMM,                               HW_Flag_FullRangeIMM)
+ HARDWARE_INTRINSIC(SSE41_BlendVariable,                              "BlendVariable",                                    SSE41,      -1,           16,           3,           {INS_pblendvb,  INS_pblendvb,  INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_blendvps,  INS_blendvpd},         HW_Category_SimpleSIMD,                        HW_Flag_NoFlag)
+ HARDWARE_INTRINSIC(SSE41_Ceiling,                                    "Ceiling",                                          SSE41,      10,           16,           1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundps,   INS_roundpd},          HW_Category_SimpleSIMD,                        HW_Flag_NoRMWSemantics)
+-HARDWARE_INTRINSIC(SSE41_CeilingScalar,                              "CeilingScalar",                                    SSE41,      10,           16,          -1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundss,   INS_roundsd},          HW_Category_Special,                           HW_Flag_CopyUpperBits)
++HARDWARE_INTRINSIC(SSE41_CeilingScalar,                              "CeilingScalar",                                    SSE41,      10,           16,          -1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundss,   INS_roundsd},          HW_Category_SIMDScalar,                        HW_Flag_CopyUpperBits)
+ HARDWARE_INTRINSIC(SSE41_CompareEqual,                               "CompareEqual",                                     SSE41,      -1,           16,           2,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_pcmpeqq,   INS_pcmpeqq,   INS_invalid,   INS_invalid},          HW_Category_SimpleSIMD,                        HW_Flag_Commutative)
+ HARDWARE_INTRINSIC(SSE41_ConvertToVector128Int16,                    "ConvertToVector128Int16",                          SSE41,      -1,           16,           1,           {INS_pmovsxbw,  INS_pmovzxbw,  INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},          HW_Category_SimpleSIMD,                        HW_Flag_NoContainment|HW_Flag_BaseTypeFromFirstArg|HW_Flag_NoRMWSemantics)
+ HARDWARE_INTRINSIC(SSE41_ConvertToVector128Int32,                    "ConvertToVector128Int32",                          SSE41,      -1,           16,           1,           {INS_pmovsxbd,  INS_pmovzxbd,  INS_pmovsxwd,  INS_pmovzxwd,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},          HW_Category_SimpleSIMD,                        HW_Flag_NoContainment|HW_Flag_BaseTypeFromFirstArg|HW_Flag_NoRMWSemantics)
+@@ -284,7 +284,7 @@ HARDWARE_INTRINSIC(SSE41_ConvertToVector128Int64,                    "ConvertToV
+ HARDWARE_INTRINSIC(SSE41_DotProduct,                                 "DotProduct",                                       SSE41,      -1,           16,           3,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_dpps,      INS_dppd},             HW_Category_IMM,                               HW_Flag_FullRangeIMM)
+ HARDWARE_INTRINSIC(SSE41_Extract,                                    "Extract",                                          SSE41,      -1,           16,           2,           {INS_pextrb,    INS_pextrb,    INS_invalid,   INS_invalid,    INS_pextrd,    INS_pextrd,    INS_pextrq,    INS_pextrq,    INS_extractps, INS_invalid},          HW_Category_IMM,                               HW_Flag_FullRangeIMM|HW_Flag_BaseTypeFromFirstArg|HW_Flag_MultiIns|HW_Flag_NoRMWSemantics)
+ HARDWARE_INTRINSIC(SSE41_Floor,                                      "Floor",                                            SSE41,       9,           16,           1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundps,   INS_roundpd},          HW_Category_SimpleSIMD,                        HW_Flag_NoRMWSemantics)
+-HARDWARE_INTRINSIC(SSE41_FloorScalar,                                "FloorScalar",                                      SSE41,       9,           16,          -1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundss,   INS_roundsd},          HW_Category_Special,                           HW_Flag_CopyUpperBits)
++HARDWARE_INTRINSIC(SSE41_FloorScalar,                                "FloorScalar",                                      SSE41,       9,           16,          -1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundss,   INS_roundsd},          HW_Category_SIMDScalar,                        HW_Flag_CopyUpperBits)
+ HARDWARE_INTRINSIC(SSE41_Insert,                                     "Insert",                                           SSE41,      -1,           16,           3,           {INS_pinsrb,    INS_pinsrb,    INS_invalid,   INS_invalid,    INS_pinsrd,    INS_pinsrd,    INS_pinsrq,    INS_pinsrq,    INS_insertps,  INS_invalid},          HW_Category_IMM,                               HW_Flag_FullRangeIMM|HW_Flag_SecondArgMaybe64Bit)
+ HARDWARE_INTRINSIC(SSE41_LoadAlignedVector128NonTemporal,            "LoadAlignedVector128NonTemporal",                  SSE41,      -1,           16,           1,           {INS_movntdqa,  INS_movntdqa,  INS_movntdqa,  INS_movntdqa,   INS_movntdqa,  INS_movntdqa,  INS_movntdqa,  INS_movntdqa,  INS_invalid,   INS_invalid},          HW_Category_MemoryLoad,                        HW_Flag_NoRMWSemantics)
+ HARDWARE_INTRINSIC(SSE41_Max,                                        "Max",                                              SSE41,      -1,           16,           2,           {INS_pmaxsb,    INS_invalid,   INS_invalid,   INS_pmaxuw,     INS_pmaxsd,    INS_pmaxud,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},          HW_Category_SimpleSIMD,                        HW_Flag_NoFlag)
+@@ -295,15 +295,15 @@ HARDWARE_INTRINSIC(SSE41_Multiply,                                   "Multiply",
+ HARDWARE_INTRINSIC(SSE41_MultiplyLow,                                "MultiplyLow",                                      SSE41,      -1,           16,           2,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_pmulld,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},          HW_Category_SimpleSIMD,                        HW_Flag_NoFlag)
+ HARDWARE_INTRINSIC(SSE41_PackUnsignedSaturate,                       "PackUnsignedSaturate",                             SSE41,      -1,           16,           2,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_packusdw,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},          HW_Category_SimpleSIMD,                        HW_Flag_NoFlag)
+ HARDWARE_INTRINSIC(SSE41_RoundCurrentDirection,                      "RoundCurrentDirection",                            SSE41,       4,           16,           1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundps,   INS_roundpd},          HW_Category_SimpleSIMD,                        HW_Flag_NoRMWSemantics)
+-HARDWARE_INTRINSIC(SSE41_RoundCurrentDirectionScalar,                "RoundCurrentDirectionScalar",                      SSE41,       4,           16,          -1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundss,   INS_roundsd},          HW_Category_Special,                           HW_Flag_CopyUpperBits)
++HARDWARE_INTRINSIC(SSE41_RoundCurrentDirectionScalar,                "RoundCurrentDirectionScalar",                      SSE41,       4,           16,          -1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundss,   INS_roundsd},          HW_Category_SIMDScalar,                        HW_Flag_CopyUpperBits)
+ HARDWARE_INTRINSIC(SSE41_RoundToNearestInteger,                      "RoundToNearestInteger",                            SSE41,       8,           16,           1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundps,   INS_roundpd},          HW_Category_SimpleSIMD,                        HW_Flag_NoRMWSemantics)
+-HARDWARE_INTRINSIC(SSE41_RoundToNearestIntegerScalar,                "RoundToNearestIntegerScalar",                      SSE41,       8,           16,          -1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundss,   INS_roundsd},          HW_Category_Special,                           HW_Flag_CopyUpperBits)
++HARDWARE_INTRINSIC(SSE41_RoundToNearestIntegerScalar,                "RoundToNearestIntegerScalar",                      SSE41,       8,           16,          -1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundss,   INS_roundsd},          HW_Category_SIMDScalar,                        HW_Flag_CopyUpperBits)
+ HARDWARE_INTRINSIC(SSE41_RoundToNegativeInfinity,                    "RoundToNegativeInfinity",                          SSE41,       9,           16,           1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundps,   INS_roundpd},          HW_Category_SimpleSIMD,                        HW_Flag_NoRMWSemantics)
+-HARDWARE_INTRINSIC(SSE41_RoundToNegativeInfinityScalar,              "RoundToNegativeInfinityScalar",                    SSE41,       9,           16,          -1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundss,   INS_roundsd},          HW_Category_Special,                           HW_Flag_CopyUpperBits)
++HARDWARE_INTRINSIC(SSE41_RoundToNegativeInfinityScalar,              "RoundToNegativeInfinityScalar",                    SSE41,       9,           16,          -1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundss,   INS_roundsd},          HW_Category_SIMDScalar,                        HW_Flag_CopyUpperBits)
+ HARDWARE_INTRINSIC(SSE41_RoundToPositiveInfinity,                    "RoundToPositiveInfinity",                          SSE41,      10,           16,           1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundps,   INS_roundpd},          HW_Category_SimpleSIMD,                        HW_Flag_NoRMWSemantics)
+-HARDWARE_INTRINSIC(SSE41_RoundToPositiveInfinityScalar,              "RoundToPositiveInfinityScalar",                    SSE41,      10,           16,          -1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundss,   INS_roundsd},          HW_Category_Special,                           HW_Flag_CopyUpperBits)
++HARDWARE_INTRINSIC(SSE41_RoundToPositiveInfinityScalar,              "RoundToPositiveInfinityScalar",                    SSE41,      10,           16,          -1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundss,   INS_roundsd},          HW_Category_SIMDScalar,                        HW_Flag_CopyUpperBits)
+ HARDWARE_INTRINSIC(SSE41_RoundToZero,                                "RoundToZero",                                      SSE41,      11,           16,           1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundps,   INS_roundpd},          HW_Category_SimpleSIMD,                        HW_Flag_NoRMWSemantics)
+-HARDWARE_INTRINSIC(SSE41_RoundToZeroScalar,                          "RoundToZeroScalar",                                SSE41,      11,           16,          -1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundss,   INS_roundsd},          HW_Category_Special,                           HW_Flag_CopyUpperBits)
++HARDWARE_INTRINSIC(SSE41_RoundToZeroScalar,                          "RoundToZeroScalar",                                SSE41,      11,           16,          -1,           {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_roundss,   INS_roundsd},          HW_Category_SIMDScalar,                        HW_Flag_CopyUpperBits)
+ HARDWARE_INTRINSIC(SSE41_TestAllOnes,                                "TestAllOnes",                                      SSE41,      -1,           16,           1,           {INS_ptest,     INS_ptest,     INS_ptest,     INS_ptest,      INS_ptest,     INS_ptest,     INS_ptest,     INS_ptest,     INS_invalid,   INS_invalid},          HW_Category_SimpleSIMD,                        HW_Flag_MultiIns|HW_Flag_NoContainment|HW_Flag_NoRMWSemantics|HW_Flag_BaseTypeFromFirstArg)
+ HARDWARE_INTRINSIC(SSE41_TestAllZeros,                               "TestAllZeros",                                     SSE41,      -1,           16,           2,           {INS_ptest,     INS_ptest,     INS_ptest,     INS_ptest,      INS_ptest,     INS_ptest,     INS_ptest,     INS_ptest,     INS_invalid,   INS_invalid},          HW_Category_SimpleSIMD,                        HW_Flag_MultiIns|HW_Flag_NoContainment|HW_Flag_BaseTypeFromFirstArg)
+ HARDWARE_INTRINSIC(SSE41_TestC,                                      "TestC",                                            SSE41,      -1,           16,           2,           {INS_ptest,     INS_ptest,     INS_ptest,     INS_ptest,      INS_ptest,     INS_ptest,     INS_ptest,     INS_ptest,     INS_invalid,   INS_invalid},          HW_Category_SimpleSIMD,                        HW_Flag_MultiIns|HW_Flag_NoContainment|HW_Flag_BaseTypeFromFirstArg)
+diff --git a/src/jit/hwintrinsicxarch.cpp b/src/jit/hwintrinsicxarch.cpp
+index ef64c4e..45d1eee 100644
+--- a/src/jit/hwintrinsicxarch.cpp
++++ b/src/jit/hwintrinsicxarch.cpp
+@@ -860,8 +860,6 @@ GenTree* Compiler::impHWIntrinsic(NamedIntrinsic        intrinsic,
+             return impSSEIntrinsic(intrinsic, method, sig, mustExpand);
+         case InstructionSet_SSE2:
+             return impSSE2Intrinsic(intrinsic, method, sig, mustExpand);
+-        case InstructionSet_SSE41:
+-            return impSSE41Intrinsic(intrinsic, method, sig, mustExpand);
+         case InstructionSet_SSE42:
+             return impSSE42Intrinsic(intrinsic, method, sig, mustExpand);
+         case InstructionSet_AVX:
+@@ -924,23 +922,6 @@ GenTree* Compiler::impSSEIntrinsic(NamedIntrinsic        intrinsic,
+             break;
+         }
+ 
+-        case NI_SSE_ReciprocalScalar:
+-        case NI_SSE_ReciprocalSqrtScalar:
+-        case NI_SSE_SqrtScalar:
+-        {
+-            assert((sig->numArgs == 1) || (sig->numArgs == 2));
+-            assert(getBaseTypeOfSIMDType(sig->retTypeSigClass) == TYP_FLOAT);
+-
+-            if (sig->numArgs == 2)
+-            {
+-                op2 = impSIMDPopStack(TYP_SIMD16);
+-            }
+-
+-            op1     = impSIMDPopStack(TYP_SIMD16);
+-            retNode = gtNewSimdHWIntrinsicNode(TYP_SIMD16, op1, op2, intrinsic, TYP_FLOAT, simdSize);
+-            break;
+-        }
+-
+         case NI_SSE_MoveMask:
+             assert(sig->numArgs == 1);
+             assert(JITtype2varType(sig->retType) == TYP_INT);
+@@ -1051,51 +1032,6 @@ GenTree* Compiler::impSSE2Intrinsic(NamedIntrinsic        intrinsic,
+     return retNode;
+ }
+ 
+-GenTree* Compiler::impSSE41Intrinsic(NamedIntrinsic        intrinsic,
+-                                     CORINFO_METHOD_HANDLE method,
+-                                     CORINFO_SIG_INFO*     sig,
+-                                     bool                  mustExpand)
+-{
+-    GenTree* retNode  = nullptr;
+-    GenTree* op1      = nullptr;
+-    GenTree* op2      = nullptr;
+-    GenTree* op3      = nullptr;
+-    GenTree* op4      = nullptr;
+-    int      simdSize = simdSizeOfHWIntrinsic(intrinsic, sig);
+-
+-    assert(simdSize == 16);
+-
+-    switch (intrinsic)
+-    {
+-        case NI_SSE41_CeilingScalar:
+-        case NI_SSE41_FloorScalar:
+-        case NI_SSE41_RoundCurrentDirectionScalar:
+-        case NI_SSE41_RoundToNearestIntegerScalar:
+-        case NI_SSE41_RoundToNegativeInfinityScalar:
+-        case NI_SSE41_RoundToPositiveInfinityScalar:
+-        case NI_SSE41_RoundToZeroScalar:
+-        {
+-            assert((sig->numArgs == 1) || (sig->numArgs == 2));
+-            var_types baseType = getBaseTypeOfSIMDType(sig->retTypeSigClass);
+-            assert((baseType == TYP_FLOAT) || (baseType == TYP_DOUBLE));
+-
+-            if (sig->numArgs == 2)
+-            {
+-                op2 = impSIMDPopStack(TYP_SIMD16);
+-            }
+-
+-            op1     = impSIMDPopStack(TYP_SIMD16);
+-            retNode = gtNewSimdHWIntrinsicNode(TYP_SIMD16, op1, op2, intrinsic, baseType, simdSize);
+-            break;
+-        }
+-
+-        default:
+-            JITDUMP("Not implemented hardware intrinsic");
+-            break;
+-    }
+-    return retNode;
+-}
+-
+ GenTree* Compiler::impSSE42Intrinsic(NamedIntrinsic        intrinsic,
+                                      CORINFO_METHOD_HANDLE method,
+                                      CORINFO_SIG_INFO*     sig,
+-- 
+2.7.4
+

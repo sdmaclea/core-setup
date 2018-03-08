@@ -1,0 +1,12 @@
+From 23a78c661b91cce6585e078dedd120f23196c8d1 Mon Sep 17 00:00:00 2001
+From: Brian Sullivan <briansul@microsoft.com>
+Date: Thu, 1 Mar 2018 16:45:02 -0800
+Subject: [PATCH] Fix formatting
+
+---
+ src/jit/morph.cpp | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+
+-- 
+2.7.4
+

@@ -1,0 +1,197 @@
+From 393210965af830d2d90552a4101c91ec914473c1 Mon Sep 17 00:00:00 2001
+From: Jacek Blaszczynski <biosciencenow@outlook.com>
+Date: Thu, 1 Mar 2018 19:26:29 +0100
+Subject: [PATCH] Implement LoadHigh, LoadLow, and SetScalarVector128 SSE2 HW
+ intrinsics
+
+---
+ src/jit/compiler.h                  |  2 +-
+ src/jit/emitxarch.cpp               |  6 +++---
+ src/jit/hwintrinsiccodegenxarch.cpp | 24 +++++++++++++++++++++++-
+ src/jit/hwintrinsiclistxarch.h      |  5 ++++-
+ src/jit/hwintrinsicxarch.cpp        | 17 +++++++++++------
+ src/jit/lowerxarch.cpp              |  2 +-
+ src/jit/lsraxarch.cpp               |  3 ++-
+ 7 files changed, 45 insertions(+), 14 deletions(-)
+
+diff --git a/src/jit/compiler.h b/src/jit/compiler.h
+index 05d5f93..7266c73 100644
+--- a/src/jit/compiler.h
++++ b/src/jit/compiler.h
+@@ -3103,7 +3103,7 @@ protected:
+     bool isScalarISA(InstructionSet isa);
+     static int ivalOfHWIntrinsic(NamedIntrinsic intrinsic);
+     unsigned simdSizeOfHWIntrinsic(NamedIntrinsic intrinsic, CORINFO_SIG_INFO* sig);
+-    static int numArgsOfHWIntrinsic(NamedIntrinsic intrinsic, GenTreeHWIntrinsic* node = nullptr);
++    static int numArgsOfHWIntrinsic(GenTreeHWIntrinsic* node);
+     static GenTree* lastOpOfHWIntrinsic(GenTreeHWIntrinsic* node, int numArgs);
+     static instruction insOfHWIntrinsic(NamedIntrinsic intrinsic, var_types type);
+     static HWIntrinsicCategory categoryOfHWIntrinsic(NamedIntrinsic intrinsic);
+diff --git a/src/jit/emitxarch.cpp b/src/jit/emitxarch.cpp
+index aabf69f..7583fe3 100644
+--- a/src/jit/emitxarch.cpp
++++ b/src/jit/emitxarch.cpp
+@@ -5538,14 +5538,14 @@ static bool isSseShift(instruction ins)
+ }
+ 
+ //------------------------------------------------------------------------
+-// IsDstSrcImmAvxInstruction: check if instruction has RM R I format
+-// for all encodings: EVEX, VEX and legacy SSE
++// IsDstSrcImmAvxInstruction: check if instruction has "R(M) R(M) I" format
++// for EVEX, VEX and legacy SSE encodings and has no (E)VEX.NDS
+ //
+ // Arguments:
+ //    instruction -- processor instruction to check
+ //
+ // Return Value:
+-//    true if instruction has RRI format
++//    true if instruction has "R(M) R(M) I" format and has no (E)VEX.NDS
+ //
+ static bool IsDstSrcImmAvxInstruction(instruction ins)
+ {
+diff --git a/src/jit/hwintrinsiccodegenxarch.cpp b/src/jit/hwintrinsiccodegenxarch.cpp
+index 232bcd7..e926465 100644
+--- a/src/jit/hwintrinsiccodegenxarch.cpp
++++ b/src/jit/hwintrinsiccodegenxarch.cpp
+@@ -56,7 +56,7 @@ void CodeGen::genHWIntrinsic(GenTreeHWIntrinsic* node)
+     HWIntrinsicCategory category    = Compiler::categoryOfHWIntrinsic(intrinsicID);
+     HWIntrinsicFlag     flags       = Compiler::flagsOfHWIntrinsic(intrinsicID);
+     int                 ival        = Compiler::ivalOfHWIntrinsic(intrinsicID);
+-    int                 numArgs     = Compiler::numArgsOfHWIntrinsic(intrinsicID, node);
++    int                 numArgs     = Compiler::numArgsOfHWIntrinsic(node);
+ 
+     assert((flags & HW_Flag_NoCodeGen) == 0);
+ 
+@@ -997,6 +997,28 @@ void CodeGen::genSSE2Intrinsic(GenTreeHWIntrinsic* node)
+             break;
+         }
+ 
++        case NI_SSE2_SetScalarVector128:
++        {
++            assert(baseType == TYP_DOUBLE);
++            assert(op2 == nullptr);
++
++            instruction ins = Compiler::insOfHWIntrinsic(intrinsicID, node->gtSIMDBaseType);
++            if (op1Reg == targetReg)
++            {
++                regNumber tmpReg = node->GetSingleTempReg();
++
++                // Ensure we aren't overwriting targetReg
++                assert(tmpReg != targetReg);
++
++                emit->emitIns_R_R(INS_movapd, emitTypeSize(TYP_SIMD16), tmpReg, op1Reg);
++                op1Reg = tmpReg;
++            }
++
++            emit->emitIns_SIMD_R_R_R(INS_xorpd, emitTypeSize(TYP_SIMD16), targetReg, targetReg, targetReg);
++            emit->emitIns_SIMD_R_R_R(ins, emitTypeSize(TYP_SIMD16), targetReg, targetReg, op1Reg);
++            break;
++        }
++
+         case NI_SSE2_SetZeroVector128:
+         {
+             assert(baseType != TYP_FLOAT);
+diff --git a/src/jit/hwintrinsiclistxarch.h b/src/jit/hwintrinsiclistxarch.h
+index aa4fe5b..9eb87af 100644
+--- a/src/jit/hwintrinsiclistxarch.h
++++ b/src/jit/hwintrinsiclistxarch.h
+@@ -192,6 +192,8 @@ HARDWARE_INTRINSIC(SSE2_Extract,                                     "Extract",
+ HARDWARE_INTRINSIC(SSE2_Insert,                                      "Insert",                                           SSE2,       -1,           16,          3,            {INS_invalid,   INS_invalid,   INS_pinsrw,    INS_pinsrw,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},           HW_Category_IMM,                               HW_Flag_FullRangeIMM)
+ HARDWARE_INTRINSIC(SSE2_LoadAlignedVector128,                        "LoadAlignedVector128",                             SSE2,       -1,           16,          1,            {INS_movdqa,    INS_movdqa,    INS_movdqa,    INS_movdqa,    INS_movdqa,    INS_movdqa,    INS_movdqa,    INS_movdqa,    INS_invalid,   INS_movapd},            HW_Category_MemoryLoad,                        HW_Flag_NoRMWSemantics)
+ HARDWARE_INTRINSIC(SSE2_LoadFence,                                   "LoadFence",                                        SSE2,       -1,            0,          0,            {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},           HW_Category_Special,                           HW_Flag_NoRMWSemantics)
++HARDWARE_INTRINSIC(SSE2_LoadHigh,                                    "LoadHigh",                                         SSE2,       -1,           16,          2,            {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_movhpd},            HW_Category_MemoryLoad,                        HW_Flag_NoRMWSemantics)
++HARDWARE_INTRINSIC(SSE2_LoadLow,                                     "LoadLow",                                          SSE2,       -1,           16,          2,            {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_movlpd},            HW_Category_MemoryLoad,                        HW_Flag_NoRMWSemantics)
+ HARDWARE_INTRINSIC(SSE2_LoadScalarVector128,                         "LoadScalarVector128",                              SSE2,       -1,           16,          1,            {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_movd,      INS_movd,      INS_movq,      INS_movq,      INS_invalid,   INS_movsdsse2},         HW_Category_MemoryLoad,                        HW_Flag_NoRMWSemantics)
+ HARDWARE_INTRINSIC(SSE2_LoadVector128,                               "LoadVector128",                                    SSE2,       -1,           16,          1,            {INS_movdqu,    INS_movdqu,    INS_movdqu,    INS_movdqu,    INS_movdqu,    INS_movdqu,    INS_movdqu,    INS_movdqu,    INS_invalid,   INS_movupd},            HW_Category_MemoryLoad,                        HW_Flag_NoRMWSemantics)
+ HARDWARE_INTRINSIC(SSE2_MaskMove,                                    "MaskMove",                                         SSE2,       -1,           16,          3,            {INS_maskmovdqu,INS_maskmovdqu,INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},           HW_Category_MemoryStore,                       HW_Flag_BaseTypeFromFirstArg|HW_Flag_NoRMWSemantics)
+@@ -210,7 +212,8 @@ HARDWARE_INTRINSIC(SSE2_MultiplyScalar,                              "MultiplySc
+ HARDWARE_INTRINSIC(SSE2_Or,                                          "Or",                                               SSE2,       -1,           16,          2,            {INS_por,       INS_por,       INS_por,       INS_por,       INS_por,       INS_por,       INS_por,       INS_por,       INS_invalid,   INS_orpd},              HW_Category_SimpleSIMD,                        HW_Flag_Commutative)
+ HARDWARE_INTRINSIC(SSE2_PackSignedSaturate,                          "PackSignedSaturate",                               SSE2,       -1,           16,          2,            {INS_invalid,   INS_invalid,   INS_packsswb,  INS_invalid,   INS_packssdw,  INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},           HW_Category_SimpleSIMD,                        HW_Flag_BaseTypeFromFirstArg)
+ HARDWARE_INTRINSIC(SSE2_PackUnsignedSaturate,                        "PackUnsignedSaturate",                             SSE2,       -1,           16,          2,            {INS_invalid,   INS_invalid,   INS_packuswb,  INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},           HW_Category_SimpleSIMD,                        HW_Flag_BaseTypeFromFirstArg)
+-HARDWARE_INTRINSIC(SSE2_SetZeroVector128,                            "SetZeroVector128",                                 SSE2,       -1,           16,          0,            {INS_pxor,      INS_pxor,      INS_pxor,      INS_pxor,      INS_pxor,      INS_pxor,      INS_pxor,      INS_pxor,      INS_invalid,   INS_xorpd},             HW_Category_Helper,                            HW_Flag_NoRMWSemantics)
++HARDWARE_INTRINSIC(SSE2_SetScalarVector128,                          "SetScalarVector128",                               SSE2,       -1,           16,          1,            {INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_movsdsse2},         HW_Category_Helper,                            HW_Flag_MultiIns|HW_Flag_NoRMWSemantics)
++HARDWARE_INTRINSIC(SSE2_SetZeroVector128,                            "SetZeroVector128",                                 SSE2,       -1,           16,          0,            {INS_pxor,      INS_pxor,      INS_pxor,      INS_pxor,      INS_pxor,      INS_pxor,      INS_pxor,      INS_pxor,      INS_invalid,   INS_xorpd},             HW_Category_Helper,                            HW_Flag_NoFlag)
+ HARDWARE_INTRINSIC(SSE2_SumAbsoluteDifferences,                      "SumAbsoluteDifferences",                           SSE2,       -1,           16,          2,            {INS_invalid,   INS_psadbw,    INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid,   INS_invalid},           HW_Category_SimpleSIMD,                        HW_Flag_BaseTypeFromFirstArg)
+ HARDWARE_INTRINSIC(SSE2_ShiftLeftLogical,                            "ShiftLeftLogical",                                 SSE2,       -1,           16,          2,            {INS_invalid,   INS_invalid,   INS_psllw,     INS_psllw,     INS_pslld,     INS_pslld,     INS_psllq,     INS_psllq,     INS_invalid,   INS_invalid},           HW_Category_IMM,                               HW_Flag_MaybeIMM|HW_Flag_NoJmpTableIMM|HW_Flag_FullRangeIMM)
+ HARDWARE_INTRINSIC(SSE2_ShiftLeftLogical128BitLane,                  "ShiftLeftLogical128BitLane",                       SSE2,       -1,           16,          2,            {INS_pslldq,    INS_pslldq,    INS_pslldq,    INS_pslldq,    INS_pslldq,    INS_pslldq,    INS_pslldq,    INS_pslldq,    INS_invalid,   INS_invalid},           HW_Category_IMM,                               HW_Flag_FullRangeIMM)
+diff --git a/src/jit/hwintrinsicxarch.cpp b/src/jit/hwintrinsicxarch.cpp
+index 45d1eee..b48a1b1 100644
+--- a/src/jit/hwintrinsicxarch.cpp
++++ b/src/jit/hwintrinsicxarch.cpp
+@@ -218,20 +218,26 @@ unsigned Compiler::simdSizeOfHWIntrinsic(NamedIntrinsic intrinsic, CORINFO_SIG_I
+     return simdSize;
+ }
+ 
++// TODO_XARCH-CQ - refactoring of numArgsOfHWIntrinsic fast path into inlinable
++// function and slow local static function may increase performance significantly
++
+ //------------------------------------------------------------------------
+-// numArgsOfHWIntrinsic: get the number of arguments based on table and
+-// if numArgs is -1 check number of arguments using GenTreeHWIntrinsic
+-// node unless it is nullptr
++// numArgsOfHWIntrinsic: gets the number of arguments for the hardware intrinsic.
++// This attempts to do a table based lookup but will fallback to the number
++// of operands in 'node' if the table entry is -1.
+ //
+ // Arguments:
+-//    intrinsic -- id of the intrinsic function
+ //    node      -- GenTreeHWIntrinsic* node with nullptr default value
+ //
+ // Return Value:
+ //     number of arguments
+ //
+-int Compiler::numArgsOfHWIntrinsic(NamedIntrinsic intrinsic, GenTreeHWIntrinsic* node)
++int Compiler::numArgsOfHWIntrinsic(GenTreeHWIntrinsic* node)
+ {
++    assert(node != nullptr);
++
++    NamedIntrinsic intrinsic = node->gtHWIntrinsicId;
++
+     assert(intrinsic != NI_Illegal);
+     assert(intrinsic > NI_HW_INTRINSIC_START && intrinsic < NI_HW_INTRINSIC_END);
+ 
+@@ -241,7 +247,6 @@ int Compiler::numArgsOfHWIntrinsic(NamedIntrinsic intrinsic, GenTreeHWIntrinsic*
+         return numArgs;
+     }
+ 
+-    noway_assert(node != nullptr);
+     assert(numArgs == -1);
+ 
+     GenTree* op1 = node->gtGetOp1();
+diff --git a/src/jit/lowerxarch.cpp b/src/jit/lowerxarch.cpp
+index 45799e3..0aa5693 100644
+--- a/src/jit/lowerxarch.cpp
++++ b/src/jit/lowerxarch.cpp
+@@ -2367,7 +2367,7 @@ void Lowering::ContainCheckHWIntrinsic(GenTreeHWIntrinsic* node)
+     NamedIntrinsic      intrinsicID = node->gtHWIntrinsicId;
+     HWIntrinsicCategory category    = Compiler::categoryOfHWIntrinsic(intrinsicID);
+     HWIntrinsicFlag     flags       = Compiler::flagsOfHWIntrinsic(intrinsicID);
+-    int                 numArgs     = Compiler::numArgsOfHWIntrinsic(intrinsicID, node);
++    int                 numArgs     = Compiler::numArgsOfHWIntrinsic(node);
+     GenTree*            op1         = node->gtGetOp1();
+     GenTree*            op2         = node->gtGetOp2();
+ 
+diff --git a/src/jit/lsraxarch.cpp b/src/jit/lsraxarch.cpp
+index 17b6378..b0e95ae 100644
+--- a/src/jit/lsraxarch.cpp
++++ b/src/jit/lsraxarch.cpp
+@@ -2261,7 +2261,7 @@ void LinearScan::BuildHWIntrinsic(GenTreeHWIntrinsic* intrinsicTree)
+     InstructionSet      isa         = Compiler::isaOfHWIntrinsic(intrinsicID);
+     HWIntrinsicCategory category    = Compiler::categoryOfHWIntrinsic(intrinsicID);
+     HWIntrinsicFlag     flags       = Compiler::flagsOfHWIntrinsic(intrinsicID);
+-    int                 numArgs     = Compiler::numArgsOfHWIntrinsic(intrinsicID, intrinsicTree);
++    int                 numArgs     = Compiler::numArgsOfHWIntrinsic(intrinsicTree);
+ 
+     if (isa == InstructionSet_AVX || isa == InstructionSet_AVX2)
+     {
+@@ -2349,6 +2349,7 @@ void LinearScan::BuildHWIntrinsic(GenTreeHWIntrinsic* intrinsicTree)
+             break;
+ 
+         case NI_SSE_SetScalarVector128:
++        case NI_SSE2_SetScalarVector128:
+             // Need an internal register to stitch together all the values into a single vector in a SIMD reg.
+             info->internalFloatCount = 1;
+             info->setInternalCandidates(this, allSIMDRegs());
+-- 
+2.7.4
+

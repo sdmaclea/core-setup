@@ -1,0 +1,75 @@
+From 063e8d07f80c8e7e026e42b52cbe9addf50c884d Mon Sep 17 00:00:00 2001
+From: Brian Robbins <brianrob@microsoft.com>
+Date: Tue, 6 Mar 2018 11:31:40 -0800
+Subject: [PATCH] Convert Byte Arrays to Hexidecimal Strings When Writing to
+ LTTng via EventSource (#16762)
+
+---
+ .../Diagnostics/Eventing/XplatEventLogger.cs       | 39 ++++++++++++++++++----
+ 1 file changed, 33 insertions(+), 6 deletions(-)
+
+diff --git a/src/mscorlib/src/System/Diagnostics/Eventing/XplatEventLogger.cs b/src/mscorlib/src/System/Diagnostics/Eventing/XplatEventLogger.cs
+index d8057f3..31f79f5 100644
+--- a/src/mscorlib/src/System/Diagnostics/Eventing/XplatEventLogger.cs
++++ b/src/mscorlib/src/System/Diagnostics/Eventing/XplatEventLogger.cs
+@@ -109,24 +109,51 @@ namespace System.Diagnostics.Tracing
+                 sb.Append("\\\"");
+                 sb.Append(':');
+ 
+-                var valuestr = payload[i] as string;
+-
+-                if( valuestr != null)
++                switch(payload[i])
++                {
++                    case string str:
+                     {
+                         sb.Append("\\\"");
+-                    minimalJsonserializer(valuestr,sb);
++                        minimalJsonserializer(str, sb);
+                         sb.Append("\\\"");
++                        break;
+                     }
+-                else
++                    case byte[] byteArr:
++                    {
++                        sb.Append("\\\"");
++                        AppendByteArrayAsHexString(sb, byteArr);
++                        sb.Append("\\\"");
++                        break;
++                    }
++                    default:
++                    {
++                        if(payload[i] != null)
+                         {
+                             sb.Append(payload[i].ToString());
+                         }
+-
++                        break;
++                    }
++                }
+             }
+             sb.Append('}');
+             return StringBuilderCache.GetStringAndRelease(sb);
+         }
+ 
++        private static void AppendByteArrayAsHexString(StringBuilder builder, byte[] byteArray)
++        {
++            Debug.Assert(builder != null);
++            Debug.Assert(byteArray != null);
++
++            ReadOnlySpan<char> hexFormat = "X2";
++            Span<char> hex = stackalloc char[2];
++            for(int i=0; i<byteArray.Length; i++)
++            {
++                byteArray[i].TryFormat(hex, out int charsWritten, hexFormat);
++                Debug.Assert(charsWritten == 2);
++                builder.Append(hex);
++            }
++        }
++
+         internal protected  override void OnEventSourceCreated(EventSource eventSource)
+         {
+             string eventSourceFilter = eventSourceNameFilter.Value;
+-- 
+2.7.4
+

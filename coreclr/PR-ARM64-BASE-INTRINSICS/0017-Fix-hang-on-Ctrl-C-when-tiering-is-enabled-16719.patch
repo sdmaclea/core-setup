@@ -1,0 +1,198 @@
+From 88e9fb63e5e49ce72a50e2e677fa74d951dc5057 Mon Sep 17 00:00:00 2001
+From: Koundinya Veluri <kouvel@users.noreply.github.com>
+Date: Tue, 6 Mar 2018 11:42:13 -0800
+Subject: [PATCH] Fix hang on Ctrl+C when tiering is enabled (#16719)
+
+Fix hang on Ctrl+C when tiering is enabled
+
+- When the work thread count is nonzero at the time of Ctrl+C, by the time `TieredCompilationManager::Shutdown(BOOL)` runs (during `DllMain` for process detach), the background worker thread has already been torn down abruptly and it does not get a chance to exit gracefully and set the event, and Shutdown() hangs the process waiting for the event forever.
+- It looks like there is no benefit to waiting for the work to complete, fixed by removing the wait and the event
+- In the MusicStore benchmark it looks like the arch folder was missing in the 'publish' folder path. In case there is a difference in bin directory layout between the CI dotnet and current dotnet, changed to check for both paths.
+---
+ src/vm/appdomain.cpp                               |  2 +-
+ src/vm/ceemain.cpp                                 |  7 -----
+ src/vm/tieredcompilation.cpp                       | 31 +---------------------
+ src/vm/tieredcompilation.h                         |  3 +--
+ .../JitBench/Benchmarks/MusicStoreBenchmark.cs     | 29 +++++++++++++++++---
+ 5 files changed, 28 insertions(+), 44 deletions(-)
+
+diff --git a/src/vm/appdomain.cpp b/src/vm/appdomain.cpp
+index 96fd088..8bb747b 100644
+--- a/src/vm/appdomain.cpp
++++ b/src/vm/appdomain.cpp
+@@ -8026,7 +8026,7 @@ void AppDomain::Exit(BOOL fRunFinalizers, BOOL fAsyncExit)
+     // have exited the domain.
+     //
+ #ifdef FEATURE_TIERED_COMPILATION
+-    m_tieredCompilationManager.Shutdown(FALSE);
++    m_tieredCompilationManager.Shutdown();
+ #endif
+ 
+     //
+diff --git a/src/vm/ceemain.cpp b/src/vm/ceemain.cpp
+index e9b914e..05384c3 100644
+--- a/src/vm/ceemain.cpp
++++ b/src/vm/ceemain.cpp
+@@ -1641,13 +1641,6 @@ void STDMETHODCALLTYPE EEShutDownHelper(BOOL fIsDllUnloading)
+         // Indicate the EE is the shut down phase.
+         g_fEEShutDown |= ShutDown_Start;
+ 
+-#ifdef FEATURE_TIERED_COMPILATION
+-        {
+-            GCX_PREEMP();
+-            TieredCompilationManager::ShutdownAllDomains();
+-        }
+-#endif
+-
+         fFinalizeOK = TRUE;
+ 
+         // Terminate the BBSweep thread
+diff --git a/src/vm/tieredcompilation.cpp b/src/vm/tieredcompilation.cpp
+index f89f4f2..cd571a6 100644
+--- a/src/vm/tieredcompilation.cpp
++++ b/src/vm/tieredcompilation.cpp
+@@ -108,7 +108,6 @@ void TieredCompilationManager::Init(ADID appDomainId)
+     SpinLockHolder holder(&m_lock);
+     m_domainId = appDomainId;
+     m_callCountOptimizationThreshhold = g_pConfig->TieredCompilation_Tier1CallCountThreshold();
+-    m_asyncWorkDoneEvent.CreateManualEventNoThrow(TRUE);
+ }
+ 
+ void TieredCompilationManager::InitiateTier1CountingDelay()
+@@ -318,35 +317,12 @@ void TieredCompilationManager::AsyncPromoteMethodToTier1(MethodDesc* pMethodDesc
+     return;
+ }
+ 
+-// static
+-// called from EEShutDownHelper
+-void TieredCompilationManager::ShutdownAllDomains()
++void TieredCompilationManager::Shutdown()
+ {
+     STANDARD_VM_CONTRACT;
+ 
+-    AppDomainIterator domain(TRUE);
+-    while (domain.Next())
+-    {
+-        AppDomain * pDomain = domain.GetDomain();
+-        if (pDomain != NULL)
+-        {
+-            pDomain->GetTieredCompilationManager()->Shutdown(TRUE);
+-        }
+-    }
+-}
+-
+-void TieredCompilationManager::Shutdown(BOOL fBlockUntilAsyncWorkIsComplete)
+-{
+-    STANDARD_VM_CONTRACT;
+-
+-    {
+     SpinLockHolder holder(&m_lock);
+     m_isAppDomainShuttingDown = TRUE;
+-    }
+-    if (fBlockUntilAsyncWorkIsComplete)
+-    {
+-        m_asyncWorkDoneEvent.Wait(INFINITE, FALSE);
+-    }
+ }
+ 
+ VOID WINAPI TieredCompilationManager::Tier1DelayTimerCallback(PVOID parameter, BOOLEAN timerFired)
+@@ -619,7 +595,6 @@ void TieredCompilationManager::IncrementWorkerThreadCount()
+     //m_lock should be held
+ 
+     m_countOptimizationThreadsRunning++;
+-    m_asyncWorkDoneEvent.Reset();
+ }
+ 
+ void TieredCompilationManager::DecrementWorkerThreadCount()
+@@ -628,10 +603,6 @@ void TieredCompilationManager::DecrementWorkerThreadCount()
+     //m_lock should be held
+     
+     m_countOptimizationThreadsRunning--;
+-    if (m_countOptimizationThreadsRunning == 0)
+-    {
+-        m_asyncWorkDoneEvent.Set();
+-    }
+ }
+ 
+ //static
+diff --git a/src/vm/tieredcompilation.h b/src/vm/tieredcompilation.h
+index 95dbb74..2665ad4 100644
+--- a/src/vm/tieredcompilation.h
++++ b/src/vm/tieredcompilation.h
+@@ -32,8 +32,7 @@ public:
+     void OnMethodCalled(MethodDesc* pMethodDesc, DWORD currentCallCount, BOOL* shouldStopCountingCallsRef, BOOL* wasPromotedToTier1Ref);
+     void OnMethodCallCountingStoppedWithoutTier1Promotion(MethodDesc* pMethodDesc);
+     void AsyncPromoteMethodToTier1(MethodDesc* pMethodDesc);
+-    static void ShutdownAllDomains();
+-    void Shutdown(BOOL fBlockUntilAsyncWorkIsComplete);
++    void Shutdown();
+     static CORJIT_FLAGS GetJitFlags(NativeCodeVersion nativeCodeVersion);
+ 
+ private:
+diff --git a/tests/src/performance/Scenario/JitBench/Benchmarks/MusicStoreBenchmark.cs b/tests/src/performance/Scenario/JitBench/Benchmarks/MusicStoreBenchmark.cs
+index f8bc04f..5774000 100644
+--- a/tests/src/performance/Scenario/JitBench/Benchmarks/MusicStoreBenchmark.cs
++++ b/tests/src/performance/Scenario/JitBench/Benchmarks/MusicStoreBenchmark.cs
+@@ -26,7 +26,7 @@ namespace JitBench
+             string musicStoreSrcDirectory = GetMusicStoreSrcDirectory(outputDir);
+             string tfm = DotNetSetup.GetTargetFrameworkMonikerForFrameworkVersion(dotNetInstall.FrameworkVersion);
+             ExePath = "MusicStore.dll";
+-            WorkingDirPath = GetMusicStorePublishDirectory(outputDir, tfm);
++            WorkingDirPath = GetMusicStorePublishDirectory(dotNetInstall, outputDir, tfm);
+             EnvironmentVariables.Add("DOTNET_SHARED_STORE", GetMusicStoreStoreDir(outputDir));
+         }
+ 
+@@ -72,9 +72,12 @@ namespace JitBench
+         private static async Task<string> Publish(DotNetInstallation dotNetInstall, string outputDir, ITestOutputHelper output)
+         {
+             string tfm = DotNetSetup.GetTargetFrameworkMonikerForFrameworkVersion(dotNetInstall.FrameworkVersion);
+-            string publishDir = GetMusicStorePublishDirectory(outputDir, tfm);
++            string publishDir = GetMusicStorePublishDirectory(dotNetInstall, outputDir, tfm);
+             string manifestPath = Path.Combine(GetMusicStoreStoreDir(outputDir), dotNetInstall.Architecture, tfm, "artifact.xml");
++            if (publishDir != null)
++            {
+                 FileTasks.DeleteDirectory(publishDir, output);
++            }
+             string dotNetExePath = dotNetInstall.DotNetExe;
+             await new ProcessRunner(dotNetExePath, $"publish -c Release -f {tfm} --manifest {manifestPath}")
+                 .WithWorkingDirectory(GetMusicStoreSrcDirectory(outputDir))
+@@ -85,6 +88,12 @@ namespace JitBench
+                 .WithEnvironmentVariable("UseSharedCompilation", "false")
+                 .WithLog(output)
+                 .Run();
++
++            publishDir = GetMusicStorePublishDirectory(dotNetInstall, outputDir, tfm);
++            if (publishDir == null)
++            {
++                throw new DirectoryNotFoundException("Could not find 'publish' directory");
++            }
+             return publishDir;
+         }
+ 
+@@ -205,9 +214,21 @@ namespace JitBench
+             return Path.Combine(GetJitBenchRepoRootDir(outputDir), "src", "MusicStore");
+         }
+ 
+-        static string GetMusicStorePublishDirectory(string outputDir, string tfm)
++        static string GetMusicStorePublishDirectory(DotNetInstallation dotNetInstall, string outputDir, string tfm)
++        {
++            string dir = Path.Combine(GetMusicStoreSrcDirectory(outputDir), "bin", dotNetInstall.Architecture, "Release", tfm, "publish");
++            if (Directory.Exists(dir))
+             {
+-            return Path.Combine(GetMusicStoreSrcDirectory(outputDir), "bin", "Release", tfm, "publish");
++                return dir;
++            }
++
++            dir = Path.Combine(GetMusicStoreSrcDirectory(outputDir), "bin", "Release", tfm, "publish");
++            if (Directory.Exists(dir))
++            {
++                return dir;
++            }
++
++            return null;
+         }
+ 
+         static string GetMusicStoreStoreDir(string outputDir)
+-- 
+2.7.4
+
