@@ -1,0 +1,36 @@
+From 4b68fe957c29d26c7995a872132e7e3faf08414d Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 8 Mar 2018 17:43:37 -0500
+Subject: [PATCH] [Arm64] Fix cross/build-rootfs.sh
+
+---
+ cross/build-rootfs.sh | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/cross/build-rootfs.sh b/cross/build-rootfs.sh
+index 39a3608..ab9b556 100755
+--- a/cross/build-rootfs.sh
++++ b/cross/build-rootfs.sh
+@@ -52,6 +52,9 @@ for i in "$@" ; do
+         arm64)
+             __BuildArch=arm64
+             __UbuntuArch=arm64
++            if [ "$__LLDB_Package" = "lldb-3.6-dev" ]; then
++                __LLDB_Package="lldb-3.9-dev"
++            fi
+             ;;
+         armel)
+             __BuildArch=armel
+@@ -117,6 +120,9 @@ done
+ if [ "$__BuildArch" == "armel" ]; then
+     __LLDB_Package="lldb-3.5-dev"
+ fi
++if [ "$__BuildArch" == "arm64" ]; then
++    __LLDB_Package="lib$__LLDB_Package"
++fi
+ __UbuntuPackages+=" ${__LLDB_Package:-}"
+ 
+ __RootfsDir="$__CrossDir/rootfs/$__BuildArch"
+-- 
+2.7.4
+
