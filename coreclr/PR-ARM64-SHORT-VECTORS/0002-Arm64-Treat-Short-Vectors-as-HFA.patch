@@ -1,36 +1,38 @@
-From ae8f2a29b0daed80ca68e64b40de88394aa262cc Mon Sep 17 00:00:00 2001
+From b878dc2b00e963e0fa5ee0a0ed477eaf14096718 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Thu, 8 Feb 2018 13:38:22 -0500
 Subject: [PATCH] [Arm64] Treat Short Vectors as HFA
 
 ---
- Documentation/design-docs/arm64-intrinsics.md |  27 +++++-
- src/inc/corhdr.h                              |   3 +
- src/inc/corinfo.h                             |   1 +
- src/jit/codegenarm64.cpp                      |   2 +-
- src/jit/codegenarmarch.cpp                    |  14 ++-
- src/jit/codegencommon.cpp                     |  43 ++++++++-
- src/jit/compiler.cpp                          |  44 ++++++++-
- src/jit/compiler.h                            |  81 ++++++++--------
- src/jit/compiler.hpp                          |  16 ++++
- src/jit/ee_il_dll.cpp                         |   3 +-
- src/jit/flowgraph.cpp                         |   6 +-
- src/jit/gentree.cpp                           |  20 +++-
- src/jit/gentree.h                             |   2 +-
- src/jit/hwintrinsicArm64.cpp                  |   3 +-
- src/jit/importer.cpp                          |  23 +++--
- src/jit/lclvars.cpp                           |  66 ++++++++++---
- src/jit/lsraarmarch.cpp                       |   2 +-
- src/jit/lsrabuild.cpp                         |   8 +-
- src/jit/morph.cpp                             | 129 ++++++++++++--------------
- src/jit/regalloc.cpp                          |   4 +
- src/jit/register_arg_convention.h             |   8 ++
- src/jit/scopeinfo.cpp                         |   7 ++
- src/jit/simd.cpp                              |   8 ++
- src/jit/target.h                              |   5 +
- src/vm/class.cpp                              |  86 ++++++++++++++++-
- src/vm/jitinterface.cpp                       |  15 ++-
- 26 files changed, 472 insertions(+), 154 deletions(-)
+ Documentation/design-docs/arm64-intrinsics.md | 27 ++++++--
+ src/inc/corinfo.h                             | 11 ++--
+ src/inc/corpriv.h                             | 12 ++++
+ src/jit/codegenarm64.cpp                      |  2 +-
+ src/jit/codegenarmarch.cpp                    | 14 ++++-
+ src/jit/codegencommon.cpp                     | 43 ++++++++++++-
+ src/jit/compiler.cpp                          | 44 +++++++++++++-
+ src/jit/compiler.h                            | 81 ++++++++++++------------
+ src/jit/compiler.hpp                          | 16 +++++
+ src/jit/ee_il_dll.cpp                         |  3 +-
+ src/jit/flowgraph.cpp                         |  6 +-
+ src/jit/gentree.cpp                           | 20 +++++-
+ src/jit/gentree.h                             |  2 +-
+ src/jit/hwintrinsicArm64.cpp                  |  3 +-
+ src/jit/importer.cpp                          | 23 ++++---
+ src/jit/lclvars.cpp                           | 66 ++++++++++++++++----
+ src/jit/lsraarmarch.cpp                       |  2 +-
+ src/jit/lsrabuild.cpp                         |  8 ++-
+ src/jit/morph.cpp                             | 47 +++++++++++---
+ src/jit/regalloc.cpp                          |  4 ++
+ src/jit/register_arg_convention.h             |  8 +++
+ src/jit/scopeinfo.cpp                         |  7 +++
+ src/jit/simd.cpp                              |  8 +++
+ src/jit/target.h                              |  5 ++
+ src/vm/argdestination.h                       | 15 +++--
+ src/vm/callingconvention.h                    | 88 ++++++++++++++++++++++-----
+ src/vm/class.cpp                              | 86 ++++++++++++++++++++++++--
+ src/vm/jitinterface.cpp                       | 15 ++++-
+ 28 files changed, 550 insertions(+), 116 deletions(-)
 
 diff --git a/Documentation/design-docs/arm64-intrinsics.md b/Documentation/design-docs/arm64-intrinsics.md
 index 67aff02..c64108a 100644
@@ -71,24 +73,27 @@ index 67aff02..c64108a 100644
  
  ## Half precision floating point
  
-diff --git a/src/inc/corhdr.h b/src/inc/corhdr.h
-index df54ab4..9d9ca30 100644
---- a/src/inc/corhdr.h
-+++ b/src/inc/corhdr.h
-@@ -913,6 +913,9 @@ typedef enum CorElementType
-     ELEMENT_TYPE_SENTINEL       = 0x01 | ELEMENT_TYPE_MODIFIER, // sentinel for varargs
-     ELEMENT_TYPE_PINNED         = 0x05 | ELEMENT_TYPE_MODIFIER,
- 
-+    ELEMENT_TYPE_SHORT_VECTOR   = 0x80,
-+    ELEMENT_TYPE_V8             = 0x0c | ELEMENT_TYPE_SHORT_VECTOR, // Limited use HFA type Vector  8 byte primitive
-+    ELEMENT_TYPE_V16            = 0x0d | ELEMENT_TYPE_SHORT_VECTOR, // Limited use HFA type Vector 16 byte primitive
- } CorElementType;
- 
- 
 diff --git a/src/inc/corinfo.h b/src/inc/corinfo.h
-index d430412..5ccb031 100644
+index d430412..fad0f2b 100644
 --- a/src/inc/corinfo.h
 +++ b/src/inc/corinfo.h
+@@ -213,11 +213,11 @@ TODO: Talk about initializing strutures before use
+     #define SELECTANY extern __declspec(selectany)
+ #endif
+ 
+-SELECTANY const GUID JITEEVersionIdentifier = { /* 0ba106c8-81a0-407f-99a1-928448c1eb62 */
+-    0x0ba106c8,
+-    0x81a0,
+-    0x407f,
+-    {0x99, 0xa1, 0x92, 0x84, 0x48, 0xc1, 0xeb, 0x62}
++SELECTANY const GUID JITEEVersionIdentifier = { /* ee4d7d71-ae29-42d3-bcd6-43586dafb5d2 */
++    0xee4d7d71,
++    0xae29,
++    0x42d3,
++    {0xbc, 0xd6, 0x43, 0x58, 0x6d, 0xaf, 0xb5, 0xd2}
+ };
+ 
+ //////////////////////////////////////////////////////////////////////////////////////////////////////////
 @@ -719,6 +719,7 @@ enum CorInfoTypeWithMod
  {
      CORINFO_TYPE_MASK            = 0x3F,        // lower 6 bits are type mask
@@ -97,6 +102,29 @@ index d430412..5ccb031 100644
  };
  
  inline CorInfoType strip(CorInfoTypeWithMod val) {
+diff --git a/src/inc/corpriv.h b/src/inc/corpriv.h
+index edd55e9..07b041e 100644
+--- a/src/inc/corpriv.h
++++ b/src/inc/corpriv.h
+@@ -262,6 +262,18 @@ typedef enum CorElementTypeZapSig
+ 
+ } CorElementTypeZapSig;
+ 
++#if defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_) // ARM64 or arm64altjit
++////////////////////////////////////////////////////////////////////////////////
++// Homogeneous Aggregate fundamental types which are not in the ECMA spec
++// Values are only used in GetHFAType() and its clients
++////////////////////////////////////////////////////////////////////////////////
++#define ELEMENT_TYPE_SHORT_VECTOR   0x80
++// 8 byte Short Vector
++#define ELEMENT_TYPE_V8             ((CorElementType) (0x0c | ELEMENT_TYPE_SHORT_VECTOR))
++// 16 byte Short Vector
++#define ELEMENT_TYPE_V16            ((CorElementType) (0x0d | ELEMENT_TYPE_SHORT_VECTOR))
++#endif // defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_)
++
+ typedef enum CorCallingConventionInternal
+ {
+     // IL stub signatures containing types that need to be restored have the highest
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
 index fa50983..8d0964d 100644
 --- a/src/jit/codegenarm64.cpp
@@ -905,7 +933,7 @@ index 5023b13..3da10a4 100644
                      useCandidates = RBM_FLOATRET;
                      break;
 diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
-index a428590..323b8db 100644
+index a428590..3567769 100644
 --- a/src/jit/morph.cpp
 +++ b/src/jit/morph.cpp
 @@ -2487,7 +2487,11 @@ void fgArgInfo::EvalArgsToTemps()
@@ -986,42 +1014,7 @@ index a428590..323b8db 100644
  #else // !FEATURE_MULTIREG_RET
      // No more struct returns
      assert(call->TypeGet() != TYP_STRUCT);
-@@ -6691,22 +6698,11 @@ GenTree* Compiler::fgMorphField(GenTree* tree, MorphAddrContext* mac)
-                 }
-                 else
-                 {
--                    // In R2R mode the field offset for some fields may change when the code
--                    // is loaded. So we can't rely on a zero offset here to suppress the null check.
--                    //
--                    // See GitHub issue #16454.
--                    bool fieldHasChangeableOffset = false;
--
--#ifdef FEATURE_READYTORUN_COMPILER
--                    fieldHasChangeableOffset = (tree->gtField.gtFieldLookup.addr != nullptr);
--#endif
--
- #if CONSERVATIVE_NULL_CHECK_BYREF_CREATION
--                    addExplicitNullCheck = (mac->m_kind == MACK_Addr) &&
--                                           ((mac->m_totalOffset + fldOffset > 0) || fieldHasChangeableOffset);
-+                    addExplicitNullCheck = (mac->m_kind == MACK_Addr && (mac->m_totalOffset + fldOffset > 0));
- #else
-                     addExplicitNullCheck = (objRef->gtType == TYP_BYREF && mac->m_kind == MACK_Addr &&
--                                            ((mac->m_totalOffset + fldOffset > 0) || fieldHasChangeableOffset));
-+                                            (mac->m_totalOffset + fldOffset > 0));
- #endif
-                 }
-             }
-@@ -7384,9 +7380,6 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee)
-         {
-             JITDUMP("[Fast tailcall decision]: %s\n", msg);
-         }
--#else
--        (void)this;
--        (void)callee;
- #endif // DEBUG
-     };
- 
-@@ -7510,7 +7503,7 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee)
+@@ -7510,7 +7517,7 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee)
  
  #elif defined(_TARGET_ARM64_) // ARM64
                  var_types hfaType  = GetHfaType(argx);
@@ -1030,128 +1023,7 @@ index a428590..323b8db 100644
                  size_t    size     = 1;
  
                  if (isHfaArg)
-@@ -7752,12 +7745,12 @@ void Compiler::fgMorphTailCall(GenTreeCall* call)
-     if (call->IsVirtualStub())
-     {
-         flags = CORINFO_TAILCALL_STUB_DISPATCH_ARG;
--#ifdef LEGACY_BACKEND
-+
-         GenTree* arg;
-         if (call->gtCallType == CT_INDIRECT)
-         {
-             arg = gtClone(call->gtCallAddr, true);
--            noway_assert(arg != nullptr);
-+            noway_assert(arg != NULL);
-         }
-         else
-         {
-@@ -7770,17 +7763,12 @@ void Compiler::fgMorphTailCall(GenTreeCall* call)
-             call->gtStubCallStubAddr = NULL;
-             call->gtCallType         = CT_INDIRECT;
-         }
--        arg->gtRegNum = virtualStubParamInfo->GetReg();
-         // Add the extra indirection to generate the real target
-         call->gtCallAddr = gtNewOperNode(GT_IND, TYP_I_IMPL, call->gtCallAddr);
-         call->gtFlags |= GTF_EXCEPT;
--        call->gtCallArgs = gtNewListNode(arg, call->gtCallArgs);
- 
--#else  // !LEGACY_BACKEND
--        GenTree* stubAddrArg = fgGetStubAddrArg(call);
-         // And push the stub address onto the list of arguments
--        call->gtCallArgs = gtNewListNode(stubAddrArg, call->gtCallArgs);
--#endif // !LEGACY_BACKEND
-+        call->gtCallArgs = gtNewListNode(arg, call->gtCallArgs);
-     }
-     else if (call->IsVirtualVtable())
-     {
-@@ -8020,10 +8008,24 @@ void Compiler::fgMorphTailCall(GenTreeCall* call)
-     CorInfoHelperTailCallSpecialHandling flags = CorInfoHelperTailCallSpecialHandling(0);
-     if (call->IsVirtualStub())
-     {
-+        GenTree* stubAddrArg;
-+
-         flags = CORINFO_TAILCALL_STUB_DISPATCH_ARG;
- 
--        GenTree* stubAddrArg = fgGetStubAddrArg(call);
--        // And push the stub address onto the list of arguments
-+        if (call->gtCallType == CT_INDIRECT)
-+        {
-+            stubAddrArg = gtClone(call->gtCallAddr, true);
-+            noway_assert(stubAddrArg != nullptr);
-+        }
-+        else
-+        {
-+            noway_assert((call->gtCallMoreFlags & GTF_CALL_M_VIRTSTUB_REL_INDIRECT) != 0);
-+
-+            ssize_t addr = ssize_t(call->gtStubCallStubAddr);
-+            stubAddrArg  = gtNewIconHandleNode(addr, GTF_ICON_FTN_ADDR);
-+        }
-+
-+        // Push the stub address onto the list of arguments
-         call->gtCallArgs = gtNewListNode(stubAddrArg, call->gtCallArgs);
-     }
- 
-@@ -8084,38 +8086,6 @@ void Compiler::fgMorphTailCall(GenTreeCall* call)
-     DISPTREE(call);
- }
- 
--//------------------------------------------------------------------------
--// fgGetStubAddrArg: Return the virtual stub address for the given call.
--//
--// Notes:
--//    the JIT must place the address of the stub used to load the call target,
--//    the "stub indirection cell", in special call argument with special register.
--//
--// Arguments:
--//    call - a call that needs virtual stub dispatching.
--//
--// Return Value:
--//    addr tree with set resister requirements.
--//
--GenTree* Compiler::fgGetStubAddrArg(GenTreeCall* call)
--{
--    assert(call->IsVirtualStub());
--    GenTree* stubAddrArg;
--    if (call->gtCallType == CT_INDIRECT)
--    {
--        stubAddrArg = gtClone(call->gtCallAddr, true);
--    }
--    else
--    {
--        assert(call->gtCallMoreFlags & GTF_CALL_M_VIRTSTUB_REL_INDIRECT);
--        ssize_t addr = ssize_t(call->gtStubCallStubAddr);
--        stubAddrArg  = gtNewIconHandleNode(addr, GTF_ICON_FTN_ADDR);
--    }
--    assert(stubAddrArg != nullptr);
--    stubAddrArg->gtRegNum = virtualStubParamInfo->GetReg();
--    return stubAddrArg;
--}
--
- //------------------------------------------------------------------------------
- // fgMorphRecursiveFastTailCallIntoLoop : Transform a recursive fast tail call into a loop.
- //
-@@ -9332,17 +9302,17 @@ GenTree* Compiler::fgMorphOneAsgBlockOp(GenTree* tree)
-     unsigned             size;
-     CORINFO_CLASS_HANDLE clsHnd = NO_CLASS_HANDLE;
- #ifdef FEATURE_SIMD
--    // importer introduces cpblk nodes with src = GT_ADDR(GT_SIMD/GT_HWIntrinsic)
-+    // importer introduces cpblk nodes with src = GT_ADDR(GT_SIMD)
-     // The SIMD type in question could be Vector2f which is 8-bytes in size.
-     // The below check is to make sure that we don't turn that copyblk
-     // into a assignment, since rationalizer logic will transform the
-     // copyblk appropriately. Otherwise, the transformation made in this
-     // routine will prevent rationalizer logic and we might end up with
--    // GT_ADDR(GT_SIMD/GT_HWIntrinsic) node post rationalization, leading to a noway assert
-+    // GT_ADDR(GT_SIMD) node post rationalization, leading to a noway assert
-     // in codegen.
-     // TODO-1stClassStructs: This is here to preserve old behavior.
-     // It should be eliminated.
--    if (src->OperIsSIMDorSimdHWintrinsic())
-+    if (src->OperGet() == GT_SIMD)
-     {
-         return nullptr;
-     }
-@@ -9428,12 +9398,16 @@ GenTree* Compiler::fgMorphOneAsgBlockOp(GenTree* tree)
+@@ -9428,12 +9435,21 @@ GenTree* Compiler::fgMorphOneAsgBlockOp(GenTree* tree)
          }
      }
  
@@ -1164,26 +1036,30 @@ index a428590..323b8db 100644
      {
          // For initBlk, a non constant source is not going to allow us to fiddle
          // with the bits to create a single assigment.
--        noway_assert(size <= REGSIZE_BYTES);
++        CLANG_FORMAT_COMMENT_ANCHOR;
++#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
 +        noway_assert(size <= REGSIZE_BYTES || (varTypeIsSIMD(asgType) && size <= FP_REGSIZE_BYTES));
++#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
+         noway_assert(size <= REGSIZE_BYTES);
++#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
  
          if (isInitBlock && !src->IsConstInitVal())
          {
-@@ -9461,7 +9435,13 @@ GenTree* Compiler::fgMorphOneAsgBlockOp(GenTree* tree)
+@@ -9461,7 +9477,13 @@ GenTree* Compiler::fgMorphOneAsgBlockOp(GenTree* tree)
              // holes, whose contents could be meaningful in unsafe code.  If we decide that's a valid
              // concern, then we could compromise, and say that address-exposed + fields do not completely cover the
              // memory of the struct prevent field-wise assignments.  Same situation exists for the "src" decision.
 +            CLANG_FORMAT_COMMENT_ANCHOR;
 +#if defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
 +            if (varTypeIsStruct(lclVarTree) && (destVarDsc->lvPromoted || destVarDsc->lvIsSIMDType()) &&
-+                (genTypeSize(asgType) != genTypeSize(destVarDsc)))
++                !varTypeIsStruct(asgType))
 +#else  // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
              if (varTypeIsStruct(lclVarTree) && (destVarDsc->lvPromoted || destVarDsc->lvIsSIMDType()))
 +#endif // defined(FEATURE_HW_INTRINSICS) && defined(_TARGET_ARM64_)
              {
                  // Let fgMorphInitBlock handle it.  (Since we'll need to do field-var-wise assignments.)
                  return nullptr;
-@@ -10255,7 +10235,11 @@ GenTree* Compiler::fgMorphBlockOperand(GenTree* tree, var_types asgType, unsigne
+@@ -10255,7 +10277,11 @@ GenTree* Compiler::fgMorphBlockOperand(GenTree* tree, var_types asgType, unsigne
                  needsIndirection = false;
                  effectiveVal     = indirTree->Addr()->gtGetOp1();
              }
@@ -1195,7 +1071,7 @@ index a428590..323b8db 100644
              {
                  needsIndirection = false;
              }
-@@ -18449,7 +18433,11 @@ void Compiler::fgMarkImplicitByRefArgs()
+@@ -18449,7 +18475,11 @@ void Compiler::fgMarkImplicitByRefArgs()
      {
          LclVarDsc* varDsc = &lvaTable[lclNum];
  
@@ -1207,7 +1083,7 @@ index a428590..323b8db 100644
          {
              size_t size;
  
-@@ -18608,7 +18596,6 @@ void Compiler::fgRetypeImplicitByRefArgs()
+@@ -18608,7 +18638,6 @@ void Compiler::fgRetypeImplicitByRefArgs()
                      // the parameter which is really a pointer to the struct.
                      fieldVarDsc->lvIsRegArg      = false;
                      fieldVarDsc->lvIsMultiRegArg = false;
@@ -1320,8 +1196,181 @@ index 453f8f9..cbd34f1 100644
    #define MAX_ARG_REG_COUNT             4  // Maximum registers used to pass a single argument in multiple registers. (max is 4 floats or doubles using an HFA)
    #define MAX_RET_REG_COUNT             4  // Maximum registers used to return a value.
  
+diff --git a/src/vm/argdestination.h b/src/vm/argdestination.h
+index 2d2a842..22e4048 100644
+--- a/src/vm/argdestination.h
++++ b/src/vm/argdestination.h
+@@ -64,24 +64,29 @@ public:
+         // enregister each field.
+ 
+         int floatRegCount = m_argLocDescForStructInRegs->m_cFloatReg;
+-        bool typeFloat = m_argLocDescForStructInRegs->m_isSinglePrecision;
++        size_t elementSize = m_argLocDescForStructInRegs->m_hfaElementSizeBytes;
+         void* dest = this->GetDestinationAddress();
+ 
+-        if (typeFloat)
++        switch (elementSize)
+         {
++        case 4:
+             for (int i = 0; i < floatRegCount; ++i)
+             {
+                 // Copy 4 bytes on 16 bytes alignment
+                 *((UINT64*)dest + 2*i) = *((UINT32*)src + i);
+             }
+-        }
+-        else
+-        {
++            break;
++        case 8:
+             for (int i = 0; i < floatRegCount; ++i)
+             {
+                 // Copy 8 bytes on 16 bytes alignment
+                 *((UINT64*)dest + 2*i) = *((UINT64*)src + i);
+             }
++            break;
++        case 16:
++            // We can just do a memcpy.
++            memcpyNoGCRefs(dest, src, fieldBytes);
++            break;
+         }
+     }
+ 
+diff --git a/src/vm/callingconvention.h b/src/vm/callingconvention.h
+index 9a0abd3..caef0e9 100644
+--- a/src/vm/callingconvention.h
++++ b/src/vm/callingconvention.h
+@@ -50,8 +50,7 @@ struct ArgLocDesc
+ #endif // UNIX_AMD64_ABI && FEATURE_UNIX_AMD64_STRUCT_PASSING
+ 
+ #if defined(_TARGET_ARM64_)
+-    bool    m_isSinglePrecision;  // For determining if HFA is single or double
+-                                  // precision
++    size_t  m_hfaElementSizeBytes;   // HFA element size
+ #endif // defined(_TARGET_ARM64_)
+ 
+ #if defined(_TARGET_ARM_)
+@@ -76,7 +75,7 @@ struct ArgLocDesc
+         m_fRequires64BitAlignment = FALSE;
+ #endif
+ #if defined(_TARGET_ARM64_)
+-        m_isSinglePrecision = FALSE;
++        m_hfaElementSizeBytes = 0;
+ #endif // defined(_TARGET_ARM64_)
+ #if defined(UNIX_AMD64_ABI) && defined(FEATURE_UNIX_AMD64_STRUCT_PASSING)
+         m_eeClass = NULL;
+@@ -563,11 +562,32 @@ public:
+ 
+             if (!m_argTypeHandle.IsNull() && m_argTypeHandle.IsHFA())
+             {
+-                CorElementType type = m_argTypeHandle.GetHFAType();
+-                bool isFloatType = (type == ELEMENT_TYPE_R4);
++                CorElementType hfaType = m_argTypeHandle.GetHFAType();
++                size_t elementSize = 0;
+ 
+-                pLoc->m_cFloatReg = isFloatType ? GetArgSize()/sizeof(float): GetArgSize()/sizeof(double);
+-                pLoc->m_isSinglePrecision = isFloatType;
++                switch ((unsigned)hfaType)
++                {
++                case ELEMENT_TYPE_R4:
++                    elementSize = sizeof(float);
++                    break;
++                case ELEMENT_TYPE_R8:
++                    elementSize = sizeof(double);
++                    break;
++#if defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_) // ARM64 or arm64altjit
++                case ELEMENT_TYPE_V8:
++                    elementSize = sizeof(double);
++                    break;
++                case ELEMENT_TYPE_V16:
++                    elementSize = 2*sizeof(double);
++                    break;
++#endif // defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_) // ARM64 or arm64altjit
++                default:
++                    assert(!"Unexpected hfaType");
++                }
++
++                pLoc->m_cFloatReg = GetArgSize()/elementSize;
++
++                pLoc->m_hfaElementSizeBytes = elementSize;
+             }
+             else
+             {
+@@ -1267,16 +1287,37 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
+         // registers if possible.
+         if (thValueType.IsHFA())
+         {
+-            CorElementType type = thValueType.GetHFAType();
+-            bool isFloatType = (type == ELEMENT_TYPE_R4);
++            CorElementType hfaType = thValueType.GetHFAType();
+ 
+-            cFPRegs = (type == ELEMENT_TYPE_R4)? (argSize/sizeof(float)): (argSize/sizeof(double));
++            size_t elementSize = 0;
++
++            switch ((unsigned)hfaType)
++            {
++            case ELEMENT_TYPE_R4:
++                elementSize = sizeof(float);
++                break;
++            case ELEMENT_TYPE_R8:
++                elementSize = sizeof(double);
++                break;
++#if defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_) // ARM64 or arm64altjit
++            case ELEMENT_TYPE_V8:
++                elementSize = sizeof(double);
++                break;
++            case ELEMENT_TYPE_V16:
++                elementSize = 2*sizeof(double);
++                break;
++#endif // defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_) // ARM64 or arm64altjit
++            default:
++                assert(!"Unexpected hfaType");
++            }
++
++            cFPRegs = argSize/elementSize;
+ 
+             m_argLocDescForStructInRegs.Init();
+             m_argLocDescForStructInRegs.m_cFloatReg = cFPRegs;
+             m_argLocDescForStructInRegs.m_idxFloatReg = m_idxFPReg;
+ 
+-            m_argLocDescForStructInRegs.m_isSinglePrecision = isFloatType;
++            m_argLocDescForStructInRegs.m_hfaElementSizeBytes = elementSize;
+                 
+             m_hasArgLocDescForStructInRegs = true;
+         }
+@@ -1419,9 +1460,28 @@ void ArgIteratorTemplate<ARGITERATOR_BASE>::ComputeReturnFlags()
+             {
+                 CorElementType hfaType = thValueType.GetHFAType();
+ 
+-                flags |= (hfaType == ELEMENT_TYPE_R4) ? 
+-                    ((4 * sizeof(float)) << RETURN_FP_SIZE_SHIFT) : 
+-                    ((4 * sizeof(double)) << RETURN_FP_SIZE_SHIFT);
++                size_t elementSize = 0;
++
++                switch ((unsigned)hfaType)
++                {
++                case ELEMENT_TYPE_R4:
++                    elementSize = sizeof(float);
++                    break;
++                case ELEMENT_TYPE_R8:
++                    elementSize = sizeof(double);
++                    break;
++#if defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_) // ARM64 or arm64altjit
++                case ELEMENT_TYPE_V8:
++                    elementSize = sizeof(double);
++                    break;
++                case ELEMENT_TYPE_V16:
++                    elementSize = 2*sizeof(double);
++                    break;
++#endif // defined(_TARGET_ARM64_) || defined(_TARGET_AMD64_) // ARM64 or arm64altjit
++                default:
++                    assert(!"Unexpected hfaType");
++                }
++                flags |= (4 * elementSize) << RETURN_FP_SIZE_SHIFT;
+ 
+                 break;
+             }
 diff --git a/src/vm/class.cpp b/src/vm/class.cpp
-index c3e0637..c9c55ea 100644
+index c3e0637..d75e076 100644
 --- a/src/vm/class.cpp
 +++ b/src/vm/class.cpp
 @@ -1672,6 +1672,31 @@ CorElementType MethodTable::GetHFAType()
@@ -1424,7 +1473,7 @@ index c3e0637..c9c55ea 100644
 +    int elemSize = 0;
  
 -    int elemSize = (hfaType == ELEMENT_TYPE_R8) ? sizeof(double) : sizeof(float);
-+    switch (hfaType)
++    switch ((unsigned)hfaType)
 +    {
 +        case ELEMENT_TYPE_R4:
 +            elemSize = sizeof(float);
