@@ -1,4 +1,4 @@
-From 1c6f74f68ddd556c8448737fbe55b2e7c9fc8c9d Mon Sep 17 00:00:00 2001
+From d8ac38ebe13412bee04f7c21816d19ffb86eaf3e Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 7 Mar 2018 19:07:51 -0500
 Subject: [PATCH] [Arm64] Add Base HW intrinsic tests
@@ -12,7 +12,7 @@ Subject: [PATCH] [Arm64] Add Base HW intrinsic tests
 
 diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Base.cs b/tests/src/JIT/HardwareIntrinsics/Arm64/Base.cs
 new file mode 100644
-index 0000000..d19f7eb
+index 0000000..c86aa70
 --- /dev/null
 +++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Base.cs
 @@ -0,0 +1,170 @@
@@ -34,7 +34,7 @@ index 0000000..d19f7eb
 +            {
 +                int expected = check(value);
 +                int result = binOp(value);
-+
++        
 +                if (result != expected)
 +                {
 +                    Console.WriteLine($"testUnaryOp<{typeof(T).Name}>{testCaseDescription}: Check Failed");
@@ -128,7 +128,7 @@ index 0000000..d19f7eb
 +            else
 +            {
 +                testThrowsPlatformNotSupported<int >(name, (x) => Base.LeadingSignCount(x), 0);
-+                testThrowsPlatformNotSupported<long>(name, (x) => Base.LeadingSignCount)x), 0);
++                testThrowsPlatformNotSupported<long>(name, (x) => Base.LeadingSignCount(x), 0);
 +            }
 +
 +            Console.WriteLine($"Test{name} passed");
