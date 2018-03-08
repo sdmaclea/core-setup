@@ -1,4 +1,4 @@
-From 19414cb0e9a75914815945e8528107ffb969d9a7 Mon Sep 17 00:00:00 2001
+From 9b8e675bffa338a849c76687f134acfd26c85d1e Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 7 Mar 2018 19:01:57 -0500
 Subject: [PATCH] [Arm64] Add Base HW intrinsics
