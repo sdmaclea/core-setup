@@ -1,4 +1,4 @@
-From ecacf891bb5c3cae4af748407d345a8944fa41e5 Mon Sep 17 00:00:00 2001
+From 70f2256eecbfb950d8dbee1f3f3468b6d8b85da9 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 28 Feb 2018 12:00:31 -0500
 Subject: [PATCH] Revise init-tools.sh to support bootstrapping
@@ -6,29 +6,35 @@ Subject: [PATCH] Revise init-tools.sh to support bootstrapping
 Add $DotNetBootstrapCliTarPath
 Disable ILAsm nuget fetch while bootstrapping
 ---
- init-tools.sh | 13 ++++++++++++-
- 1 file changed, 12 insertions(+), 1 deletion(-)
+ init-tools.sh | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
 
 diff --git a/init-tools.sh b/init-tools.sh
-index 1df4f25..2f04fdf 100755
+index 1df4f25..7f39d55 100755
 --- a/init-tools.sh
 +++ b/init-tools.sh
-@@ -121,7 +121,13 @@ if [ ! -e $__DOTNET_PATH ]; then
+@@ -121,7 +121,8 @@ if [ ! -e $__DOTNET_PATH ]; then
      __DOTNET_LOCATION="https://dotnetcli.azureedge.net/dotnet/Sdk/${__DOTNET_TOOLS_VERSION}/${__DOTNET_PKG}.tar.gz"
  
      install_dotnet_cli() {
 -        echo "Installing '${__DOTNET_LOCATION}' to '$__DOTNET_PATH/dotnet.tar'" >> "$__init_tools_log"
-+        if [[ ! "$DotNetBootstrapCliTarPath" = "" ]]; then
-+            echo "Running 'tar -xf $DotNetBootstrapCliTarPath' in '$__DOTNET_PATH'"
-+            cd $__DOTNET_PATH
-+            tar -xf $DotNetBootstrapCliTarPath
-+            return
++        if [[ "$DotNetBootstrapCliTarPath" = "" ]]; then
++            echo "Installing '${__DOTNET_LOCATION}' to '$__DOTNET_PATH/dotnet.tar'"
+             rm -rf -- "$__DOTNET_PATH/*"
+             # curl has HTTPS CA trust-issues less often than wget, so lets try that first.
+             if command -v curl > /dev/null; then
+@@ -129,6 +130,10 @@ if [ ! -e $__DOTNET_PATH ]; then
+             else
+                 wget -q -O $__DOTNET_PATH/dotnet.tar ${__DOTNET_LOCATION}
+             fi
++        else
++            echo "Copying '$DotNetBootstrapCliTarPath' to '$__DOTNET_PATH/dotnet.tar'"
++            cp $DotNetBootstrapCliTarPath $__DOTNET_PATH/dotnet.tar
 +        fi
-+        echo "Installing '${__DOTNET_LOCATION}' to '$__DOTNET_PATH/dotnet.tar'"
-         rm -rf -- "$__DOTNET_PATH/*"
-         # curl has HTTPS CA trust-issues less often than wget, so lets try that first.
-         if command -v curl > /dev/null; then
-@@ -156,6 +162,11 @@ echo "Using RID $__ILASM_RID for BuildTools native tools"
+         cd $__DOTNET_PATH
+         tar -xf $__DOTNET_PATH/dotnet.tar
+     }
+@@ -156,6 +161,11 @@ echo "Using RID $__ILASM_RID for BuildTools native tools"
  export ILASMCOMPILER_VERSION=$__ILASM_VERSION
  export NATIVE_TOOLS_RID=$__ILASM_RID
  
