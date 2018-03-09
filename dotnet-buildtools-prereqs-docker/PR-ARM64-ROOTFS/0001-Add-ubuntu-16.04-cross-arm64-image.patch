@@ -1,4 +1,4 @@
-From 574967832551c193e05bdc3164594b0f0674290e Mon Sep 17 00:00:00 2001
+From 6dad13df7d54d535c812738e94ad346440239193 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Thu, 8 Mar 2018 18:02:21 -0500
 Subject: [PATCH] Add ubuntu-16.04-cross-arm64 image
@@ -63,15 +63,15 @@ index 0000000..17ac0ab
 +
 +$(dirname ${BASH_SOURCE[0]})/../../../../build-scripts/build-rootfs.sh ubuntu-16.04 xenial arm64 lldb3.9
 diff --git a/src/ubuntu/build-scripts/build-rootfs.sh b/src/ubuntu/build-scripts/build-rootfs.sh
-index 3382cba..e6e0303 100755
+index 3382cba..73416b2 100755
 --- a/src/ubuntu/build-scripts/build-rootfs.sh
 +++ b/src/ubuntu/build-scripts/build-rootfs.sh
 @@ -7,6 +7,8 @@ set -u
  
  os=$1
  crossToolset=$2
-+archArg=$3
-+lldb=$4
++archArg=${3:-}
++lldb=${4:-}
  
  scriptsVolume="scripts$(date +%s)"
  dockerCrossDepsTag="microsoft/dotnet-buildtools-prereqs:${os}-crossdeps"
