@@ -1,17 +1,17 @@
-From 30fd822a4b9717e885bd7c91c00b16a4488c974b Mon Sep 17 00:00:00 2001
+From 298434b0f96dbbe775600a1081af2c3c03d6aea3 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 2 Mar 2018 12:38:00 -0500
-Subject: [PATCH] [Arm64/Linux] Enable CI
+Subject: [PATCH] [Arm64/Linux] Enable CI & official builds
 
 ---
  buildpipeline/pipeline.json | 14 ++++++++++
- cross/arm64_ci_script.sh    | 64 +++++++++++++++++++++++++++++++++++++++++++++
- netci.groovy                | 55 ++++++++++++++++++++++++++++++++++++++
- 3 files changed, 133 insertions(+)
+ cross/arm64_ci_script.sh    | 63 +++++++++++++++++++++++++++++++++++++++++++++
+ netci.groovy                | 55 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 132 insertions(+)
  create mode 100755 cross/arm64_ci_script.sh
 
 diff --git a/buildpipeline/pipeline.json b/buildpipeline/pipeline.json
-index b6c834b..c34b4de 100644
+index b6c834b..9c458d4 100644
 --- a/buildpipeline/pipeline.json
 +++ b/buildpipeline/pipeline.json
 @@ -74,6 +74,20 @@
@@ -20,11 +20,11 @@ index b6c834b..c34b4de 100644
            }
 +        },
 +        {
-+          "Name": "DotNet-CoreFx-Trusted-Linux-Crossbuild-arm64",
++          "Name": "DotNet-CoreFx-Trusted-Linux-Crossbuild",
 +          "Parameters": {
-+            "PB_DockerTag": "hseok82/dotnet-buildtools-prereqs:ubuntu-16.04-crossx86-ef0ac75-20175511035548",
++            "PB_DockerTag": "ubuntu-16.04-cross-arm64-cae792c-20180309195159",
 +            "PB_Architecture": "arm64",
-+            "PB_BuildArguments": "-buildArch=arm64 -$(PB_ConfigurationGroup) -stripSymbols",
++            "PB_BuildArguments": "-buildArch=arm64 -$(PB_ConfigurationGroup) -stripSymbols -- /p:StabilizePackageVersion=$(PB_IsStable) /p:PackageVersionStamp=$(PB_VersionStamp)",
 +            "PB_SyncArguments": "-p -- /p:ArchGroup=arm64 /p:DotNetRestoreSources=$(PB_RestoreSource) /p:DotNetAssetRootUrl=$(PB_AssetRootUrl)"
 +          },
 +          "ReportingParameters": {
@@ -37,10 +37,10 @@ index b6c834b..c34b4de 100644
      },
 diff --git a/cross/arm64_ci_script.sh b/cross/arm64_ci_script.sh
 new file mode 100755
-index 0000000..7010cccd
+index 0000000..3b98439
 --- /dev/null
 +++ b/cross/arm64_ci_script.sh
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,63 @@
 +#!/bin/bash
 +
 +function exit_with_error {
@@ -67,9 +67,8 @@ index 0000000..7010cccd
 +    __currentWorkingDirectory=`pwd`
 +
 +    # choose Docker image
-+    __dockerImage=" hseok82/dotnet-buildtools-prereqs:ubuntu-16.04-crossx86-ef0ac75-20175511035548"
++    __dockerImage="ubuntu-16.04-cross-arm64-cae792c-20180309195159"
 +    __dockerEnvironmentVariables="-e ROOTFS_DIR=/crossrootfs/arm64"
-+    __runtimeOS="ubuntu.16.04"
 +
 +    __dockerCmd="docker run ${__dockerEnvironmentVariables} -i --rm -v $__currentWorkingDirectory:/opt/code -w /opt/code $__dockerImage"
 +
@@ -87,7 +86,7 @@ index 0000000..7010cccd
 +        --buildConfig=*)
 +            __buildConfig="$(echo ${arg#*=} | awk '{print tolower($0)}')"
 +            if [[ "$__buildConfig" != "debug" && "$__buildConfig" != "release" ]]; then
-+                exit_with_error "--buildConfig can be only Debug or Release" true
++                exit_with_error "--buildConfig can be only Debug or Release"
 +            fi
 +            ;;
 +        *)
