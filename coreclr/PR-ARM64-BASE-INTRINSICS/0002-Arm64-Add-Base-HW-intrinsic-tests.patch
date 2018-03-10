@@ -1,21 +1,21 @@
-From d8ac38ebe13412bee04f7c21816d19ffb86eaf3e Mon Sep 17 00:00:00 2001
+From 40f7302f227f7fde344e1e586b1eb31300946120 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 7 Mar 2018 19:07:51 -0500
 Subject: [PATCH] [Arm64] Add Base HW intrinsic tests
 
 ---
- tests/src/JIT/HardwareIntrinsics/Arm64/Base.cs     | 170 +++++++++++++++++++++
- tests/src/JIT/HardwareIntrinsics/Arm64/Base.csproj |  38 +++++
- 2 files changed, 208 insertions(+)
+ tests/src/JIT/HardwareIntrinsics/Arm64/Base.cs     | 181 +++++++++++++++++++++
+ tests/src/JIT/HardwareIntrinsics/Arm64/Base.csproj |  36 ++++
+ 2 files changed, 217 insertions(+)
  create mode 100644 tests/src/JIT/HardwareIntrinsics/Arm64/Base.cs
  create mode 100644 tests/src/JIT/HardwareIntrinsics/Arm64/Base.csproj
 
 diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Base.cs b/tests/src/JIT/HardwareIntrinsics/Arm64/Base.cs
 new file mode 100644
-index 0000000..c86aa70
+index 0000000..e6efcd0
 --- /dev/null
 +++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Base.cs
-@@ -0,0 +1,170 @@
+@@ -0,0 +1,181 @@
 +using System;
 +using System.Diagnostics;
 +using System.Runtime.CompilerServices;
@@ -34,7 +34,7 @@ index 0000000..c86aa70
 +            {
 +                int expected = check(value);
 +                int result = binOp(value);
-+        
++
 +                if (result != expected)
 +                {
 +                    Console.WriteLine($"testUnaryOp<{typeof(T).Name}>{testCaseDescription}: Check Failed");
@@ -69,15 +69,20 @@ index 0000000..c86aa70
 +
 +            if (notSupported == false)
 +            {
-+                throw new Exception($"testThrowsPlatformNotSupported<{typeof(TVectorType).Name} >{testCaseDescription}: Failed");
++                throw new Exception($"testThrowsPlatformNotSupported<{typeof(T).Name} >{testCaseDescription}: Failed");
 +            }
 +        }
 +
-+        static T leadingZero<T>(T x)
++        static ulong bitsToUint64<T>(T x)
++        {
++            return Unsafe.As<T, ulong>(ref x) & ~(~0UL << 8*Unsafe.SizeOf<T>());
++        }
++
++        static int leadingZero<T>(T x)
 +            where T : IConvertible
 +        {
 +            ulong compare = 0x1UL << (8*Unsafe.SizeOf<T>() - 1);
-+            ulong result = 0;
++            int result = 0;
 +            ulong value = bitsToUint64(x);
 +
 +            while(value < compare)
@@ -86,44 +91,45 @@ index 0000000..c86aa70
 +                compare >>= 1;
 +            }
 +
-+            return (T) Convert.ChangeType(result,  typeof(T));
++            return result;
 +
 +            throw new Exception("Unexpected Type");
 +        }
 +
-+        static T leadingSign<T>(T x)
++        static int leadingSign<T>(T x)
 +            where T : IConvertible
 +        {
 +            ulong value = bitsToUint64(x);
 +            ulong signBit = value & (0x1UL << (8*Unsafe.SizeOf<T>() - 1));
-+            ulong result = 0;
++            int result = 0;
 +
 +            if (signBit == 0)
 +            {
-+                result = (ulong) Convert.ChangeType(leadingZero(x), typeof(ulong));
++                result = leadingZero(x);
 +            }
 +            else
 +            {
-+                result = (ulong) Convert.ChangeType(leadingZero((T) Convert.ChangeType(value ^ (signBit + (signBit - 1)),  typeof(T))), typeof(ulong));
++                result = leadingZero((T) Convert.ChangeType(value ^ (signBit + (signBit - 1)),  typeof(T)));
 +            }
 +
-+            return (T) Convert.ChangeType(result - 1, typeof(T));
++            return result - 1;
 +        }
 +
 +        static void TestLeadingSignCount()
 +        {
++#if COREFX_HAS_ARM64_BASE
 +            String name = "LeadingSignCount";
 +
-+            if (Simd.IsSupported)
++            if (Base.IsSupported)
 +            {
-+                testBinOp<int >(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x),  0);
-+                testBinOp<int >(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x), -1);
-+                testBinOp<int >(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x),  1 << 30);
-+                testBinOp<int >(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x), -1 << 30);
-+                testBinOp<long>(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x),  0);
-+                testBinOp<long>(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x), -1);
-+                testBinOp<long>(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x),  1L << 60);
-+                testBinOp<long>(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x), -1L << 60);
++                testUnaryOp<int >(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x),  0);
++                testUnaryOp<int >(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x), -1);
++                testUnaryOp<int >(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x),  1 << 30);
++                testUnaryOp<int >(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x), -1 << 30);
++                testUnaryOp<long>(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x),  0);
++                testUnaryOp<long>(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x), -1);
++                testUnaryOp<long>(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x),  1L << 60);
++                testUnaryOp<long>(name, (x) => Base.LeadingSignCount(x), (x) => leadingSign(x), -1L << 60);
 +            }
 +            else
 +            {
@@ -132,26 +138,28 @@ index 0000000..c86aa70
 +            }
 +
 +            Console.WriteLine($"Test{name} passed");
++#endif // COREFX_HAS_ARM64_BASE
 +        }
 +
 +        static void TestLeadingZeroCount()
 +        {
++#if COREFX_HAS_ARM64_BASE
 +            String name = "LeadingZeroCount";
 +
-+            if (Simd.IsSupported)
++            if (Base.IsSupported)
 +            {
-+                testBinOp<int  >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  0);
-+                testBinOp<int  >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x), -1);
-+                testBinOp<int  >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  1 << 30);
-+                testBinOp<int  >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x), -1 << 30);
-+                testBinOp<uint >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  0);
-+                testBinOp<uint >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  1 << 30);
-+                testBinOp<long >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  0);
-+                testBinOp<long >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x), -1);
-+                testBinOp<long >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  1L << 60);
-+                testBinOp<long >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x), -1L << 60);
-+                testBinOp<ulong>(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  0);
-+                testBinOp<ulong>(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  1L << 60);
++                testUnaryOp<int  >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  0);
++                testUnaryOp<int  >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x), -1);
++                testUnaryOp<int  >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  1 << 30);
++                testUnaryOp<int  >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x), -1 << 30);
++                testUnaryOp<uint >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  0);
++                testUnaryOp<uint >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  1 << 30);
++                testUnaryOp<long >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  0);
++                testUnaryOp<long >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x), -1);
++                testUnaryOp<long >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  1L << 60);
++                testUnaryOp<long >(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x), -1L << 60);
++                testUnaryOp<ulong>(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  0);
++                testUnaryOp<ulong>(name, (x) => Base.LeadingZeroCount(x), (x) => leadingZero(x),  1L << 60);
 +            }
 +            else
 +            {
@@ -162,6 +170,7 @@ index 0000000..c86aa70
 +            }
 +
 +            Console.WriteLine($"Test{name} passed");
++#endif // COREFX_HAS_ARM64_BASE
 +        }
 +
 +        static void ExecuteAllTests()
@@ -172,13 +181,15 @@ index 0000000..c86aa70
 +
 +        static int Main(string[] args)
 +        {
++#if COREFX_HAS_ARM64_BASE
 +            Console.WriteLine($"System.Runtime.Intrinsics.Arm.Arm64.Base.IsSupported = {Base.IsSupported}");
 +
 +            // Reflection call
 +            var issupported = "get_IsSupported";
-+            bool reflectedIsSupported = Convert.ToBoolean(typeof(Simd).GetMethod(issupported).Invoke(null, null));
++            bool reflectedIsSupported = Convert.ToBoolean(typeof(Base).GetMethod(issupported).Invoke(null, null));
 +
 +            Debug.Assert(reflectedIsSupported == Base.IsSupported, "Reflection result does not match");
++#endif // COREFX_HAS_ARM64_BASE
 +
 +            ExecuteAllTests();
 +
@@ -188,10 +199,10 @@ index 0000000..c86aa70
 +}
 diff --git a/tests/src/JIT/HardwareIntrinsics/Arm64/Base.csproj b/tests/src/JIT/HardwareIntrinsics/Arm64/Base.csproj
 new file mode 100644
-index 0000000..e4ea6cc
+index 0000000..45dd4b6
 --- /dev/null
 +++ b/tests/src/JIT/HardwareIntrinsics/Arm64/Base.csproj
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,36 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 +  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
@@ -204,8 +215,6 @@ index 0000000..e4ea6cc
 +    <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
 +    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
 +    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-+    <!-- TODO-ARM64 Remove when Base intrinsics are present in corefx -->
-+    <ReferenceSystemPrivateCoreLib>true</ReferenceSystemPrivateCoreLib>
 +  </PropertyGroup>
 +  <!-- Default configurations to help VS understand the configurations -->
 +  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' "></PropertyGroup>
