@@ -1,0 +1,29 @@
+From c6e7c135a1766683e2685ecb066dd2c837ec424f Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Sat, 10 Mar 2018 16:45:31 -0500
+Subject: [PATCH] Fix lldb-3.9-dev package name
+
+---
+ cross/build-rootfs.sh | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/cross/build-rootfs.sh b/cross/build-rootfs.sh
+index 6ef286d..e3fb029 100755
+--- a/cross/build-rootfs.sh
++++ b/cross/build-rootfs.sh
+@@ -71,10 +71,10 @@ for i in "$@" ; do
+             __LLDB_Package="lldb-3.8-dev"
+             ;;
+         lldb3.9)
+-            __LLDB_Package="lldb-3.9-dev"
++            __LLDB_Package="liblldb-3.9-dev"
+             ;;
+         lldb4.0)
+-            __LLDB_Package="lldb-4.0-dev"
++            __LLDB_Package="liblldb-4.0-dev"
+             ;;
+         no-lldb)
+             unset __LLDB_Package
+-- 
+2.7.4
+
