@@ -1,0 +1,47 @@
+From 133345a0fa2c9ffdee5ed01a3dc3f56a78afcecd Mon Sep 17 00:00:00 2001
+From: Hugh Zabriskie <hugh.zabriskie@gmail.com>
+Date: Wed, 7 Mar 2018 14:39:22 -0800
+Subject: [PATCH] Perf fix for month-day parsing ambiguity (#16782)
+
+* Perf fix for month-day parsing ambiguity
+
+* Use DateTime.TryCreate
+---
+ .../shared/System/Globalization/GregorianCalendar.cs   | 18 ++----------------
+ 1 file changed, 2 insertions(+), 16 deletions(-)
+
+diff --git a/src/mscorlib/shared/System/Globalization/GregorianCalendar.cs b/src/mscorlib/shared/System/Globalization/GregorianCalendar.cs
+index 1602320..94963a1 100644
+--- a/src/mscorlib/shared/System/Globalization/GregorianCalendar.cs
++++ b/src/mscorlib/shared/System/Globalization/GregorianCalendar.cs
+@@ -520,25 +520,11 @@ namespace System.Globalization
+             throw new ArgumentOutOfRangeException(nameof(era), SR.ArgumentOutOfRange_InvalidEraValue);
+         }
+ 
+-        internal override Boolean TryToDateTime(int year, int month, int day, int hour, int minute, int second, int millisecond, int era, out DateTime result)
++        internal override bool TryToDateTime(int year, int month, int day, int hour, int minute, int second, int millisecond, int era, out DateTime result)
+         {
+             if (era == CurrentEra || era == ADEra)
+             {
+-                try
+-                {
+-                    result = new DateTime(year, month, day, hour, minute, second, millisecond);
+-                    return true;
+-                }
+-                catch (ArgumentOutOfRangeException)
+-                {
+-                    result = DateTime.Now;
+-                    return false;
+-                }
+-                catch (ArgumentException)
+-                {
+-                    result = DateTime.Now;
+-                    return false;
+-                }
++                return DateTime.TryCreate(year, month, day, hour, minute, second, millisecond, out result);
+             }
+             result = DateTime.MinValue;
+             return false;
+-- 
+2.7.4
+
