@@ -1,0 +1,49 @@
+From 29eabe2c115d8fef7e72c13b518ff2a17ed7c526 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Sat, 10 Mar 2018 16:54:01 -0500
+Subject: [PATCH] Revise init-tools.sh to support bootstrapping
+
+---
+ init-tools.sh | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/init-tools.sh b/init-tools.sh
+index 13ac3db..1413353 100755
+--- a/init-tools.sh
++++ b/init-tools.sh
+@@ -122,7 +122,8 @@ if [ ! -e $__DOTNET_PATH ]; then
+     __DOTNET_LOCATION="https://dotnetcli.azureedge.net/dotnet/Sdk/${__DOTNET_TOOLS_VERSION}/${__DOTNET_PKG}.tar.gz"
+ 
+     install_dotnet_cli() {
+-        echo "Installing '${__DOTNET_LOCATION}' to '$__DOTNET_PATH/dotnet.tar'" >> "$__init_tools_log"
++        if [[ "$DotNetBootstrapCliTarPath" = "" ]]; then
++            echo "Installing '${__DOTNET_LOCATION}' to '$__DOTNET_PATH/dotnet.tar'"
+             rm -rf -- "$__DOTNET_PATH/*"
+             # curl has HTTPS CA trust-issues less often than wget, so lets try that first.
+             if command -v curl > /dev/null; then
+@@ -130,6 +131,10 @@ if [ ! -e $__DOTNET_PATH ]; then
+             else
+                 wget -q -O $__DOTNET_PATH/dotnet.tar ${__DOTNET_LOCATION}
+             fi
++        else
++            echo "Copying '$DotNetBootstrapCliTarPath' to '$__DOTNET_PATH/dotnet.tar'"
++            cp $DotNetBootstrapCliTarPath $__DOTNET_PATH/dotnet.tar
++        fi
+         cd $__DOTNET_PATH
+         tar -xf $__DOTNET_PATH/dotnet.tar
+     }
+@@ -157,6 +162,11 @@ echo "Using RID $__ILASM_RID for BuildTools native tools"
+ export ILASMCOMPILER_VERSION=$__ILASM_VERSION
+ export NATIVE_TOOLS_RID=$__ILASM_RID
+ 
++if [ ! "$DotNetBootstrapCliTarPath" = "" ]; then
++    # Assume ilasm is not in nuget yet when bootstrapping...
++    unset ILASMCOMPILER_VERSION
++fi
++
+ echo "Initializing BuildTools..."
+ echo "Running: $__BUILD_TOOLS_PATH/init-tools.sh $__scriptpath $__DOTNET_CMD $__TOOLRUNTIME_DIR $__PACKAGES_DIR" >> $__init_tools_log
+ 
+-- 
+2.7.4
+
