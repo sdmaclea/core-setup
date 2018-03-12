@@ -1,0 +1,25 @@
+From 74a560e2ebebfce74c13c7e1dc12978782354f58 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Mon, 12 Mar 2018 14:06:16 -0400
+Subject: [PATCH] [Arm64/Ubuntu] Update docker tag to include binutils
+
+---
+ buildpipeline/pipelines.json | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/buildpipeline/pipelines.json b/buildpipeline/pipelines.json
+index b86a9f8..0b4edd0 100644
+--- a/buildpipeline/pipelines.json
++++ b/buildpipeline/pipelines.json
+@@ -145,7 +145,7 @@
+         {
+           "Name": "DotNet-CoreClr-Trusted-Linux-Crossbuild",
+           "Parameters": {
+-            "DockerTag": "ubuntu-16.04-cross-arm64-cae792c-20180309195159",
++            "DockerTag": "ubuntu-16.04-cross-arm64-d809634-20180312171656",
+             "Architecture": "arm64",
+             "Rid": "linux"
+           },
+-- 
+2.7.4
+
