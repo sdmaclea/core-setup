@@ -1,0 +1,26 @@
+From 2dd1363624d001202f6aacea34a5c6beb3ed22e1 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Sun, 11 Mar 2018 20:39:23 -0400
+Subject: [PATCH] ubuntu-16.04-cross-arm64:Install binutils-aarch64-linux-gnu
+
+---
+ src/ubuntu/16.04/cross/arm64/Dockerfile | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/ubuntu/16.04/cross/arm64/Dockerfile b/src/ubuntu/16.04/cross/arm64/Dockerfile
+index 68ad20f..d6a3e0e 100644
+--- a/src/ubuntu/16.04/cross/arm64/Dockerfile
++++ b/src/ubuntu/16.04/cross/arm64/Dockerfile
+@@ -1,3 +1,9 @@
+ FROM microsoft/dotnet-buildtools-prereqs:ubuntu-16.04-crossdeps
+ 
++# Install binutils-aarch64-linux-gnu
++RUN apt-get update \
++    && apt-get install -y \
++        binutils-aarch64-linux-gnu \
++    && rm -rf /var/lib/apt/lists/*
++
+ ADD rootfs crossrootfs
+-- 
+2.7.4
+
