@@ -1,31 +1,51 @@
-From 9556affe784dbf58aa5a53be1f8785a88f67e2ae Mon Sep 17 00:00:00 2001
+From 27029a02843d3b7b6e8e75cbcc9e35d57a361564 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Wed, 14 Feb 2018 12:27:03 -0500
 Subject: [PATCH] [Arm64] Mark removed compare zero nodes unused
 
 ---
- src/jit/lowerarmarch.cpp | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ src/jit/lowerarmarch.cpp | 20 +++++++++++---------
+ 1 file changed, 11 insertions(+), 9 deletions(-)
 
 diff --git a/src/jit/lowerarmarch.cpp b/src/jit/lowerarmarch.cpp
-index a914c61..c61b232 100644
+index b058acb..10f182f 100644
 --- a/src/jit/lowerarmarch.cpp
 +++ b/src/jit/lowerarmarch.cpp
-@@ -540,7 +540,7 @@ void Lowering::LowerHWIntrinsic(GenTreeHWIntrinsic* node)
-                 node->gtHWIntrinsicId = setAllVector;
-                 node->gtOp.gtOp1      = comp->gtNewLconNode(~0ULL);
-                 BlockRange().InsertBefore(node, node->gtOp.gtOp1);
+@@ -540,13 +540,6 @@ void Lowering::LowerHWIntrinsic(GenTreeHWIntrinsic* node)
+ 
+         switch (intrinsicID)
+         {
+-            case NI_ARM64_SIMD_GE_ZERO:
+-                // Unsigned >= 0 ==> Always true
+-                node->gtHWIntrinsicId = setAllVector;
+-                node->gtOp.gtOp1      = comp->gtNewLconNode(~0ULL);
+-                BlockRange().InsertBefore(node, node->gtOp.gtOp1);
 -                BlockRange().Remove(origOp1);
-+                BlockRange().Remove(origOp1, (origOp1->gtFlags & GTF_ALL_EFFECT) == 0);
-                 break;
+-                break;
              case NI_ARM64_SIMD_GT_ZERO:
                  // Unsigned > 0 ==> !(Unsigned == 0)
-@@ -559,7 +559,7 @@ void Lowering::LowerHWIntrinsic(GenTreeHWIntrinsic* node)
+                 node->gtOp.gtOp1 =
+@@ -559,12 +552,21 @@ void Lowering::LowerHWIntrinsic(GenTreeHWIntrinsic* node)
+                 // Unsigned <= 0 ==> Unsigned == 0
+                 node->gtHWIntrinsicId = NI_ARM64_SIMD_EQ_ZERO;
+                 break;
++            case NI_ARM64_SIMD_GE_ZERO:
+             case NI_ARM64_SIMD_LT_ZERO:
++                // Unsigned >= 0 ==> Always true
+                 // Unsigned < 0 ==> Always false
                  node->gtHWIntrinsicId = setAllVector;
-                 node->gtOp.gtOp1      = comp->gtNewIconNode(0);
+-                node->gtOp.gtOp1      = comp->gtNewIconNode(0);
++                node->gtOp.gtOp1      = comp->gtNewLconNode((intrinsicID == NI_ARM64_SIMD_GE_ZERO) ? ~0ULL : 0ULL);
                  BlockRange().InsertBefore(node, node->gtOp.gtOp1);
 -                BlockRange().Remove(origOp1);
-+                BlockRange().Remove(origOp1, (origOp1->gtFlags & GTF_ALL_EFFECT) == 0);
++                if ((origOp1->gtFlags & GTF_ALL_EFFECT) == 0)
++                {
++                    BlockRange().Remove(origOp1, true);
++                }
++                else
++                {
++                    origOp1->SetUnusedValue();
++                }
                  break;
              default:
                  assert(!"Unhandled LowerCmpUZero case");
