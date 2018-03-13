@@ -1,0 +1,56 @@
+From 74e3fb135b88a644c4f64aba6fc4521beeaabec8 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 13 Mar 2018 14:25:37 -0400
+Subject: [PATCH] Ubuntu 16.04 remove obsolete packages
+
+---
+ src/ubuntu/16.04/Dockerfile           | 4 +---
+ src/ubuntu/16.04/crossdeps/Dockerfile | 7 +------
+ 2 files changed, 2 insertions(+), 9 deletions(-)
+
+diff --git a/src/ubuntu/16.04/Dockerfile b/src/ubuntu/16.04/Dockerfile
+index 4cf3e5c..b0ff75e 100644
+--- a/src/ubuntu/16.04/Dockerfile
++++ b/src/ubuntu/16.04/Dockerfile
+@@ -11,11 +11,9 @@ RUN apt-get update && \
+     apt-get update && \
+     apt-get install -y \
+             cmake \
+-            clang-3.5 \
+             clang-3.9 \
+-            liblldb-3.9-dev && \
++            liblldb-3.9-dev \
+             lldb-3.9 \
+-            llvm-3.5 \
+             llvm-3.9 \
+             make \
+     apt-get clean
+diff --git a/src/ubuntu/16.04/crossdeps/Dockerfile b/src/ubuntu/16.04/crossdeps/Dockerfile
+index 6c2ba06..327bd22 100644
+--- a/src/ubuntu/16.04/crossdeps/Dockerfile
++++ b/src/ubuntu/16.04/crossdeps/Dockerfile
+@@ -2,20 +2,15 @@ FROM microsoft/dotnet-buildtools-prereqs:ubuntu-16.04-coredeps
+ 
+ # Install the base toolchain we need to build anything (clang, cmake, make and the like).
+ RUN apt-get update \
+-    && apt-get install -y wget \
+-    && echo "deb http://llvm.org/apt/trusty/ llvm-toolchain-trusty-3.6 main" | tee /etc/apt/sources.list.d/llvm.list \
+-    && wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key | apt-key add - \
+-    && apt-get update \
+     && apt-get install -y \
+         binfmt-support \
+         binutils-arm-linux-gnueabihf \
+-        clang-3.6 \
+         cmake \
+         debootstrap \
+-        llvm-3.6 \
+         make \
+         qemu \
+         qemu-user-static \
++        wget \
+     && rm -rf /var/lib/apt/lists/*
+ 
+ RUN apt-get update \
+-- 
+2.7.4
+

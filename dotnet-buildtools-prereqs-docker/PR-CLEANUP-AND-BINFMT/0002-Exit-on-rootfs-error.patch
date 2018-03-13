@@ -1,0 +1,24 @@
+From 230a8239dcf5932090fb071bc5a551730c2365d4 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 13 Mar 2018 14:26:07 -0400
+Subject: [PATCH] Exit on rootfs error
+
+---
+ src/ubuntu/build-scripts/build-rootfs.sh | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/ubuntu/build-scripts/build-rootfs.sh b/src/ubuntu/build-scripts/build-rootfs.sh
+index 73416b2..50cc5ac 100755
+--- a/src/ubuntu/build-scripts/build-rootfs.sh
++++ b/src/ubuntu/build-scripts/build-rootfs.sh
+@@ -27,5 +27,6 @@ do
+     buildRootFSContainer="rootfs-$arch-$crossToolset"
+     docker run --privileged --rm --name $buildRootFSContainer -e ROOTFS_DIR=/rootfs/$arch \
+         -v $PWD/rootfs:/rootfs -v $scriptsVolume:/scripts \
+-        $dockerCrossDepsTag /scripts/cross/build-rootfs.sh $arch $crossToolset $lldb --skipunmount
++        $dockerCrossDepsTag /scripts/cross/build-rootfs.sh $arch $crossToolset $lldb --skipunmount || \
++        exit 1
+ done
+-- 
+2.7.4
+
