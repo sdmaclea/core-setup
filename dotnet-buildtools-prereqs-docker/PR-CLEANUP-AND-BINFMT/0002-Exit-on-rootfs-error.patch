@@ -1,4 +1,4 @@
-From 230a8239dcf5932090fb071bc5a551730c2365d4 Mon Sep 17 00:00:00 2001
+From 78759a2a1121dacd61c9effe9e9bed324ef55880 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 13 Mar 2018 14:26:07 -0400
 Subject: [PATCH] Exit on rootfs error

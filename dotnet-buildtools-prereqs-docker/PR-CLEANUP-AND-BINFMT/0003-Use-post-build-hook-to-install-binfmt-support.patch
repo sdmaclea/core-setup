@@ -1,4 +1,4 @@
-From 307176290333cdc0b095640fa97f8bb0d4c9ba42 Mon Sep 17 00:00:00 2001
+From 02c8e08701f1ba446625bdd155cc19a3f5214d2c Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 13 Mar 2018 14:24:11 -0400
 Subject: [PATCH] Use post-build hook to install binfmt-support

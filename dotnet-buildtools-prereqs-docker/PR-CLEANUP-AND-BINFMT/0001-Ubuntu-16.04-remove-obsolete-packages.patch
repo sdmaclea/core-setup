@@ -1,18 +1,18 @@
-From 74e3fb135b88a644c4f64aba6fc4521beeaabec8 Mon Sep 17 00:00:00 2001
+From 0a1b1d0db72e48c84ac1b450030b72b9608bb4de Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 13 Mar 2018 14:25:37 -0400
 Subject: [PATCH] Ubuntu 16.04 remove obsolete packages
 
 ---
- src/ubuntu/16.04/Dockerfile           | 4 +---
+ src/ubuntu/16.04/Dockerfile           | 6 ++----
  src/ubuntu/16.04/crossdeps/Dockerfile | 7 +------
- 2 files changed, 2 insertions(+), 9 deletions(-)
+ 2 files changed, 3 insertions(+), 10 deletions(-)
 
 diff --git a/src/ubuntu/16.04/Dockerfile b/src/ubuntu/16.04/Dockerfile
-index 4cf3e5c..b0ff75e 100644
+index 4cf3e5c..2aa1137 100644
 --- a/src/ubuntu/16.04/Dockerfile
 +++ b/src/ubuntu/16.04/Dockerfile
-@@ -11,11 +11,9 @@ RUN apt-get update && \
+@@ -11,13 +11,11 @@ RUN apt-get update && \
      apt-get update && \
      apt-get install -y \
              cmake \
@@ -23,8 +23,11 @@ index 4cf3e5c..b0ff75e 100644
              lldb-3.9 \
 -            llvm-3.5 \
              llvm-3.9 \
-             make \
+-            make \
++            make && \
      apt-get clean
+ 
+ # Install tools used by the VSO build automation.  nodejs-legacy is a Debian specific
 diff --git a/src/ubuntu/16.04/crossdeps/Dockerfile b/src/ubuntu/16.04/crossdeps/Dockerfile
 index 6c2ba06..327bd22 100644
 --- a/src/ubuntu/16.04/crossdeps/Dockerfile
