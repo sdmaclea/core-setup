@@ -1,0 +1,39 @@
+From a18adf67edc215f98154d57061466f7c53cae400 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 14 Mar 2018 09:19:23 -0400
+Subject: [PATCH] Define install_Failed() before use
+
+---
+ cross/build-rootfs.sh | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/cross/build-rootfs.sh b/cross/build-rootfs.sh
+index d2e42a4..16b775c 100755
+--- a/cross/build-rootfs.sh
++++ b/cross/build-rootfs.sh
+@@ -10,6 +10,12 @@ usage()
+     exit 1
+ }
+ 
++install_Failed()
++{
++    echo "Failed to install/symlink packages."
++    exit 1
++}
++
+ __LinuxCodeName=trusty
+ __CrossDir=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+ __InitialDir=$PWD
+@@ -178,9 +184,3 @@ else
+     usage;
+     exit 1
+ fi
+-
+-install_Failed()
+-{
+-    echo "Failed to install/symlink packages."
+-    exit 1
+-}
+-- 
+2.7.4
+
