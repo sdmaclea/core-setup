@@ -1,4 +1,4 @@
-From bc884cfdc1d796056081fcf0c876126d746355e0 Mon Sep 17 00:00:00 2001
+From 0deb719365ca65a12f56d69e80ae1213701ecf26 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 13 Mar 2018 14:26:07 -0400
 Subject: [PATCH] Rework build rootfs
@@ -41,7 +41,7 @@ index d6a3e0e..60b00e3 100644
 -ADD rootfs crossrootfs
 +ADD rootfs.tar crossrootfs
 diff --git a/src/ubuntu/build-scripts/build-rootfs.sh b/src/ubuntu/build-scripts/build-rootfs.sh
-index 73416b2..2b0cbbf 100755
+index 73416b2..cb80f5b 100755
 --- a/src/ubuntu/build-scripts/build-rootfs.sh
 +++ b/src/ubuntu/build-scripts/build-rootfs.sh
 @@ -16,8 +16,7 @@ dockerCrossDepsTag="microsoft/dotnet-buildtools-prereqs:${os}-crossdeps"
@@ -71,7 +71,7 @@ index 73416b2..2b0cbbf 100755
 +        exit 1
 +    fi
 +
-+    docker exec \
++    docker exec $buildRootFSContainer \
 +         -e ROOTFS_DIR=/rootfs/$arch \
 +         /scripts/cross/build-rootfs.sh $arch $crossToolset $lldb --skipunmount
 +
@@ -81,7 +81,7 @@ index 73416b2..2b0cbbf 100755
 +        exit 1
 +    fi
 +
-+    docker exec \
++    docker exec $buildRootFSContainer \
 +        [ -d /rootfs/$arch/bin ]
 +
 +    if [ $? -ne 0 ]; then
@@ -90,7 +90,7 @@ index 73416b2..2b0cbbf 100755
 +        exit 1
 +    fi
 +
-+    docker exec \
++    docker exec $buildRootFSContainer \
 +        tar Ccf /rootfs - . >> $PWD/rootfs.tar
 +
 +    if [ $? -ne 0 ]; then
