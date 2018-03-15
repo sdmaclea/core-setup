@@ -1,0 +1,57 @@
+From ba8be5cfd9b495932bea92af8b287f0dcee270e1 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 15 Mar 2018 05:56:47 -0400
+Subject: [PATCH] Attempt to use tar to extract rootfs
+
+---
+ src/ubuntu/build-scripts/build-rootfs.sh | 25 ++++++++++++++++++-------
+ 1 file changed, 18 insertions(+), 7 deletions(-)
+
+diff --git a/src/ubuntu/build-scripts/build-rootfs.sh b/src/ubuntu/build-scripts/build-rootfs.sh
+index 0e575fd..5976279 100755
+--- a/src/ubuntu/build-scripts/build-rootfs.sh
++++ b/src/ubuntu/build-scripts/build-rootfs.sh
+@@ -16,8 +16,7 @@ dockerCrossDepsTag="microsoft/dotnet-buildtools-prereqs:${os}-crossdeps"
+ echo "Using $dockerCrossDepsTag to clone core-setup to fetch scripts used to build cross-toolset"
+ docker run --rm -v $scriptsVolume:/scripts $dockerCrossDepsTag git clone https://github.com/dotnet/core-setup /scripts
+ 
+-rm -rf $PWD/rootfs
+-mkdir rootfs
++rm -rf $PWD/rootfs.tar
+ 
+ # If argument three was set, use that as the only arch, otherwise use default list of arches : 'arm x86'
+ crossArchArray=(${archArg:-'arm x86'})
+@@ -25,13 +24,25 @@ for arch in $crossArchArray
+ do
+     echo "Using $dockerCrossDepsTag to set up cross-toolset for $arch for $crossToolset"
+     buildRootFSContainer="rootfs-$arch-$crossToolset"
+-    docker run --privileged --rm --name $buildRootFSContainer -e ROOTFS_DIR=/rootfs/$arch \
+-        -v $PWD/rootfs:/rootfs -v $scriptsVolume:/scripts \
+-        $dockerCrossDepsTag /scripts/cross/build-rootfs.sh $arch $crossToolset $lldb --skipunmount || \
++    docker run --privileged --name $buildRootFSContainer -e ROOTFS_DIR=/rootfs/$arch \
++        -v $scriptsVolume:/scripts \
++        $dockerCrossDepsTag /scripts/cross/build-rootfs.sh $arch $crossToolset $lldb --skipunmount
++
++    if [ $? -ne 0 ]; then
++        echo "Rootfs build failed: build-rootfs.sh returned error"
++        docker rm -f $buildRootFSContainer
+         exit 1
++    fi
++
++    docker exec $buildRootFSContainer tar Ccf /rootfs - >> $PWD/rootfs.tar
+ 
+-    if [[ ! -d $PWD/rootfs/$arch/bin ]]; then
+-        echo "Rootfs build failed: missing directory rootfs/$arch/bin"
++    if [ $? -ne 0 ]; then
++        echo "Rootfs build failed: tar Ccf /rootfs returned error"
++        docker rm -f $buildRootFSContainer
+         exit 1
+     fi
++
++    docker rm -f $buildRootFSContainer
+ done
++
++tar -tf $PWD/rootfs.tar
+-- 
+2.7.4
+
