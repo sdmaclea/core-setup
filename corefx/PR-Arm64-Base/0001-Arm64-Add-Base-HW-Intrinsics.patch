@@ -1,0 +1,33 @@
+From eece172144c0c0a11c01ad570df82d595fa8cadd Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 15 Mar 2018 11:43:49 -0400
+Subject: [PATCH] [Arm64] Add Base HW Intrinsics
+
+---
+ .../ref/System.Runtime.Intrinsics.cs                           | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/src/System.Runtime.Intrinsics.Experimental/ref/System.Runtime.Intrinsics.cs b/src/System.Runtime.Intrinsics.Experimental/ref/System.Runtime.Intrinsics.cs
+index 9c67ccf..8afb277 100644
+--- a/src/System.Runtime.Intrinsics.Experimental/ref/System.Runtime.Intrinsics.cs
++++ b/src/System.Runtime.Intrinsics.Experimental/ref/System.Runtime.Intrinsics.cs
+@@ -35,6 +35,16 @@ namespace System.Runtime.Intrinsics.Arm.Arm64
+         public static Vector128<byte> MixColumns(Vector128<byte> value) { throw null; }
+         public static Vector128<byte> InverseMixColumns(Vector128<byte> value) { throw null; }
+     }
++    public static class Base
++    {
++        public static bool IsSupported { get { throw null; } }
++        public static int LeadingSignCount(int value) { throw null; }
++        public static int LeadingSignCount(long value) { throw null; }
++        public static int LeadingZeroCount(int value) { throw null; }
++        public static int LeadingZeroCount(uint value) { throw null; }
++        public static int LeadingZeroCount(long value) { throw null; }
++        public static int LeadingZeroCount(ulong value) { throw null; }
++    }
+     public static class Sha1
+     {
+         public static bool IsSupported { get { throw null; } }
+-- 
+2.7.4
+
