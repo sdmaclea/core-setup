@@ -1,4 +1,4 @@
-From 0a1b1d0db72e48c84ac1b450030b72b9608bb4de Mon Sep 17 00:00:00 2001
+From 620ba250e5934344778c56b54f3a41367f82a141 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Tue, 13 Mar 2018 14:25:37 -0400
 Subject: [PATCH] Ubuntu 16.04 remove obsolete packages

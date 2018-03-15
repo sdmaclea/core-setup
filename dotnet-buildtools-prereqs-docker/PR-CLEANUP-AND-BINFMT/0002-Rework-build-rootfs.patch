@@ -1,0 +1,106 @@
+From bc884cfdc1d796056081fcf0c876126d746355e0 Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 13 Mar 2018 14:26:07 -0400
+Subject: [PATCH] Rework build rootfs
+
+Use tar file when saving the rootfs
+Add error checking
+---
+ src/ubuntu/14.04/cross/Dockerfile        |  2 +-
+ src/ubuntu/16.04/cross/Dockerfile        |  2 +-
+ src/ubuntu/16.04/cross/arm64/Dockerfile  |  2 +-
+ src/ubuntu/build-scripts/build-rootfs.sh | 45 ++++++++++++++++++++++++++++----
+ 4 files changed, 43 insertions(+), 8 deletions(-)
+
+diff --git a/src/ubuntu/14.04/cross/Dockerfile b/src/ubuntu/14.04/cross/Dockerfile
+index 5194dde..470401f 100644
+--- a/src/ubuntu/14.04/cross/Dockerfile
++++ b/src/ubuntu/14.04/cross/Dockerfile
+@@ -1,3 +1,3 @@
+ FROM microsoft/dotnet-buildtools-prereqs:ubuntu-14.04-crossdeps
+ 
+-ADD rootfs crossrootfs
++ADD rootfs.tar crossrootfs
+diff --git a/src/ubuntu/16.04/cross/Dockerfile b/src/ubuntu/16.04/cross/Dockerfile
+index 68ad20f..82d1720 100644
+--- a/src/ubuntu/16.04/cross/Dockerfile
++++ b/src/ubuntu/16.04/cross/Dockerfile
+@@ -1,3 +1,3 @@
+ FROM microsoft/dotnet-buildtools-prereqs:ubuntu-16.04-crossdeps
+ 
+-ADD rootfs crossrootfs
++ADD rootfs.tar crossrootfs
+diff --git a/src/ubuntu/16.04/cross/arm64/Dockerfile b/src/ubuntu/16.04/cross/arm64/Dockerfile
+index d6a3e0e..60b00e3 100644
+--- a/src/ubuntu/16.04/cross/arm64/Dockerfile
++++ b/src/ubuntu/16.04/cross/arm64/Dockerfile
+@@ -6,4 +6,4 @@ RUN apt-get update \
+         binutils-aarch64-linux-gnu \
+     && rm -rf /var/lib/apt/lists/*
+ 
+-ADD rootfs crossrootfs
++ADD rootfs.tar crossrootfs
+diff --git a/src/ubuntu/build-scripts/build-rootfs.sh b/src/ubuntu/build-scripts/build-rootfs.sh
+index 73416b2..2b0cbbf 100755
+--- a/src/ubuntu/build-scripts/build-rootfs.sh
++++ b/src/ubuntu/build-scripts/build-rootfs.sh
+@@ -16,8 +16,7 @@ dockerCrossDepsTag="microsoft/dotnet-buildtools-prereqs:${os}-crossdeps"
+ echo "Using $dockerCrossDepsTag to clone core-setup to fetch scripts used to build cross-toolset"
+ docker run --rm -v $scriptsVolume:/scripts $dockerCrossDepsTag git clone https://github.com/dotnet/core-setup /scripts
+ 
+-rm -rf $PWD/rootfs
+-mkdir rootfs
++rm -rf $PWD/rootfs.tar
+ 
+ # If argument three was set, use that as the only arch, otherwise use default list of arches : 'arm x86'
+ crossArchArray=(${archArg:-'arm x86'})
+@@ -25,7 +24,43 @@ for arch in $crossArchArray
+ do
+     echo "Using $dockerCrossDepsTag to set up cross-toolset for $arch for $crossToolset"
+     buildRootFSContainer="rootfs-$arch-$crossToolset"
+-    docker run --privileged --rm --name $buildRootFSContainer -e ROOTFS_DIR=/rootfs/$arch \
+-        -v $PWD/rootfs:/rootfs -v $scriptsVolume:/scripts \
+-        $dockerCrossDepsTag /scripts/cross/build-rootfs.sh $arch $crossToolset $lldb --skipunmount
++
++    # Start a detached container running bash
++    docker run --privileged -itd --name $buildRootFSContainer \
++        -v $scriptsVolume:/scripts $dockerCrossDepsTag bash
++
++    if [ $? -ne 0 ]; then
++        echo "Rootfs build failed: detached container failed to start"
++        exit 1
++    fi
++
++    docker exec \
++         -e ROOTFS_DIR=/rootfs/$arch \
++         /scripts/cross/build-rootfs.sh $arch $crossToolset $lldb --skipunmount
++
++    if [ $? -ne 0 ]; then
++        echo "Rootfs build failed: build-rootfs.sh returned error"
++        docker rm -f $buildRootFSContainer
++        exit 1
++    fi
++
++    docker exec \
++        [ -d /rootfs/$arch/bin ]
++
++    if [ $? -ne 0 ]; then
++        echo "Rootfs build failed: rootfs/$arch/bin empty"
++        docker rm -f $buildRootFSContainer
++        exit 1
++    fi
++
++    docker exec \
++        tar Ccf /rootfs - . >> $PWD/rootfs.tar
++
++    if [ $? -ne 0 ]; then
++        echo "Rootfs build failed: 'tar Ccf /rootfs - .' returned error"
++        docker rm -f $buildRootFSContainer
++        exit 1
++    fi
++
++    docker rm -f $buildRootFSContainer
+ done
+-- 
+2.7.4
+
