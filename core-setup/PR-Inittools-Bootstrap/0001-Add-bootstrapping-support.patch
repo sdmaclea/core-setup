@@ -1,0 +1,37 @@
+From 6c06b346bb26dbac452ba488eaebacdaa6ebed6b Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 15 Mar 2018 12:51:00 -0400
+Subject: [PATCH] Add bootstrapping support
+
+---
+ init-tools.sh | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/init-tools.sh b/init-tools.sh
+index 95eb5f3..19da034 100755
+--- a/init-tools.sh
++++ b/init-tools.sh
+@@ -120,7 +120,8 @@ if [ ! -e $__DOTNET_PATH ]; then
+     __DOTNET_LOCATION="https://dotnetcli.azureedge.net/dotnet/Sdk/${__DOTNET_TOOLS_VERSION}/${__DOTNET_PKG}.tar.gz"
+ 
+     install_dotnet_cli() {
+-        echo "Installing '${__DOTNET_LOCATION}' to '$__DOTNET_PATH/dotnet.tar'" >> "$__init_tools_log"
++        if [[ "$DotNetBootstrapCliTarPath" = "" ]]; then
++            echo "Installing '${__DOTNET_LOCATION}' to '$__DOTNET_PATH/dotnet.tar'"
+             rm -rf -- "$__DOTNET_PATH/*"
+             # curl has HTTPS CA trust-issues less often than wget, so lets try that first.
+             if command -v curl > /dev/null; then
+@@ -128,6 +129,10 @@ if [ ! -e $__DOTNET_PATH ]; then
+             else
+                 wget -q -O $__DOTNET_PATH/dotnet.tar ${__DOTNET_LOCATION}
+             fi
++        else
++            echo "Copying '$DotNetBootstrapCliTarPath' to '$__DOTNET_PATH/dotnet.tar'"
++            cp $DotNetBootstrapCliTarPath $__DOTNET_PATH/dotnet.tar
++        fi
+         cd $__DOTNET_PATH
+         tar -xf $__DOTNET_PATH/dotnet.tar
+     }
+-- 
+2.7.4
+
