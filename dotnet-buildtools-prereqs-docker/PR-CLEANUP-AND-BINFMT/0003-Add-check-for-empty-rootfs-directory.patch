@@ -1,0 +1,26 @@
+From 5c79bbd7618098e9e9ff2258c756d87b6cf9ba8c Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Wed, 14 Mar 2018 23:06:31 -0400
+Subject: [PATCH] Add check for empty rootfs directory
+
+---
+ src/ubuntu/build-scripts/build-rootfs.sh | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/ubuntu/build-scripts/build-rootfs.sh b/src/ubuntu/build-scripts/build-rootfs.sh
+index 50cc5ac..0e575fd 100755
+--- a/src/ubuntu/build-scripts/build-rootfs.sh
++++ b/src/ubuntu/build-scripts/build-rootfs.sh
+@@ -29,4 +29,9 @@ do
+         -v $PWD/rootfs:/rootfs -v $scriptsVolume:/scripts \
+         $dockerCrossDepsTag /scripts/cross/build-rootfs.sh $arch $crossToolset $lldb --skipunmount || \
+         exit 1
++
++    if [[ ! -d $PWD/rootfs/$arch/bin ]]; then
++        echo "Rootfs build failed: missing directory rootfs/$arch/bin"
++        exit 1
++    fi
+ done
+-- 
+2.7.4
+
