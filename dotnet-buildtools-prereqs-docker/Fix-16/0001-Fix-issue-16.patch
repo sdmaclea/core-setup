@@ -1,0 +1,266 @@
+From 47efa99ff82e78669dedb53af1d26f1556808ecb Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Fri, 16 Mar 2018 14:29:14 -0400
+Subject: [PATCH] Fix issue #16
+
+---
+ manifest.json                                      | 28 ++++++++++++++++++----
+ src/ubuntu/14.04/cross/Dockerfile                  |  3 ---
+ src/ubuntu/14.04/cross/arm/Dockerfile              |  9 +++++++
+ src/ubuntu/14.04/cross/arm/hooks/post-build        |  1 +
+ src/ubuntu/14.04/cross/arm/hooks/pre-build         |  3 +++
+ src/ubuntu/14.04/cross/hooks/post-build            |  1 -
+ src/ubuntu/14.04/cross/hooks/pre-build             |  3 ---
+ .../{16.04/cross => 14.04/cross/x86}/Dockerfile    |  0
+ src/ubuntu/14.04/cross/x86/hooks/post-build        |  1 +
+ src/ubuntu/14.04/cross/x86/hooks/pre-build         |  3 +++
+ src/ubuntu/14.04/crossdeps/Dockerfile              |  1 -
+ src/ubuntu/16.04/cross/arm/Dockerfile              |  9 +++++++
+ src/ubuntu/16.04/cross/arm/hooks/post-build        |  1 +
+ src/ubuntu/16.04/cross/arm/hooks/pre-build         |  3 +++
+ src/ubuntu/16.04/cross/hooks/post-build            |  1 -
+ src/ubuntu/16.04/cross/hooks/pre-build             |  3 ---
+ src/ubuntu/16.04/cross/{ => x86}/Dockerfile        |  0
+ src/ubuntu/16.04/cross/x86/hooks/post-build        |  1 +
+ src/ubuntu/16.04/cross/x86/hooks/pre-build         |  3 +++
+ src/ubuntu/16.04/crossdeps/Dockerfile              |  1 -
+ src/ubuntu/build-scripts/build-rootfs.sh           |  4 ++++
+ 21 files changed, 62 insertions(+), 17 deletions(-)
+ delete mode 100644 src/ubuntu/14.04/cross/Dockerfile
+ create mode 100644 src/ubuntu/14.04/cross/arm/Dockerfile
+ create mode 120000 src/ubuntu/14.04/cross/arm/hooks/post-build
+ create mode 100755 src/ubuntu/14.04/cross/arm/hooks/pre-build
+ delete mode 120000 src/ubuntu/14.04/cross/hooks/post-build
+ delete mode 100755 src/ubuntu/14.04/cross/hooks/pre-build
+ copy src/ubuntu/{16.04/cross => 14.04/cross/x86}/Dockerfile (100%)
+ create mode 120000 src/ubuntu/14.04/cross/x86/hooks/post-build
+ create mode 100755 src/ubuntu/14.04/cross/x86/hooks/pre-build
+ create mode 100644 src/ubuntu/16.04/cross/arm/Dockerfile
+ create mode 120000 src/ubuntu/16.04/cross/arm/hooks/post-build
+ create mode 100755 src/ubuntu/16.04/cross/arm/hooks/pre-build
+ delete mode 120000 src/ubuntu/16.04/cross/hooks/post-build
+ delete mode 100755 src/ubuntu/16.04/cross/hooks/pre-build
+ rename src/ubuntu/16.04/cross/{ => x86}/Dockerfile (100%)
+ create mode 120000 src/ubuntu/16.04/cross/x86/hooks/post-build
+ create mode 100755 src/ubuntu/16.04/cross/x86/hooks/pre-build
+
+diff --git a/manifest.json b/manifest.json
+index c953e00..0ccf2f1 100644
+--- a/manifest.json
++++ b/manifest.json
+@@ -186,10 +186,19 @@
+         {
+           "platforms": [
+             {
+-              "dockerfile": "src/ubuntu/14.04/cross",
++              "dockerfile": "src/ubuntu/14.04/cross/arm",
+               "os": "linux",
+               "tags": {
+-                "ubuntu-14.04-cross-$(System:DockerfileGitCommitSha)-$(System:TimeStamp)": {}
++                "ubuntu-14.04-cross-arm-$(System:DockerfileGitCommitSha)-$(System:TimeStamp)": {}
++              }
++            }
++        },
++        {
++            {
++              "dockerfile": "src/ubuntu/14.04/cross/x86",
++              "os": "linux",
++              "tags": {
++                "ubuntu-14.04-cross-x86-$(System:DockerfileGitCommitSha)-$(System:TimeStamp)": {}
+               }
+             }
+           ]
+@@ -250,6 +259,17 @@
+         {
+           "platforms": [
+             {
++              "dockerfile": "src/ubuntu/16.04/cross/arm",
++              "os": "linux",
++              "tags": {
++                "ubuntu-16.04-cross-arm-$(System:DockerfileGitCommitSha)-$(System:TimeStamp)": {}
++              }
++            }
++          ]
++        },
++        {
++          "platforms": [
++            {
+               "dockerfile": "src/ubuntu/16.04/cross/arm64",
+               "os": "linux",
+               "tags": {
+@@ -261,10 +281,10 @@
+         {
+           "platforms": [
+             {
+-              "dockerfile": "src/ubuntu/16.04/cross",
++              "dockerfile": "src/ubuntu/16.04/cross/x86",
+               "os": "linux",
+               "tags": {
+-                "ubuntu-16.04-cross-$(System:DockerfileGitCommitSha)-$(System:TimeStamp)": {}
++                "ubuntu-16.04-cross-x86-$(System:DockerfileGitCommitSha)-$(System:TimeStamp)": {}
+               }
+             }
+           ]
+diff --git a/src/ubuntu/14.04/cross/Dockerfile b/src/ubuntu/14.04/cross/Dockerfile
+deleted file mode 100644
+index 470401f..0000000
+diff --git a/src/ubuntu/14.04/cross/arm/Dockerfile b/src/ubuntu/14.04/cross/arm/Dockerfile
+new file mode 100644
+index 0000000..2b7c751
+--- /dev/null
++++ b/src/ubuntu/14.04/cross/arm/Dockerfile
+@@ -0,0 +1,9 @@
++FROM microsoft/dotnet-buildtools-prereqs:ubuntu-16.04-crossdeps
++
++# Install binutils-arm-linux-gnueabihf
++RUN apt-get update \
++    && apt-get install -y \
++        binutils-arm-linux-gnueabihf \
++    && rm -rf /var/lib/apt/lists/*
++
++ADD rootfs.tar crossrootfs
+diff --git a/src/ubuntu/14.04/cross/arm/hooks/post-build b/src/ubuntu/14.04/cross/arm/hooks/post-build
+new file mode 120000
+index 0000000..332e91d
+--- /dev/null
++++ b/src/ubuntu/14.04/cross/arm/hooks/post-build
+@@ -0,0 +1 @@
++../../../../build-scripts/build-rootfs-cleanup.sh
+\ No newline at end of file
+diff --git a/src/ubuntu/14.04/cross/arm/hooks/pre-build b/src/ubuntu/14.04/cross/arm/hooks/pre-build
+new file mode 100755
+index 0000000..5e7e350
+--- /dev/null
++++ b/src/ubuntu/14.04/cross/arm/hooks/pre-build
+@@ -0,0 +1,3 @@
++#!/usr/bin/env bash
++
++$(dirname ${BASH_SOURCE[0]})/../../../../build-scripts/build-rootfs.sh ubuntu-14.04 trusty arm lldb3.6
+diff --git a/src/ubuntu/14.04/cross/hooks/post-build b/src/ubuntu/14.04/cross/hooks/post-build
+deleted file mode 120000
+index 782c7eb..0000000
+diff --git a/src/ubuntu/14.04/cross/hooks/pre-build b/src/ubuntu/14.04/cross/hooks/pre-build
+deleted file mode 100755
+index a94f021..0000000
+diff --git a/src/ubuntu/16.04/cross/Dockerfile b/src/ubuntu/14.04/cross/x86/Dockerfile
+similarity index 100%
+copy from src/ubuntu/16.04/cross/Dockerfile
+copy to src/ubuntu/14.04/cross/x86/Dockerfile
+diff --git a/src/ubuntu/14.04/cross/x86/hooks/post-build b/src/ubuntu/14.04/cross/x86/hooks/post-build
+new file mode 120000
+index 0000000..332e91d
+--- /dev/null
++++ b/src/ubuntu/14.04/cross/x86/hooks/post-build
+@@ -0,0 +1 @@
++../../../../build-scripts/build-rootfs-cleanup.sh
+\ No newline at end of file
+diff --git a/src/ubuntu/14.04/cross/x86/hooks/pre-build b/src/ubuntu/14.04/cross/x86/hooks/pre-build
+new file mode 100755
+index 0000000..24c43b4
+--- /dev/null
++++ b/src/ubuntu/14.04/cross/x86/hooks/pre-build
+@@ -0,0 +1,3 @@
++#!/usr/bin/env bash
++
++$(dirname ${BASH_SOURCE[0]})/../../../../build-scripts/build-rootfs.sh ubuntu-14.04 trusty x86 lldb3.6
+diff --git a/src/ubuntu/14.04/crossdeps/Dockerfile b/src/ubuntu/14.04/crossdeps/Dockerfile
+index 45b2c29..417f651 100644
+--- a/src/ubuntu/14.04/crossdeps/Dockerfile
++++ b/src/ubuntu/14.04/crossdeps/Dockerfile
+@@ -8,7 +8,6 @@ RUN apt-get update \
+     && apt-get update \
+     && apt-get install -y \
+         binfmt-support \
+-        binutils-arm-linux-gnueabihf \
+         clang-3.6 \
+         cmake \
+         debootstrap \
+diff --git a/src/ubuntu/16.04/cross/arm/Dockerfile b/src/ubuntu/16.04/cross/arm/Dockerfile
+new file mode 100644
+index 0000000..2b7c751
+--- /dev/null
++++ b/src/ubuntu/16.04/cross/arm/Dockerfile
+@@ -0,0 +1,9 @@
++FROM microsoft/dotnet-buildtools-prereqs:ubuntu-16.04-crossdeps
++
++# Install binutils-arm-linux-gnueabihf
++RUN apt-get update \
++    && apt-get install -y \
++        binutils-arm-linux-gnueabihf \
++    && rm -rf /var/lib/apt/lists/*
++
++ADD rootfs.tar crossrootfs
+diff --git a/src/ubuntu/16.04/cross/arm/hooks/post-build b/src/ubuntu/16.04/cross/arm/hooks/post-build
+new file mode 120000
+index 0000000..332e91d
+--- /dev/null
++++ b/src/ubuntu/16.04/cross/arm/hooks/post-build
+@@ -0,0 +1 @@
++../../../../build-scripts/build-rootfs-cleanup.sh
+\ No newline at end of file
+diff --git a/src/ubuntu/16.04/cross/arm/hooks/pre-build b/src/ubuntu/16.04/cross/arm/hooks/pre-build
+new file mode 100755
+index 0000000..60a2b28
+--- /dev/null
++++ b/src/ubuntu/16.04/cross/arm/hooks/pre-build
+@@ -0,0 +1,3 @@
++#!/usr/bin/env bash
++
++$(dirname ${BASH_SOURCE[0]})/../../../../build-scripts/build-rootfs.sh ubuntu-16.04 xenial arm lldb3.9
+diff --git a/src/ubuntu/16.04/cross/hooks/post-build b/src/ubuntu/16.04/cross/hooks/post-build
+deleted file mode 120000
+index 782c7eb..0000000
+diff --git a/src/ubuntu/16.04/cross/hooks/pre-build b/src/ubuntu/16.04/cross/hooks/pre-build
+deleted file mode 100755
+index e6d9930..0000000
+diff --git a/src/ubuntu/16.04/cross/Dockerfile b/src/ubuntu/16.04/cross/x86/Dockerfile
+similarity index 100%
+rename from src/ubuntu/16.04/cross/Dockerfile
+rename to src/ubuntu/16.04/cross/x86/Dockerfile
+diff --git a/src/ubuntu/16.04/cross/x86/hooks/post-build b/src/ubuntu/16.04/cross/x86/hooks/post-build
+new file mode 120000
+index 0000000..332e91d
+--- /dev/null
++++ b/src/ubuntu/16.04/cross/x86/hooks/post-build
+@@ -0,0 +1 @@
++../../../../build-scripts/build-rootfs-cleanup.sh
+\ No newline at end of file
+diff --git a/src/ubuntu/16.04/cross/x86/hooks/pre-build b/src/ubuntu/16.04/cross/x86/hooks/pre-build
+new file mode 100755
+index 0000000..1d5300e
+--- /dev/null
++++ b/src/ubuntu/16.04/cross/x86/hooks/pre-build
+@@ -0,0 +1,3 @@
++#!/usr/bin/env bash
++
++$(dirname ${BASH_SOURCE[0]})/../../../../build-scripts/build-rootfs.sh ubuntu-16.04 xenial x86 lldb3.9
+diff --git a/src/ubuntu/16.04/crossdeps/Dockerfile b/src/ubuntu/16.04/crossdeps/Dockerfile
+index 327bd22..aaaad27 100644
+--- a/src/ubuntu/16.04/crossdeps/Dockerfile
++++ b/src/ubuntu/16.04/crossdeps/Dockerfile
+@@ -4,7 +4,6 @@ FROM microsoft/dotnet-buildtools-prereqs:ubuntu-16.04-coredeps
+ RUN apt-get update \
+     && apt-get install -y \
+         binfmt-support \
+-        binutils-arm-linux-gnueabihf \
+         cmake \
+         debootstrap \
+         make \
+diff --git a/src/ubuntu/build-scripts/build-rootfs.sh b/src/ubuntu/build-scripts/build-rootfs.sh
+index 951306c..2fffb26 100755
+--- a/src/ubuntu/build-scripts/build-rootfs.sh
++++ b/src/ubuntu/build-scripts/build-rootfs.sh
+@@ -60,6 +60,10 @@ do
+         exit 1
+     fi
+ 
++    echo "Cleaning apt files"
++    docker exec $buildRootFSContainer \
++        rm -rf /rootfs/$arch/var/cache/apt/archives/* /rootfs/$arch/var/lib/apt/lists/*
++
+     echo "Tarring rootfs"
+     docker exec $buildRootFSContainer \
+         tar Ccf /rootfs - . >> $PWD/rootfs.tar
+-- 
+2.7.4
+
