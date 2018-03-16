@@ -1,38 +1,36 @@
-From 47efa99ff82e78669dedb53af1d26f1556808ecb Mon Sep 17 00:00:00 2001
+From fb8a0820d5ca03d02fb3bef8061062f5c5eaf3d5 Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Fri, 16 Mar 2018 14:29:14 -0400
 Subject: [PATCH] Fix issue #16
 
 ---
- manifest.json                                      | 28 ++++++++++++++++++----
- src/ubuntu/14.04/cross/Dockerfile                  |  3 ---
- src/ubuntu/14.04/cross/arm/Dockerfile              |  9 +++++++
- src/ubuntu/14.04/cross/arm/hooks/post-build        |  1 +
- src/ubuntu/14.04/cross/arm/hooks/pre-build         |  3 +++
- src/ubuntu/14.04/cross/hooks/post-build            |  1 -
- src/ubuntu/14.04/cross/hooks/pre-build             |  3 ---
- .../{16.04/cross => 14.04/cross/x86}/Dockerfile    |  0
- src/ubuntu/14.04/cross/x86/hooks/post-build        |  1 +
- src/ubuntu/14.04/cross/x86/hooks/pre-build         |  3 +++
- src/ubuntu/14.04/crossdeps/Dockerfile              |  1 -
- src/ubuntu/16.04/cross/arm/Dockerfile              |  9 +++++++
- src/ubuntu/16.04/cross/arm/hooks/post-build        |  1 +
- src/ubuntu/16.04/cross/arm/hooks/pre-build         |  3 +++
- src/ubuntu/16.04/cross/hooks/post-build            |  1 -
- src/ubuntu/16.04/cross/hooks/pre-build             |  3 ---
- src/ubuntu/16.04/cross/{ => x86}/Dockerfile        |  0
- src/ubuntu/16.04/cross/x86/hooks/post-build        |  1 +
- src/ubuntu/16.04/cross/x86/hooks/pre-build         |  3 +++
- src/ubuntu/16.04/crossdeps/Dockerfile              |  1 -
- src/ubuntu/build-scripts/build-rootfs.sh           |  4 ++++
- 21 files changed, 62 insertions(+), 17 deletions(-)
- delete mode 100644 src/ubuntu/14.04/cross/Dockerfile
+ manifest.json                               | 28 ++++++++++++++++++++++++----
+ src/ubuntu/14.04/cross/arm/Dockerfile       |  9 +++++++++
+ src/ubuntu/14.04/cross/arm/hooks/post-build |  1 +
+ src/ubuntu/14.04/cross/arm/hooks/pre-build  |  3 +++
+ src/ubuntu/14.04/cross/hooks/post-build     |  1 -
+ src/ubuntu/14.04/cross/hooks/pre-build      |  3 ---
+ src/ubuntu/14.04/cross/{ => x86}/Dockerfile |  0
+ src/ubuntu/14.04/cross/x86/hooks/post-build |  1 +
+ src/ubuntu/14.04/cross/x86/hooks/pre-build  |  3 +++
+ src/ubuntu/14.04/crossdeps/Dockerfile       |  1 -
+ src/ubuntu/16.04/cross/arm/Dockerfile       |  9 +++++++++
+ src/ubuntu/16.04/cross/arm/hooks/post-build |  1 +
+ src/ubuntu/16.04/cross/arm/hooks/pre-build  |  3 +++
+ src/ubuntu/16.04/cross/hooks/post-build     |  1 -
+ src/ubuntu/16.04/cross/hooks/pre-build      |  3 ---
+ src/ubuntu/16.04/cross/{ => x86}/Dockerfile |  0
+ src/ubuntu/16.04/cross/x86/hooks/post-build |  1 +
+ src/ubuntu/16.04/cross/x86/hooks/pre-build  |  3 +++
+ src/ubuntu/16.04/crossdeps/Dockerfile       |  1 -
+ src/ubuntu/build-scripts/build-rootfs.sh    |  4 ++++
+ 20 files changed, 62 insertions(+), 14 deletions(-)
  create mode 100644 src/ubuntu/14.04/cross/arm/Dockerfile
  create mode 120000 src/ubuntu/14.04/cross/arm/hooks/post-build
  create mode 100755 src/ubuntu/14.04/cross/arm/hooks/pre-build
  delete mode 120000 src/ubuntu/14.04/cross/hooks/post-build
  delete mode 100755 src/ubuntu/14.04/cross/hooks/pre-build
- copy src/ubuntu/{16.04/cross => 14.04/cross/x86}/Dockerfile (100%)
+ rename src/ubuntu/14.04/cross/{ => x86}/Dockerfile (100%)
  create mode 120000 src/ubuntu/14.04/cross/x86/hooks/post-build
  create mode 100755 src/ubuntu/14.04/cross/x86/hooks/pre-build
  create mode 100644 src/ubuntu/16.04/cross/arm/Dockerfile
@@ -101,16 +99,13 @@ index c953e00..0ccf2f1 100644
                }
              }
            ]
-diff --git a/src/ubuntu/14.04/cross/Dockerfile b/src/ubuntu/14.04/cross/Dockerfile
-deleted file mode 100644
-index 470401f..0000000
 diff --git a/src/ubuntu/14.04/cross/arm/Dockerfile b/src/ubuntu/14.04/cross/arm/Dockerfile
 new file mode 100644
-index 0000000..2b7c751
+index 0000000..3c088b6
 --- /dev/null
 +++ b/src/ubuntu/14.04/cross/arm/Dockerfile
 @@ -0,0 +1,9 @@
-+FROM microsoft/dotnet-buildtools-prereqs:ubuntu-16.04-crossdeps
++FROM microsoft/dotnet-buildtools-prereqs:ubuntu-14.04-crossdeps
 +
 +# Install binutils-arm-linux-gnueabihf
 +RUN apt-get update \
@@ -142,10 +137,10 @@ index 782c7eb..0000000
 diff --git a/src/ubuntu/14.04/cross/hooks/pre-build b/src/ubuntu/14.04/cross/hooks/pre-build
 deleted file mode 100755
 index a94f021..0000000
-diff --git a/src/ubuntu/16.04/cross/Dockerfile b/src/ubuntu/14.04/cross/x86/Dockerfile
+diff --git a/src/ubuntu/14.04/cross/Dockerfile b/src/ubuntu/14.04/cross/x86/Dockerfile
 similarity index 100%
-copy from src/ubuntu/16.04/cross/Dockerfile
-copy to src/ubuntu/14.04/cross/x86/Dockerfile
+rename from src/ubuntu/14.04/cross/Dockerfile
+rename to src/ubuntu/14.04/cross/x86/Dockerfile
 diff --git a/src/ubuntu/14.04/cross/x86/hooks/post-build b/src/ubuntu/14.04/cross/x86/hooks/post-build
 new file mode 120000
 index 0000000..332e91d
