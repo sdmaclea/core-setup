@@ -1,0 +1,38 @@
+From 2bee93d33e4aa7d4dd1851efe793184655e96bfd Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Thu, 15 Mar 2018 19:56:30 -0400
+Subject: [PATCH] [Arm64/Ubuntu] Enable official builds
+
+---
+ buildpipeline/pipelines.json | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/buildpipeline/pipelines.json b/buildpipeline/pipelines.json
+index e48305d..056b53c 100644
+--- a/buildpipeline/pipelines.json
++++ b/buildpipeline/pipelines.json
+@@ -141,6 +141,21 @@
+             "Architecture": "arm",
+             "PB_BuildType": null
+           }
++        },
++        {
++          "Name": "DotNet-CoreClr-Trusted-Linux-Crossbuild",
++          "Parameters": {
++            "DockerTag": "ubuntu-16.04-cross-arm64-a3ae44b-20180315221921",
++            "Architecture": "arm64",
++            "Rid": "linux"
++          },
++          "ReportingParameters": {
++            "OperatingSystem": "Linux",
++            "SubType": "PortableCrossBuild",
++            "Type": "build/product/",
++            "Architecture": "arm64",
++            "PB_BuildType": null
++          }
+         }
+       ]
+     }
+-- 
+2.7.4
+
