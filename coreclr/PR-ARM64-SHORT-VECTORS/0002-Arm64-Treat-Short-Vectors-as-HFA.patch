@@ -1,4 +1,4 @@
-From b878dc2b00e963e0fa5ee0a0ed477eaf14096718 Mon Sep 17 00:00:00 2001
+From 607bf8b3992ebfdaace68dd51bbc26f0a73c375d Mon Sep 17 00:00:00 2001
 From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
 Date: Thu, 8 Feb 2018 13:38:22 -0500
 Subject: [PATCH] [Arm64] Treat Short Vectors as HFA
@@ -7,7 +7,7 @@ Subject: [PATCH] [Arm64] Treat Short Vectors as HFA
  Documentation/design-docs/arm64-intrinsics.md | 27 ++++++--
  src/inc/corinfo.h                             | 11 ++--
  src/inc/corpriv.h                             | 12 ++++
- src/jit/codegenarm64.cpp                      |  2 +-
+ src/jit/codegenarm64.cpp                      | 12 ++--
  src/jit/codegenarmarch.cpp                    | 14 ++++-
  src/jit/codegencommon.cpp                     | 43 ++++++++++++-
  src/jit/compiler.cpp                          | 44 +++++++++++++-
@@ -32,7 +32,7 @@ Subject: [PATCH] [Arm64] Treat Short Vectors as HFA
  src/vm/callingconvention.h                    | 88 ++++++++++++++++++++++-----
  src/vm/class.cpp                              | 86 ++++++++++++++++++++++++--
  src/vm/jitinterface.cpp                       | 15 ++++-
- 28 files changed, 550 insertions(+), 116 deletions(-)
+ 28 files changed, 555 insertions(+), 121 deletions(-)
 
 diff --git a/Documentation/design-docs/arm64-intrinsics.md b/Documentation/design-docs/arm64-intrinsics.md
 index 67aff02..c64108a 100644
@@ -126,23 +126,53 @@ index edd55e9..07b041e 100644
  {
      // IL stub signatures containing types that need to be restored have the highest
 diff --git a/src/jit/codegenarm64.cpp b/src/jit/codegenarm64.cpp
-index fa50983..8d0964d 100644
+index efefbf1..a4b9683 100644
 --- a/src/jit/codegenarm64.cpp
 +++ b/src/jit/codegenarm64.cpp
-@@ -1813,7 +1813,7 @@ void CodeGen::genReturn(GenTree* treeNode)
+@@ -1775,16 +1775,16 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* tree)
+ }
  
-         genConsumeReg(op1);
+ //------------------------------------------------------------------------
+-// genSimpleReturn: Generates code for simple return statement for arm64.
+-//
+-// Note: treeNode's and op1's registers are already consumed.
++// genReturn: Generates code for return statement.
++//            In case of struct return, delegates to the genStructReturn method.
+ //
+ // Arguments:
+-//    treeNode - The GT_RETURN or GT_RETFILT tree node with non-struct and non-void type
++//    treeNode - The GT_RETURN or GT_RETFILT tree node.
+ //
+ // Return Value:
+ //    None
+ //
++//
+ void CodeGen::genSimpleReturn(GenTree* treeNode)
+ {
+     assert(treeNode->OperGet() == GT_RETURN || treeNode->OperGet() == GT_RETFILT);
+@@ -1794,7 +1794,7 @@ void CodeGen::genSimpleReturn(GenTree* treeNode)
+     assert(!isStructReturn(treeNode));
+     assert(targetType != TYP_VOID);
  
--        regNumber retReg = varTypeIsFloating(treeNode) ? REG_FLOATRET : REG_INTRET;
+-    regNumber retReg = varTypeIsFloating(treeNode) ? REG_FLOATRET : REG_INTRET;
 +        regNumber retReg = (varTypeIsFloating(treeNode) || varTypeIsSIMD(treeNode)) ? REG_FLOATRET : REG_INTRET;
  
          bool movRequired = (op1->gtRegNum != retReg);
  
+@@ -1825,7 +1825,7 @@ void CodeGen::genSimpleReturn(GenTree* treeNode)
+             emitAttr attr = emitActualTypeSize(targetType);
+             getEmitter()->emitIns_R_R(INS_mov, attr, retReg, op1->gtRegNum);
+         }
+-}
++    }
+ 
+ /***********************************************************************************************
+  *  Generate code for localloc
 diff --git a/src/jit/codegenarmarch.cpp b/src/jit/codegenarmarch.cpp
-index 22eb70e..48f23b7 100644
+index d4f6343..370d27f 100644
 --- a/src/jit/codegenarmarch.cpp
 +++ b/src/jit/codegenarmarch.cpp
-@@ -2345,7 +2345,11 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
+@@ -2342,7 +2342,11 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
      }
      else
      {
@@ -154,7 +184,7 @@ index 22eb70e..48f23b7 100644
  
          if (call->gtType == TYP_REF)
          {
-@@ -2500,7 +2504,11 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
+@@ -2497,7 +2501,11 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
              }
              else
  #endif // _TARGET_ARM_
@@ -167,7 +197,7 @@ index 22eb70e..48f23b7 100644
              {
                  returnReg = REG_FLOATRET;
              }
-@@ -3654,7 +3662,11 @@ bool CodeGen::isStructReturn(GenTree* treeNode)
+@@ -3651,7 +3659,11 @@ bool CodeGen::isStructReturn(GenTree* treeNode)
      // a bool or a void, for the end of a finally block.
      noway_assert(treeNode->OperGet() == GT_RETURN || treeNode->OperGet() == GT_RETFILT);
  
@@ -180,7 +210,7 @@ index 22eb70e..48f23b7 100644
  
  //------------------------------------------------------------------------
 diff --git a/src/jit/codegencommon.cpp b/src/jit/codegencommon.cpp
-index 6ff6f11..635f872 100644
+index 22491c8..b49ffa8 100644
 --- a/src/jit/codegencommon.cpp
 +++ b/src/jit/codegencommon.cpp
 @@ -4325,6 +4325,13 @@ void CodeGen::genFnPrologCalleeRegArgs(regNumber xtraReg, bool* pXtraRegClobbere
@@ -223,7 +253,7 @@ index 6ff6f11..635f872 100644
              {
                  continue;
              }
-@@ -11346,7 +11364,7 @@ bool Compiler::IsMultiRegPassedType(CORINFO_CLASS_HANDLE hClass)
+@@ -11358,7 +11376,7 @@ bool Compiler::IsMultiRegPassedType(CORINFO_CLASS_HANDLE hClass)
      structPassingKind howToPassStruct;
      var_types         returnType = getArgTypeForStruct(hClass, &howToPassStruct);
  
@@ -232,7 +262,7 @@ index 6ff6f11..635f872 100644
  }
  
  //-----------------------------------------------------------------------------------
-@@ -11368,7 +11386,7 @@ bool Compiler::IsMultiRegReturnedType(CORINFO_CLASS_HANDLE hClass)
+@@ -11380,7 +11398,7 @@ bool Compiler::IsMultiRegReturnedType(CORINFO_CLASS_HANDLE hClass)
      structPassingKind howToReturnStruct;
      var_types         returnType = getReturnTypeForStruct(hClass, &howToReturnStruct);
  
@@ -241,7 +271,7 @@ index 6ff6f11..635f872 100644
  }
  
  //----------------------------------------------
-@@ -11378,7 +11396,7 @@ bool Compiler::IsMultiRegReturnedType(CORINFO_CLASS_HANDLE hClass)
+@@ -11390,7 +11408,7 @@ bool Compiler::IsMultiRegReturnedType(CORINFO_CLASS_HANDLE hClass)
  bool Compiler::IsHfa(CORINFO_CLASS_HANDLE hClass)
  {
  #ifdef FEATURE_HFA
@@ -250,7 +280,7 @@ index 6ff6f11..635f872 100644
  #else
      return false;
  #endif
-@@ -11416,7 +11434,26 @@ var_types Compiler::GetHfaType(CORINFO_CLASS_HANDLE hClass)
+@@ -11428,7 +11446,26 @@ var_types Compiler::GetHfaType(CORINFO_CLASS_HANDLE hClass)
          CorInfoType corType = info.compCompHnd->getHFAType(hClass);
          if (corType != CORINFO_TYPE_UNDEF)
          {
@@ -278,7 +308,7 @@ index 6ff6f11..635f872 100644
  #endif // FEATURE_HFA
      }
 diff --git a/src/jit/compiler.cpp b/src/jit/compiler.cpp
-index dc68ce0..20ddd44 100644
+index bc0159c..5032ef9 100644
 --- a/src/jit/compiler.cpp
 +++ b/src/jit/compiler.cpp
 @@ -644,8 +644,11 @@ var_types Compiler::getPrimitiveTypeForStruct(unsigned structSize, CORINFO_CLASS
@@ -371,10 +401,10 @@ index dc68ce0..20ddd44 100644
  #if defined LEGACY_BACKEND
          if (!IsHfa(clsHnd))
 diff --git a/src/jit/compiler.h b/src/jit/compiler.h
-index 7b9313a..30297f8 100644
+index 1eb0fe5..b13f9d2 100644
 --- a/src/jit/compiler.h
 +++ b/src/jit/compiler.h
-@@ -302,9 +302,7 @@ public:
+@@ -301,9 +301,7 @@ public:
  
  #ifdef FEATURE_HFA
      unsigned char _lvIsHfa : 1;   // Is this a struct variable who's class handle is an HFA type
@@ -385,7 +415,7 @@ index 7b9313a..30297f8 100644
  #endif                            // FEATURE_HFA
  
  #ifdef DEBUG
-@@ -386,56 +384,57 @@ public:
+@@ -385,56 +383,57 @@ public:
      bool lvIsHfaRegArg() const
      {
  #ifdef FEATURE_HFA
@@ -476,7 +506,7 @@ index 7b9313a..30297f8 100644
      // lvIsMultiRegArgOrRet()
      //     returns true if this is a multireg LclVar struct used in an argument context
      //               or if this is a multireg LclVar struct assigned from a multireg call
-@@ -770,12 +769,11 @@ public:
+@@ -769,12 +768,11 @@ public:
      }
      var_types GetHfaType() const
      {
@@ -491,7 +521,7 @@ index 7b9313a..30297f8 100644
      }
  
  #ifndef LEGACY_BACKEND
-@@ -7722,8 +7720,9 @@ private:
+@@ -7711,8 +7709,9 @@ private:
          return isSIMDClass(pTypeInfo) || isHWSIMDClass(pTypeInfo);
      }
  
@@ -556,7 +586,7 @@ index 36012fb..6ad9b3b 100644
          return genMapFloatRegNumToRegArgNum(regNum);
      }
 diff --git a/src/jit/ee_il_dll.cpp b/src/jit/ee_il_dll.cpp
-index 81ed6cf..2068619 100644
+index f7ea585..b250b81 100644
 --- a/src/jit/ee_il_dll.cpp
 +++ b/src/jit/ee_il_dll.cpp
 @@ -473,7 +473,8 @@ unsigned Compiler::eeGetArgSize(CORINFO_ARG_LIST_HANDLE list, CORINFO_SIG_INFO*
@@ -570,7 +600,7 @@ index 81ed6cf..2068619 100644
                  if (!isHfa)
                  {
 diff --git a/src/jit/flowgraph.cpp b/src/jit/flowgraph.cpp
-index ccf70dc..c583f91 100644
+index b1a4fef..c722623 100644
 --- a/src/jit/flowgraph.cpp
 +++ b/src/jit/flowgraph.cpp
 @@ -8407,20 +8407,24 @@ private:
@@ -608,7 +638,7 @@ index ccf70dc..c583f91 100644
          else
          {
 diff --git a/src/jit/gentree.cpp b/src/jit/gentree.cpp
-index 9b8f88b..9d5dcbe 100644
+index 718a566..e8c3dee 100644
 --- a/src/jit/gentree.cpp
 +++ b/src/jit/gentree.cpp
 @@ -7347,7 +7347,9 @@ void Compiler::gtBlockOpInit(GenTree* result, GenTree* dst, GenTree* srcOrFillVa
@@ -635,7 +665,7 @@ index 9b8f88b..9d5dcbe 100644
      {
          compFloatingPointUsed = true;
      }
-@@ -18122,7 +18129,16 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler* comp, CORINFO_CLASS_HA
+@@ -18171,7 +18178,16 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler* comp, CORINFO_CLASS_HA
          case Compiler::SPK_PrimitiveType:
          {
              assert(returnType != TYP_UNKNOWN);
@@ -652,7 +682,7 @@ index 9b8f88b..9d5dcbe 100644
              m_regType[0] = returnType;
              break;
          }
-@@ -18133,7 +18149,7 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler* comp, CORINFO_CLASS_HA
+@@ -18182,7 +18198,7 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler* comp, CORINFO_CLASS_HA
              var_types hfaType = comp->GetHfaType(retClsHnd);
  
              // We should have an hfa struct type
@@ -662,10 +692,10 @@ index 9b8f88b..9d5dcbe 100644
              // Note that the retail build issues a warning about a potential divsion by zero without this Max function
              unsigned elemSize = Max((unsigned)1, EA_SIZE_IN_BYTES(emitActualTypeSize(hfaType)));
 diff --git a/src/jit/gentree.h b/src/jit/gentree.h
-index 25d5a28..938491a 100644
+index c33cb51..68bf052 100644
 --- a/src/jit/gentree.h
 +++ b/src/jit/gentree.h
-@@ -3748,7 +3748,7 @@ struct GenTreeCall final : public GenTree
+@@ -3770,7 +3770,7 @@ struct GenTreeCall final : public GenTree
          // LEGACY_BACKEND does not use multi reg returns for calls with long return types
          return varTypeIsLong(gtType) || (varTypeIsStruct(gtType) && !HasRetBufArg());
  #elif FEATURE_MULTIREG_RET
@@ -746,7 +776,7 @@ index 787d758..5d1c2d1 100644
  #endif
      else if (op->gtOper == GT_COMMA)
 diff --git a/src/jit/lclvars.cpp b/src/jit/lclvars.cpp
-index d248c49..32a2dc2 100644
+index 90fac94..082ab3b 100644
 --- a/src/jit/lclvars.cpp
 +++ b/src/jit/lclvars.cpp
 @@ -147,7 +147,11 @@ void Compiler::lvaInitTypeRef()
@@ -828,7 +858,7 @@ index d248c49..32a2dc2 100644
      {
          compFloatingPointUsed = true;
      }
-@@ -2289,11 +2308,12 @@ void Compiler::lvaSetStruct(unsigned varNum, CORINFO_CLASS_HANDLE typeHnd, bool
+@@ -2288,11 +2307,12 @@ void Compiler::lvaSetStruct(unsigned varNum, CORINFO_CLASS_HANDLE typeHnd, bool
          // for structs that are small enough, we check and set lvIsHfa and lvHfaTypeIsFloat
          if (varDsc->lvExactSize <= MAX_PASS_MULTIREG_BYTES)
          {
@@ -844,7 +874,7 @@ index d248c49..32a2dc2 100644
  
                  // hfa variables can never contain GC pointers
                  assert(varDsc->lvStructGcCount == 0);
-@@ -3518,6 +3538,21 @@ const size_t LclVarDsc::lvArgStackSize() const
+@@ -3517,6 +3537,21 @@ const size_t LclVarDsc::lvArgStackSize() const
      return stackSize;
  }
  
@@ -866,7 +896,7 @@ index d248c49..32a2dc2 100644
  #ifndef LEGACY_BACKEND
  /**********************************************************************************
  * Get type of a variable when passed as an argument.
-@@ -6749,13 +6784,22 @@ void Compiler::lvaDumpEntry(unsigned lclNum, FrameLayoutState curState, size_t r
+@@ -6748,13 +6783,22 @@ void Compiler::lvaDumpEntry(unsigned lclNum, FrameLayoutState curState, size_t r
  
      if (varDsc->lvIsHfaRegArg())
      {
@@ -933,10 +963,10 @@ index 5023b13..3da10a4 100644
                      useCandidates = RBM_FLOATRET;
                      break;
 diff --git a/src/jit/morph.cpp b/src/jit/morph.cpp
-index a428590..3567769 100644
+index 1e2b1cb..c3a0353 100644
 --- a/src/jit/morph.cpp
 +++ b/src/jit/morph.cpp
-@@ -2487,7 +2487,11 @@ void fgArgInfo::EvalArgsToTemps()
+@@ -2488,7 +2488,11 @@ void fgArgInfo::EvalArgsToTemps()
  
  #else // !defined(_TARGET_AMD64_) || defined(FEATURE_UNIX_AMD64_STRUCT_PASSING)
  
@@ -948,7 +978,7 @@ index a428590..3567769 100644
              {
                  // Need a temp to walk any GT_COMMA nodes when searching for the clsHnd
                  GenTree* defArgTmp = defArg;
-@@ -3334,7 +3338,7 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+@@ -3354,7 +3358,7 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
          unsigned argAlign = 1;
          // Setup any HFA information about 'argx'
          var_types hfaType  = GetHfaType(argx);
@@ -957,7 +987,7 @@ index a428590..3567769 100644
          unsigned  hfaSlots = 0;
  
          if (isHfaArg)
-@@ -3534,7 +3538,7 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+@@ -3554,7 +3558,7 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
                  {
                      if (isHfaArg)
                      {
@@ -966,7 +996,7 @@ index a428590..3567769 100644
                          // HFA structs are passed by value in multiple registers
                          hasMultiregStructArgs = true;
                      }
-@@ -3922,6 +3926,9 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+@@ -3942,6 +3946,9 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
                              argObj->gtType = structBaseType;
                          }
                          assert(varTypeCanReg(argObj->TypeGet()) ||
@@ -976,7 +1006,7 @@ index a428590..3567769 100644
                                 ((copyBlkClass != NO_CLASS_HANDLE) && varTypeIsIntegral(structBaseType)));
  
                          size = 1;
-@@ -3946,7 +3953,7 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
+@@ -3966,7 +3973,7 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
                      {
                          if (isHfaArg && passUsingFloatRegs)
                          {
@@ -985,7 +1015,7 @@ index a428590..3567769 100644
                          }
                          else
                          {
-@@ -5006,8 +5013,8 @@ GenTree* Compiler::fgMorphMultiregStructArg(GenTree* arg, fgArgTabEntry* fgEntry
+@@ -5026,8 +5033,8 @@ GenTree* Compiler::fgMorphMultiregStructArg(GenTree* arg, fgArgTabEntry* fgEntry
      unsigned  elemSize                = 0;
      var_types type[MAX_ARG_REG_COUNT] = {}; // TYP_UNDEF = 0
  
@@ -996,7 +1026,7 @@ index a428590..3567769 100644
      {
          elemType  = hfaType;
          elemSize  = genTypeSize(elemType);
-@@ -5116,7 +5123,7 @@ GenTree* Compiler::fgMorphMultiregStructArg(GenTree* arg, fgArgTabEntry* fgEntry
+@@ -5136,7 +5143,7 @@ GenTree* Compiler::fgMorphMultiregStructArg(GenTree* arg, fgArgTabEntry* fgEntry
          if (varDsc->lvIsHfa())
          {
              // We have a HFA struct
@@ -1005,7 +1035,7 @@ index a428590..3567769 100644
              noway_assert(elemSize == genTypeSize(elemType));
              noway_assert(elemCount == (varDsc->lvExactSize / elemSize));
              noway_assert(elemSize * elemCount == varDsc->lvExactSize);
-@@ -5698,7 +5705,7 @@ void Compiler::fgFixupStructReturn(GenTree* callNode)
+@@ -5718,7 +5725,7 @@ void Compiler::fgFixupStructReturn(GenTree* callNode)
  
  #if FEATURE_MULTIREG_RET
      // Either we don't have a struct now or if struct, then it is a struct returned in regs or in return buffer.
@@ -1014,7 +1044,7 @@ index a428590..3567769 100644
  #else // !FEATURE_MULTIREG_RET
      // No more struct returns
      assert(call->TypeGet() != TYP_STRUCT);
-@@ -7510,7 +7517,7 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee)
+@@ -7531,7 +7538,7 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee)
  
  #elif defined(_TARGET_ARM64_) // ARM64
                  var_types hfaType  = GetHfaType(argx);
@@ -1023,7 +1053,7 @@ index a428590..3567769 100644
                  size_t    size     = 1;
  
                  if (isHfaArg)
-@@ -9428,12 +9435,21 @@ GenTree* Compiler::fgMorphOneAsgBlockOp(GenTree* tree)
+@@ -9449,12 +9456,21 @@ GenTree* Compiler::fgMorphOneAsgBlockOp(GenTree* tree)
          }
      }
  
@@ -1045,7 +1075,7 @@ index a428590..3567769 100644
  
          if (isInitBlock && !src->IsConstInitVal())
          {
-@@ -9461,7 +9477,13 @@ GenTree* Compiler::fgMorphOneAsgBlockOp(GenTree* tree)
+@@ -9482,7 +9498,13 @@ GenTree* Compiler::fgMorphOneAsgBlockOp(GenTree* tree)
              // holes, whose contents could be meaningful in unsafe code.  If we decide that's a valid
              // concern, then we could compromise, and say that address-exposed + fields do not completely cover the
              // memory of the struct prevent field-wise assignments.  Same situation exists for the "src" decision.
@@ -1059,7 +1089,7 @@ index a428590..3567769 100644
              {
                  // Let fgMorphInitBlock handle it.  (Since we'll need to do field-var-wise assignments.)
                  return nullptr;
-@@ -10255,7 +10277,11 @@ GenTree* Compiler::fgMorphBlockOperand(GenTree* tree, var_types asgType, unsigne
+@@ -10285,7 +10307,11 @@ GenTree* Compiler::fgMorphBlockOperand(GenTree* tree, var_types asgType, unsigne
                  needsIndirection = false;
                  effectiveVal     = indirTree->Addr()->gtGetOp1();
              }
@@ -1071,7 +1101,7 @@ index a428590..3567769 100644
              {
                  needsIndirection = false;
              }
-@@ -18449,7 +18475,11 @@ void Compiler::fgMarkImplicitByRefArgs()
+@@ -18479,7 +18505,11 @@ void Compiler::fgMarkImplicitByRefArgs()
      {
          LclVarDsc* varDsc = &lvaTable[lclNum];
  
@@ -1083,7 +1113,7 @@ index a428590..3567769 100644
          {
              size_t size;
  
-@@ -18608,7 +18638,6 @@ void Compiler::fgRetypeImplicitByRefArgs()
+@@ -18638,7 +18668,6 @@ void Compiler::fgRetypeImplicitByRefArgs()
                      // the parameter which is really a pointer to the struct.
                      fieldVarDsc->lvIsRegArg      = false;
                      fieldVarDsc->lvIsMultiRegArg = false;
@@ -1493,10 +1523,10 @@ index c3e0637..d75e076 100644
      // Note that we check the total size, but do not perform any checks on number of fields:
      // - Type of fields can be HFA valuetype itself
 diff --git a/src/vm/jitinterface.cpp b/src/vm/jitinterface.cpp
-index db402ed..32980d5 100644
+index 706caf0..94e5ec3 100644
 --- a/src/vm/jitinterface.cpp
 +++ b/src/vm/jitinterface.cpp
-@@ -9718,8 +9718,21 @@ CorInfoType CEEInfo::getHFAType(CORINFO_CLASS_HANDLE hClass)
+@@ -9711,8 +9711,21 @@ CorInfoType CEEInfo::getHFAType(CORINFO_CLASS_HANDLE hClass)
  
      TypeHandle VMClsHnd(hClass);
  
