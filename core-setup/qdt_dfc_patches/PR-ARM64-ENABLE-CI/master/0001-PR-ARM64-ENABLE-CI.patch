@@ -1,0 +1,89 @@
+From a20483c662c13ae5c165d8d41511fe6736ad51ba Mon Sep 17 00:00:00 2001
+From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
+Date: Tue, 20 Mar 2018 00:43:17 -0400
+Subject: [PATCH] PR-ARM64-ENABLE-CI
+
+---
+ .../0001-Arm64-Enable-CI-Official-builds.patch     | 70 ++++++++++++++++++++++
+ 1 file changed, 70 insertions(+)
+ create mode 100644 core-setup/PR-ARM64-ENABLE-CI/0001-Arm64-Enable-CI-Official-builds.patch
+
+diff --git a/core-setup/PR-ARM64-ENABLE-CI/0001-Arm64-Enable-CI-Official-builds.patch b/core-setup/PR-ARM64-ENABLE-CI/0001-Arm64-Enable-CI-Official-builds.patch
+new file mode 100644
+index 0000000..872c606
+--- /dev/null
++++ b/core-setup/PR-ARM64-ENABLE-CI/0001-Arm64-Enable-CI-Official-builds.patch
+@@ -0,0 +1,70 @@
++From bb00c2ebb9a92853dd96a32ff0a9994066652471 Mon Sep 17 00:00:00 2001
++From: Steve MacLean <sdmaclea.qdt@qualcommdatacenter.com>
++Date: Tue, 20 Mar 2018 00:41:46 -0400
++Subject: [PATCH] [Arm64] Enable CI & Official builds
++
++---
++ buildpipeline/pipeline.json | 17 +++++++++++++++++
++ netci.groovy                | 11 ++++++++++-
++ 2 files changed, 27 insertions(+), 1 deletion(-)
++
++diff --git a/buildpipeline/pipeline.json b/buildpipeline/pipeline.json
++index 5de1e65..024b3cc 100644
++--- a/buildpipeline/pipeline.json
+++++ b/buildpipeline/pipeline.json
++@@ -78,6 +78,23 @@
++           }
++         },
++         {
+++          "Name": "Core-Setup-Linux-Arm-BT",
+++          "Parameters": {
+++            "PB_DockerTag": "ubuntu-16.04-cross-arm64-a3ae44b-20180316023254",
+++            "PB_TargetArchitecture": "arm64",
+++            "PB_AdditionalBuildArguments":"-TargetArchitecture=arm64 -PortableBuild=true -SkipTests=true -CrossBuild=true -strip-symbols",
+++            "PB_AdditionalMSBuildArguments": "/p:DotNetRestoreSources=$(PB_RestoreSource) /p:StabilizePackageVersion=$(PB_IsStable) /p:PackageVersionStamp=$(PB_VersionStamp)",
+++            "PB_CrossBuildArgs": "-e ROOTFS_DIR ",
+++            "PB_PortableBuild": "true"
+++          },
+++          "ReportingParameters": {
+++            "SubType": "PortableBuild",
+++            "OperatingSystem": "Ubuntu 16.04",
+++            "Type": "build/product/",
+++            "Platform": "arm64"
+++          }
+++        },
+++        {
++           "Name": "Core-Setup-OSX-BT",
++           "Parameters": {
++             "PB_AdditionalBuildArguments": "-PortableBuild=true -strip-symbols -SkipTests=$(PB_SkipTests)",
++diff --git a/netci.groovy b/netci.groovy
++index d642b51..577a2d4 100644
++--- a/netci.groovy
+++++ b/netci.groovy
++@@ -10,7 +10,7 @@ def project = GithubProject
++ def branch = GithubBranchName
++ def isPR = true
++ 
++-def platformList = ['Linux:x64:Release', 'Linux:arm:Release', 'OSX:x64:Release', 'Windows_NT:x64:Release', 'Windows_NT:x86:Debug', 'Windows_NT:arm:Debug', 'Tizen:armel:Release']
+++def platformList = ['Linux:x64:Release', 'Linux:arm:Release', 'Linux:arm64:Release', 'OSX:x64:Release', 'Windows_NT:x64:Release', 'Windows_NT:x86:Debug', 'Windows_NT:arm:Debug', 'Tizen:armel:Release']
++ 
++ def static getBuildJobName(def configuration, def os, def architecture) {
++     return configuration.toLowerCase() + '_' + os.toLowerCase() + '_' + architecture.toLowerCase()
++@@ -63,6 +63,15 @@ platformList.each { platform ->
++             osForGHTrigger = "Linux"
++             os = "Ubuntu"
++         }
+++        else if (architecture == 'arm64') {
+++            dockerContainer = "ubuntu-16.04-cross-arm64-a3ae44b-20180316023254"
+++            dockerCommand = "docker run -e ROOTFS_DIR=/crossrootfs/${architecture} --name ${dockerContainer} --rm -v \${WORKSPACE}:${dockerWorkingDirectory} -w=${dockerWorkingDirectory} ${dockerRepository}:${dockerContainer}"
+++            buildArgs += " -SkipTests=true -CrossBuild=true"
+++            buildCommand = "${dockerCommand} ./build.sh ${buildArgs}"
+++
+++            osForGHTrigger = "Linux"
+++            os = "Ubuntu"
+++        }
++         else {
++             // Jenkins non-Ubuntu CI machines don't have docker
++             buildCommand = "./build.sh ${buildArgs}"
++-- 
++2.7.4
++
+-- 
+2.7.4
+
