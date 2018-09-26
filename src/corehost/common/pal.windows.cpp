@@ -537,3 +537,23 @@ bool pal::are_paths_equal_with_normalized_casing(const string_t& path1, const st
     // On Windows, paths are case-insensitive
     return (strcasecmp(path1.c_str(), path2.c_str()) == 0);
 }
+
+static void ignore_invalid_parameter(
+    const wchar_t * expression,
+    const wchar_t * function,
+    const wchar_t * file,
+    unsigned int line,
+    uintptr_t pReserved
+) 
+{
+}
+
+FILE * pal::file_open(const pal::string_t& path, const pal::char_t* mode) 
+{
+    auto oldInvalidParameterHandler = _set_thread_local_invalid_parameter_handler(ignore_invalid_parameter);
+    auto oldAssertMode = _CrtSetReportMode(_CRT_ASSERT, 0);
+    FILE * file = ::_wfopen(path.c_str(), mode);
+    _CrtSetReportMode(_CRT_ASSERT, oldAssertMode);
+    _set_thread_local_invalid_parameter_handler(oldInvalidParameterHandler);
+    return file;
+}
