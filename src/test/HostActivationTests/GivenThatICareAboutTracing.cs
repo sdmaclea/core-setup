@@ -161,6 +161,7 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.Tracing
                 .NotHaveStdErrContaining(ExpectedVerboseMessage);
         }
 
+#if EnableBadTest
         [Fact]
         public void TracingOnToFileBadPathDefault()
         {
@@ -176,7 +177,6 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.Tracing
                 .CaptureStdErr()
                 .Execute()
                 .Should()
-#if EnableBadTest
                 .Pass()
                 .And
                 .HaveStdOutContaining("Hello World")
@@ -185,9 +185,9 @@ namespace Microsoft.DotNet.CoreSetup.Test.HostActivation.Tracing
                 .And
                 .HaveStdErrContaining(ExpectedVerboseMessage)
                 .And
-#endif
                 .HaveStdErrContaining(ExpectedBadPathMessage);
         }
+#endif
 
         public class SharedTestState : IDisposable
         {
